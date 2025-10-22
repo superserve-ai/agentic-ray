@@ -281,12 +281,12 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
                 # Parse output
                 stdout, stderr = self._parse_exec_output(exec_result.output)
 
-                status = "success" if exec_result.exit_code == 0 else "error"
-
-                logger.info(f"Execution {execution_id}: {status}")
+                logger.info(
+                    f"Execution {execution_id}: {'success' if exec_result.exit_code == 0 else 'error'}"
+                )
 
                 return ExecutionResult(
-                    status=status,
+                    status="success" if exec_result.exit_code == 0 else "error",
                     stdout=stdout,
                     stderr=stderr,
                     exit_code=exec_result.exit_code,
@@ -338,12 +338,12 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
 
             stdout, stderr = self._parse_exec_output(result.output)
 
-            status = "success" if result.exit_code == 0 else "error"
-
-            logger.info(f"Session {self.session_id}: Package {package} - {status}")
+            logger.info(
+                f"Session {self.session_id}: Package {package} - {'success' if result.exit_code == 0 else 'error'}"
+            )
 
             return InstallResult(
-                status=status,
+                status="success" if result.exit_code == 0 else "error",
                 stdout=stdout,
                 stderr=stderr,
                 exit_code=result.exit_code,

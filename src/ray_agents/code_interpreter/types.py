@@ -1,12 +1,12 @@
 """Type definitions for code interpreter"""
 
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 
 class ExecutionResult(TypedDict):
     """Result from code execution"""
 
-    status: str  # "success" or "error"
+    status: Literal["success", "error"]
     stdout: str
     stderr: str
     exit_code: int
@@ -14,9 +14,9 @@ class ExecutionResult(TypedDict):
 
 
 class ExecutionError(TypedDict):
-    """Error result from code execution"""
+    """Error result from code execution infrastructure"""
 
-    status: str  # "error"
+    status: Literal["error"]
     error: str
     error_type: str
     execution_id: str
@@ -25,16 +25,16 @@ class ExecutionError(TypedDict):
 class InstallResult(TypedDict):
     """Result from package installation"""
 
-    status: str  # "success" or "error"
+    status: Literal["success", "error"]
     stdout: str
     stderr: str
     exit_code: int
 
 
 class InstallError(TypedDict):
-    """Error result from package installation"""
+    """Error result from package installation infrastructure"""
 
-    status: str  # "error"
+    status: Literal["error"]
     error: str
     error_type: str
 
@@ -42,15 +42,15 @@ class InstallError(TypedDict):
 class UploadResult(TypedDict):
     """Result from file upload"""
 
-    status: str  # "success"
+    status: Literal["success"]
     path: str
     size: int
 
 
 class UploadError(TypedDict):
-    """Error result from file upload"""
+    """Error result from file upload infrastructure"""
 
-    status: str  # "error"
+    status: Literal["error"]
     error: str
     error_type: str
 
@@ -68,13 +68,13 @@ class SessionStats(TypedDict):
 class CleanupResult(TypedDict):
     """Result from session cleanup"""
 
-    status: str  # "success" or "error"
+    status: Literal["success"]
     session_id: str
 
 
 class CleanupError(TypedDict):
     """Error result from session cleanup"""
 
-    status: str  # "error"
+    status: Literal["error"]
     error: str
     session_id: str

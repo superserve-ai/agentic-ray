@@ -182,29 +182,38 @@ def simple_example():
         # Basic execution
         logger.info("\n1. Basic execution:")
         result = ray.get(execute_code.remote("print('Hello from Docker!')"))
-        logger.info(f"Output: {result['stdout']}")
+        if result["status"] == "success":
+            logger.info(f"Output: {result['stdout']}")
+        else:
+            logger.error(f"Error: {result['error']}")  # type: ignore[typeddict-item]
 
         # Session persistence
         logger.info("\n2. Session persistence:")
         session_id = "my-session"
 
-        ray.get(execute_code.remote("x = [1, 2, 3, 4, 5]", session_id=session_id))
-        ray.get(execute_code.remote("y = sum(x)", session_id=session_id))
+        ray.get(execute_code.remote("x = [1, 2, 3, 4, 5]", session_id=session_id))  # type: ignore[call-arg]
+        ray.get(execute_code.remote("y = sum(x)", session_id=session_id))  # type: ignore[call-arg]
         result = ray.get(
-            execute_code.remote("print(f'Sum: {y}')", session_id=session_id)
+            execute_code.remote("print(f'Sum: {y}')", session_id=session_id)  # type: ignore[call-arg]
         )
-        logger.info(f"Output: {result['stdout']}")
+        if result["status"] == "success":
+            logger.info(f"Output: {result['stdout']}")
+        else:
+            logger.error(f"Error: {result['error']}")  # type: ignore[typeddict-item]
 
         # Package installation
         logger.info("\n3. Package installation:")
-        ray.get(install_package.remote("requests", session_id=session_id))
+        ray.get(install_package.remote("requests", session_id=session_id))  # type: ignore[call-arg]
         result = ray.get(
             execute_code.remote(
                 "import requests; print(f'Requests version: {requests.__version__}')",
-                session_id=session_id,
+                session_id=session_id,  # type: ignore[call-arg]
             )
         )
-        logger.info(f"Output: {result['stdout']}")
+        if result["status"] == "success":
+            logger.info(f"Output: {result['stdout']}")
+        else:
+            logger.error(f"Error: {result['error']}")  # type: ignore[typeddict-item]
 
         # Custom Dockerfile
         logger.info("\n4. Custom Dockerfile:")
@@ -213,13 +222,16 @@ FROM python:3.12-slim
 RUN pip install numpy
 """
         result = ray.get(
-            execute_code.remote(
+            execute_code.remote(  # type: ignore[call-arg]
                 "import numpy as np; print(f'NumPy version: {np.__version__}')",
                 dockerfile=dockerfile,
                 session_id="custom-env",
             )
         )
-        logger.info(f"Output: {result['stdout']}")
+        if result["status"] == "success":
+            logger.info(f"Output: {result['stdout']}")
+        else:
+            logger.error(f"Error: {result['error']}")  # type: ignore[typeddict-item]
 
         logger.info("\nSimple example completed!")
 
