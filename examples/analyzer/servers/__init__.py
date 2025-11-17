@@ -1,7 +1,6 @@
 """MCP Servers for Ray Agents examples.
 
-This package provides wrappers for MCP servers following the pattern described
-in Anthropic's MCP code execution blog post. Tools are organized by server,
+This package provides wrappers for MCP servers. Tools are organized by server,
 with each tool available as a separate Python function.
 
 Available servers:
