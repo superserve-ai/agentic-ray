@@ -49,10 +49,10 @@ def _create_agent_files(agent_dir: Path, agent_name: str):
 
     agent_content = f'''"""Agent implementation for {agent_name}."""
 
-from agentic_ray import RayAgent
+from ray_agents import RayAgent
 
 
-class {agent_name.title()}Agent(RayAgent):
+class {agent_name.title()}(RayAgent):
 
     def __init__(self):
         super().__init__()
@@ -64,9 +64,9 @@ class {agent_name.title()}Agent(RayAgent):
         Implement your agent logic here or route to other methods.
         """
         return {{
-            "agent": "{agent_name}",
-            "status": "success",
-            "data": data
+            "error": "AGENT_NOT_IMPLEMENTED",
+            "message": "This agent is not yet implemented. Please add your logic to the run() method.",
+            "status": "error"
         }}
 '''
     (agent_dir / "agent.py").write_text(agent_content)

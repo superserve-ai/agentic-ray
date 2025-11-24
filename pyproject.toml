@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentic-ray"
-version = "0.1.0"
+version = "0.1.0"  # Production PyPI version - TestPyPI is at 0.1.5 currently
 description = "Experimental API to run LLM Agents (LangGraph, CrewAI, etc.) on Ray"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -37,8 +37,14 @@ dev = [
     "docker>=7.0.0",  # Needed for code interpreter tests
 ]
 
+[tool.setuptools]
+include-package-data = true
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"ray_agents.cli" = ["templates/**/*"]
 
 [tool.ruff]
 line-length = 88

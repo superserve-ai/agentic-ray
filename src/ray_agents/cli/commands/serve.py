@@ -208,16 +208,21 @@ def _deploy_agents(agents: dict[str, Any], port: int):
                 route_prefix=f"/agents/{agent_name}",
             )
 
-            endpoint_url = f"POST http://localhost:{port}/agents/{agent_name}/chat"
-            deployed_endpoints.append(endpoint_url)
+            endpoint_url = f"http://localhost:{port}/agents/{agent_name}/chat"
+            deployed_endpoints.append((agent_name, endpoint_url))
             click.echo(f"Deployed agent '{agent_name}' at /chat endpoint")
 
         if deployed_endpoints:
             click.echo(
                 f"\nSuccessfully deployed {len(deployed_endpoints)} endpoint(s):"
             )
-            for endpoint in deployed_endpoints:
-                click.echo(f"  {endpoint}")
+            for agent_name, endpoint_url in deployed_endpoints:
+                click.echo(f"\n{agent_name}:")
+                click.echo(f"  Endpoint: POST {endpoint_url}")
+                click.echo(f"  Test it:  curl -X POST {endpoint_url} \\")
+                click.echo("                 -H 'Content-Type: application/json' \\")
+                json_data = '{"data": {"message": "hello"}, "session_id": "test"}'
+                click.echo(f"                 -d '{json_data}'")
 
             click.echo("\nRay Dashboard: http://localhost:8265")
             click.echo("Press Ctrl+C to stop all agents")
