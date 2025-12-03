@@ -70,12 +70,12 @@ my-project/
 ├── requirements.txt
 ├── .env                    # Optional API keys
 └── agents/                 # All your agents
-    ├── chatbot/
+    ├── agent1/
     │   ├── __init__.py
-    │   └── agent.py        # ChatbotAgent class
-    ├── analyzer/
+    │   └── agent.py        # Agent1 class
+    ├── agent2/
     │   ├── __init__.py
-    │   └── agent.py        # AnalyzerAgent class
+    │   └── agent.py        # Agent2 class
     └── ...
 ```
 
@@ -86,21 +86,75 @@ Each agent must inherit from `RayAgent` and implement the `run()` method:
 ```python
 from ray_agents import RayAgent
 
-class ChatbotAgent(RayAgent):
+class MyAgent(RayAgent):
     def __init__(self):
         super().__init__()
         # Add your initialization code here
         # - Load models
         # - Initialize clients
         # - Set up databases
-    
+
     def run(self, data: dict) -> dict:
         # Implement your agent logic here
-        # Called for every request to /agents/chatbot/chat
+        # Called for every request to /agents/my-agent/chat
         # - Process the input data
         # - Return results as a dictionary
         return {"response": "Hello!"}
 ```
+
+## Tool System
+
+Agents can use distributed tools that execute as Ray remote functions across your cluster.
+
+### Defining and Organizing Tools
+
+Define tools inline or in a separate `tools.py` file:
+
+```python
+# agents/my-agent/tools.py
+from ray_agents import tool
+
+@tool(desc="Search knowledge base", num_cpus=1, memory="512MB")
+def search_kb(query: str) -> dict:
+    return {"results": [...]}
+
+@tool(desc="Analyze sentiment", num_cpus=2, memory="1GB")
+def analyze_sentiment(text: str) -> dict:
+    return {"sentiment": "positive", "confidence": 0.95}
+```
+
+### Using Tools
+
+```python
+# agents/my-agent/agent.py
+from ray_agents import RayAgent
+from .tools import search_kb, analyze_sentiment
+
+class MyAgent(RayAgent):
+    def __init__(self):
+        super().__init__()
+        self.register_tools(search_kb, analyze_sentiment)
+
+    def run(self, data: dict) -> dict:
+        # Execute tools in parallel (fastest)
+        results = self.execute_tools([
+            (search_kb, {"query": data["query"]}),
+            (analyze_sentiment, {"text": data["text"]}),
+        ], parallel=True)
+
+        return {"search": results[0], "sentiment": results[1]}
+```
+
+### Parallel vs Sequential
+
+- **`parallel=True`** - All tools run simultaneously (faster)
+- **`parallel=False`** - Tools run one after another (use for dependencies)
+
+### Key Points
+
+- Tools always execute as distributed Ray remote functions
+- Specify resources per tool: `@tool(desc="...", num_cpus=4, memory="8GB", num_gpus=1)`
+- Tool resources are separate from agent resources
 
 ## Resource Configuration
 

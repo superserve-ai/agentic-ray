@@ -89,7 +89,7 @@ class {agent_name.title()}(RayAgent):
         # Your implementation here:
         # - Build LLM tool schema from tools
         # - Call your LLM
-        # - Handle tool calls via ray.get(tool.remote(...))
+        # - Handle tool calls using self.execute_tools(tool_calls, parallel=True/False)
 
         return {{
             "error": "AGENT_NOT_IMPLEMENTED",
