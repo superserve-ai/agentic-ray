@@ -155,6 +155,8 @@ class MyAgent(RayAgent):
 
 ## Resource Configuration
 
+Specify CPU, GPU, and memory requirements directly in your Python code—no Dockerfiles or Kubernetes manifests needed.
+
 Configure CPU, GPU, memory, and replicas for your agents using two methods:
 
 ### Method 1: Ray Decorator (Set Defaults in Code)
