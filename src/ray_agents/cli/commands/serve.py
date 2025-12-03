@@ -9,9 +9,10 @@ from pathlib import Path
 from typing import Any
 
 import click
-from fastapi import HTTPException
-from pydantic import BaseModel
 
+from ray_agents.deployment import (
+    create_agent_deployment,
+)
 from ray_agents.resource_loader import (
     _parse_memory,
     get_ray_native_resources,
@@ -20,20 +21,6 @@ from ray_agents.resource_loader import (
 
 RESOURCE_TYPES = ["num-cpus", "memory", "num-replicas", "num-gpus"]
 DEFAULT_RESOURCES = {"num_cpus": 1, "memory": "2GB", "num_replicas": 1, "num_gpus": 0}
-
-
-class ChatRequest(BaseModel):
-    """Request model for agent chat endpoint."""
-
-    data: dict[Any, Any]
-    session_id: str = "default"
-
-
-class ChatResponse(BaseModel):
-    """Response model for agent chat endpoint."""
-
-    result: dict[Any, Any]
-    session_id: str
 
 
 @click.command(
@@ -266,19 +253,6 @@ def _select_agents(all_agents: dict[str, Any], agents: str) -> dict[str, Any]:
     return selected
 
 
-def _create_chat_endpoint(app, agent_class: Any):
-    """Create a single /chat endpoint for the agent."""
-
-    @app.post("/chat", response_model=ChatResponse)
-    async def chat_endpoint(request: ChatRequest):
-        try:
-            agent = agent_class()
-            result = agent.run(request.data)
-            return ChatResponse(result=result, session_id=request.session_id)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e)) from e
-
-
 def _merge_all_resource_sources(
     agent_class: Any,
     agent_name: str,
@@ -347,9 +321,6 @@ def _create_deployment(
     Returns:
         Ray Serve deployment handle
     """
-    from fastapi import FastAPI
-    from ray import serve
-
     memory_bytes = (
         _parse_memory(resources["memory"])
         if isinstance(resources["memory"], str)
@@ -363,20 +334,13 @@ def _create_deployment(
     if resources["num_gpus"] > 0:
         ray_actor_options["num_gpus"] = resources["num_gpus"]
 
-    app = FastAPI(title=f"{agent_name} Agent")
-    _create_chat_endpoint(app, agent_class)
-
-    @serve.deployment(
-        name=f"{agent_name}-deployment",
+    return create_agent_deployment(
+        agent_class=agent_class,
+        agent_name=agent_name,
         num_replicas=resources["num_replicas"],
         ray_actor_options=ray_actor_options,
+        app_title=f"{agent_name} Agent",
     )
-    @serve.ingress(app)
-    class AgentDeployment:
-        def __init__(self, agent_cls=agent_class):
-            self.agent = agent_cls()
-
-    return AgentDeployment.bind()  # type: ignore
 
 
 def _print_deployment_success(

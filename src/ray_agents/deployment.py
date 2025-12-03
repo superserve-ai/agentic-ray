@@ -49,6 +49,7 @@ def create_agent_deployment(
     agent_name: str,
     num_replicas: int,
     ray_actor_options: dict[str, Any],
+    app_title: str | None = None,
 ):
     """Create a Ray Serve deployment for an agent.
 
@@ -57,11 +58,14 @@ def create_agent_deployment(
         agent_name: Name for the deployment
         num_replicas: Number of replicas to deploy
         ray_actor_options: Ray actor options (num_cpus, memory, num_gpus)
+        app_title: Optional title for the FastAPI app
 
     Returns:
         Ray Serve deployment handle
     """
     app = create_agent_app(agent_class)
+    if app_title:
+        app.title = app_title
 
     @serve.deployment(
         name=f"{agent_name}-deployment",
