@@ -1,6 +1,8 @@
 import os
-import requests
+
 import ray
+import requests
+
 from ray_agents.sandbox import execute_code, upload_file
 
 
@@ -23,7 +25,7 @@ def get_sp500(limit: int = 10) -> list[dict[str, str]]:
         timeout=30,
     )
     response.raise_for_status()
-    print(f"[DEBUG] get_sp500 got response", flush=True)
+    print("[DEBUG] get_sp500 got response", flush=True)
     return response.json()
 
 
@@ -51,7 +53,7 @@ def get_daily_time_series(symbol: str) -> dict:
         timeout=30,
     )
     response.raise_for_status()
-    print(f"[DEBUG] get_daily_time_series got response", flush=True)
+    print("[DEBUG] get_daily_time_series got response", flush=True)
     return response.json()
 
 
@@ -86,15 +88,15 @@ def run_analysis_code(code: str, time_series_data: str) -> str:
 
     # Upload the time series data
     upload_result = ray.get(
-        upload_file.remote("/tmp/data.json", time_series_data.encode(), session_id=session_id)
+        upload_file.remote(
+            "/tmp/data.json", time_series_data.encode(), session_id=session_id
+        )
     )
     if upload_result["status"] == "error":
         return f"Error uploading data: {upload_result['error']}"
 
     # Execute the analysis code
-    result = ray.get(
-        execute_code.remote(code, session_id=session_id, timeout=60)
-    )
+    result = ray.get(execute_code.remote(code, session_id=session_id, timeout=60))
 
     if result["status"] == "success":
         return result["stdout"]

@@ -6,7 +6,7 @@ from pydantic_ai import Agent
 # Load .env from repo root
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
-from tools import get_daily_time_series, get_sp500, run_analysis_code
+from tools import get_daily_time_series, get_sp500, run_analysis_code  # noqa: E402
 
 SYSTEM_PROMPT = """\
 You are a finance analyst assistant that helps users analyze stock market data.
@@ -41,6 +41,7 @@ agent = Agent(
     system_prompt=SYSTEM_PROMPT,
     tools=[get_sp500, get_daily_time_series, run_analysis_code],
 )
+
 
 def print_messages(messages):
     """Print intermediate steps from message history."""
