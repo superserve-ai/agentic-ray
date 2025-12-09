@@ -218,9 +218,16 @@ class LangChainAdapter(AgentAdapter):
             Response text from agent
         """
         try:
-            from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+            from langchain_core.messages import (
+                AIMessage,
+                BaseMessage,
+                HumanMessage,
+                SystemMessage,
+            )
 
-            conversation_history = [SystemMessage(content=self.system_prompt)]
+            conversation_history: list[BaseMessage] = [
+                SystemMessage(content=self.system_prompt)
+            ]
 
             for msg in messages:
                 if msg["role"] == "user":
@@ -247,16 +254,16 @@ class LangChainAdapter(AgentAdapter):
             lc_tools = []
             for wrapped_tool in tools:
                 try:
-                    tool_kwargs = {
-                        "func": wrapped_tool,
-                        "name": wrapped_tool.__name__,
-                        "description": wrapped_tool.__doc__
-                        or f"Calls {wrapped_tool.__name__}",
-                    }
-                    if hasattr(wrapped_tool, "args_schema"):
-                        tool_kwargs["args_schema"] = wrapped_tool.args_schema
+                    tool_name = wrapped_tool.__name__
+                    tool_desc = wrapped_tool.__doc__ or f"Calls {tool_name}"
+                    args_schema = getattr(wrapped_tool, "args_schema", None)
 
-                    structured_tool = StructuredTool.from_function(**tool_kwargs)
+                    structured_tool = StructuredTool.from_function(
+                        func=wrapped_tool,
+                        name=tool_name,
+                        description=tool_desc,
+                        args_schema=args_schema,
+                    )
                     lc_tools.append(structured_tool)
                 except Exception as e:
                     logger.error(

@@ -191,9 +191,7 @@ class PydanticAIAdapter(AgentAdapter):
                         ModelRequest(parts=[UserPromptPart(content=msg["content"])])
                     )
                 elif msg["role"] == "assistant":
-                    message_history.append(
-                        ModelResponse(parts=[msg["content"]], timestamp=None)
-                    )
+                    message_history.append(ModelResponse(parts=[msg["content"]]))
 
             toolsets = []
             if tools:
