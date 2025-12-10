@@ -147,6 +147,9 @@ class PydanticAIAdapter(AgentAdapter):
                 def sync_wrapper(*args, **kwargs):
                     object_ref = tool.remote(*args, **kwargs)
                     result = ray.get(object_ref)
+
+                    if isinstance(result, dict) and result.get("status") == "error":
+                        raise Exception(result.get("error", "Tool execution failed"))
                     return result
 
                 return sync_wrapper
