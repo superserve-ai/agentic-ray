@@ -81,7 +81,9 @@ def init(project_name: str, project_type: str):
                 click.echo("\nNext steps:")
                 click.echo(f"  cd {project_name}")
                 click.echo("  # Edit .env file with your API keys")
-                click.echo("  # Create your first agent: rayai create-agent <name>")
+                click.echo(
+                    "  # Create your first agent: rayai create-agent <name> --framework <agent_framework>"
+                )
                 click.echo("  # Run agents: rayai serve")
 
             except Exception as e:

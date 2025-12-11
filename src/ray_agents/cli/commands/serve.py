@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import click
+from dotenv import load_dotenv
 
 from ray_agents.deployment import (
     create_agent_deployment,
@@ -32,6 +33,12 @@ DEFAULT_RESOURCES = {"num_cpus": 1, "memory": "2GB", "num_replicas": 1, "num_gpu
 def serve(ctx, project_path: str, port: int, agents: str):
     """Serve agents using Ray Serve."""
     project_dir = Path(project_path).resolve()
+
+    # Load environment variables from .env file
+    env_file = project_dir / ".env"
+    if env_file.exists():
+        load_dotenv(env_file)
+        click.echo(f"Loaded environment from {env_file}")
 
     if not project_dir.exists():
         click.echo(f"Error: Project directory not found: {project_dir}")
@@ -378,7 +385,7 @@ def _print_deployment_summary(
         click.echo(f"  Endpoint: POST {endpoint_url}")
         click.echo(f"  Test it:  curl -X POST {endpoint_url} \\")
         click.echo("                 -H 'Content-Type: application/json' \\")
-        json_data = '{"data": {"message": "hello"}, "session_id": "test"}'
+        json_data = '{"data": {"messages": [{"role": "user", "content": "hello"}]}, "session_id": "test"}'
         click.echo(f"                 -d '{json_data}'")
 
     click.echo("\nRay Dashboard: http://localhost:8265")

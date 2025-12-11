@@ -139,8 +139,6 @@ def _get_langchain_template(agent_name: str) -> str:
     """Get LangChain agent template."""
     return f'''"""LangChain agent implementation for {agent_name}."""
 
-import asyncio
-
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 
@@ -173,7 +171,7 @@ class {agent_name.title().replace("_", "")}:
         # Create LangChain ReAct agent
         self.lc_agent = create_react_agent(self.llm, lc_tools)
 
-    def run(self, data: dict) -> dict:
+    async def run(self, data: dict) -> dict:
         """Execute the LangChain agent.
 
         Args:
@@ -206,9 +204,7 @@ class {agent_name.title().replace("_", "")}:
                 lc_messages.append(("system", content))
 
         # Run the agent
-        result = asyncio.get_event_loop().run_until_complete(
-            self.lc_agent.ainvoke({{"messages": lc_messages}})
-        )
+        result = await self.lc_agent.ainvoke({{"messages": lc_messages}})
 
         # Extract the final response
         agent_messages = result.get("messages", [])
@@ -224,8 +220,6 @@ class {agent_name.title().replace("_", "")}:
 def _get_pydantic_template(agent_name: str) -> str:
     """Get Pydantic AI agent template."""
     return f'''"""Pydantic AI agent implementation for {agent_name}."""
-
-import asyncio
 
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
@@ -272,7 +266,7 @@ class {agent_name.title().replace("_", "")}:
                 history.append(ModelResponse(parts=[TextPart(content=content)]))
         return history
 
-    def run(self, data: dict) -> dict:
+    async def run(self, data: dict) -> dict:
         """Execute the Pydantic AI agent.
 
         Args:
@@ -305,9 +299,7 @@ class {agent_name.title().replace("_", "")}:
         message_history = self._convert_to_pydantic_history(messages)
 
         # Run the agent
-        result = asyncio.get_event_loop().run_until_complete(
-            self.pydantic_agent.run(current_message, message_history=message_history)
-        )
+        result = await self.pydantic_agent.run(current_message, message_history=message_history)
 
         return {{"response": result.output}}
 '''

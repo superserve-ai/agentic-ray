@@ -43,7 +43,7 @@ A template for building and running agents with Ray Serve using the RayAI CLI.
 
 ## Available Commands
 
-- **`rayai create-agent <name>`** - Create a new agent
+- **`rayai create-agent <name> --framework <agent_framework>`** - Create a new agent
 - **`rayai serve`** - Run all agents
 - **`rayai serve --agents agent1,agent2`** - Run specific agents
 - **`rayai serve --port=9000`** - Run on custom port
