@@ -39,11 +39,11 @@ async def _stream_text_generator(async_gen):
         async for chunk in async_gen:
             if chunk:
                 yield f"data: {chunk}\n\n"
-        yield "data: [DONE]\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
     except asyncio.CancelledError:
         raise
     except Exception as e:
-        yield f"data: [ERROR] {str(e)}\n\n"
+        yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 
 
 async def _stream_events_generator(async_gen):
@@ -59,7 +59,7 @@ async def _stream_events_generator(async_gen):
         async for event in async_gen:
             if event:
                 yield f"data: {json.dumps(event)}\n\n"
-        yield "data: [DONE]\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
     except asyncio.CancelledError:
         raise
     except Exception as e:
