@@ -1,9 +1,12 @@
 """Agent deployment utilities for Ray Serve."""
 
+import asyncio
 import inspect
-from typing import Any
+import json
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from ray import serve
 
@@ -13,6 +16,7 @@ class ChatRequest(BaseModel):
 
     data: dict[Any, Any]
     session_id: str = "default"
+    stream: Literal[False, "text", "events"] = False
 
 
 class ChatResponse(BaseModel):
@@ -20,6 +24,46 @@ class ChatResponse(BaseModel):
 
     result: dict[Any, Any]
     session_id: str
+
+
+async def _stream_text_generator(async_gen):
+    """Wrap async generator in SSE format for text streaming.
+
+    Args:
+        async_gen: Async generator yielding text chunks
+
+    Yields:
+        SSE formatted strings (data: chunk\\n\\n)
+    """
+    try:
+        async for chunk in async_gen:
+            if chunk:
+                yield f"data: {chunk}\n\n"
+        yield "data: [DONE]\n\n"
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        yield f"data: [ERROR] {str(e)}\n\n"
+
+
+async def _stream_events_generator(async_gen):
+    """Wrap async generator in SSE format for event streaming.
+
+    Args:
+        async_gen: Async generator yielding event dicts
+
+    Yields:
+        SSE formatted JSON strings (data: {...}\\n\\n)
+    """
+    try:
+        async for event in async_gen:
+            if event:
+                yield f"data: {json.dumps(event)}\n\n"
+        yield "data: [DONE]\n\n"
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 
 
 def create_agent_deployment(
@@ -53,15 +97,49 @@ def create_agent_deployment(
         def __init__(self, agent_cls=agent_class):
             self.agent = agent_cls()
 
-        @app.post("/chat", response_model=ChatResponse)
+        @app.post("/chat")
         async def chat_endpoint(self, request: ChatRequest):
             try:
+                if request.stream == "text":
+                    if not hasattr(self.agent, "run_stream"):
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Agent does not support text streaming. Implement run_stream() method.",
+                        )
+                    return StreamingResponse(
+                        _stream_text_generator(self.agent.run_stream(request.data)),
+                        media_type="text/event-stream",
+                        headers={
+                            "Cache-Control": "no-cache",
+                            "Connection": "keep-alive",
+                        },
+                    )
+
+                if request.stream == "events":
+                    if not hasattr(self.agent, "run_stream_events"):
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Agent does not support event streaming. Implement run_stream_events() method.",
+                        )
+                    return StreamingResponse(
+                        _stream_events_generator(
+                            self.agent.run_stream_events(request.data)
+                        ),
+                        media_type="text/event-stream",
+                        headers={
+                            "Cache-Control": "no-cache",
+                            "Connection": "keep-alive",
+                        },
+                    )
+
                 result = self.agent.run(request.data)
 
                 if inspect.iscoroutine(result):
                     result = await result
 
                 return ChatResponse(result=result, session_id=request.session_id)
+            except HTTPException:
+                raise
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e)) from e
 
