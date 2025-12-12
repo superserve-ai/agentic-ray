@@ -1,0 +1,39 @@
+<svg viewBox="0 0 300 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Logo Icon (left side) for dark backgrounds -->
+  <g transform="translate(50, 50) scale(1.25)">
+    <!-- Central circle -->
+    <circle cx="0" cy="0" r="3.2" fill="#FFFFFF"/>
+
+    <!-- Inner core for contrast -->
+    <circle cx="0" cy="0" r="1.6" fill="#F0F0F0" opacity="0.6"/>
+
+    <!-- Radiating lines -->
+    <g stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round">
+      <!-- Diagonal directions only -->
+      <line x1="9.048" y1="-9.048" x2="4.528" y2="-4.528"/>
+      <line x1="9.048" y1="9.048" x2="4.528" y2="4.528"/>
+      <line x1="-9.048" y1="9.048" x2="-4.528" y2="4.528"/>
+      <line x1="-9.048" y1="-9.048" x2="-4.528" y2="-4.528"/>
+    </g>
+
+    <!-- Outer dots -->
+    <g>
+      <!-- Glow behind dots -->
+      <circle cx="0" cy="-12" r="2" fill="#FFFFFF" opacity="0.3"/>
+      <circle cx="12" cy="0" r="2" fill="#FFFFFF" opacity="0.3"/>
+      <circle cx="0" cy="12" r="2" fill="#FFFFFF" opacity="0.3"/>
+      <circle cx="-12" cy="0" r="2" fill="#FFFFFF" opacity="0.3"/>
+
+      <!-- Main dots -->
+      <circle cx="0" cy="-12" r="1.2" fill="#FFFFFF"/>
+      <circle cx="12" cy="0" r="1.2" fill="#FFFFFF"/>
+      <circle cx="0" cy="12" r="1.2" fill="#FFFFFF"/>
+      <circle cx="-12" cy="0" r="1.2" fill="#FFFFFF"/>
+    </g>
+  </g>
+
+  <!-- RayAI Text (right side) -->
+  <text x="85" y="63" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="42" font-weight="700" fill="#FFFFFF" letter-spacing="-1">
+    Ray<tspan font-weight="300">AI</tspan>
+  </text>
+</svg>

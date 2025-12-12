@@ -1,5 +1,14 @@
-# Agentic-Ray
-Scalable runtime for Agents, MCP Servers, and coding sandboxes, orchestrated with Ray.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/logo-color.svg">
+    <img alt="Agentic Ray" src="assets/logo-color.svg" width="300">
+  </picture>
+</p>
+
+<p align="center">
+  Scalable runtime for Agents, MCP Servers, and coding sandboxes, orchestrated with Ray.
+</p>
 
 ## Features
 - Distributed resource-aware tool execution on Ray clusters
