@@ -6,22 +6,14 @@ from typing import Any
 import ray
 
 
-def from_langchain_tool(
-    langchain_tool: Any,
-    num_cpus: int = 1,
-    memory: int | float = 256 * 1024**2,
-    num_gpus: int = 0,
-) -> Callable:
+def from_langchain_tool(langchain_tool: Any) -> Callable:
     """Convert a LangChain tool to a Ray-compatible remote function.
 
     Args:
         langchain_tool: LangChain tool (BaseTool instance)
-        num_cpus: Number of CPUs to allocate (default: 1)
-        memory: Memory to allocate in bytes (int) or GB (float < 1024)
-        num_gpus: Number of GPUs to allocate (default: 0)
 
     Returns:
-        Ray remote function compatible with RayAgent.register_tools()
+        Ray remote function
 
     Raises:
         ImportError: If langchain-core is not installed
@@ -42,11 +34,6 @@ def from_langchain_tool(
 
     tool_name = langchain_tool.name
     tool_description = langchain_tool.description
-
-    if isinstance(memory, float) and memory < 1024:
-        memory_bytes = int(memory * (1024**3))
-    else:
-        memory_bytes = int(memory)
 
     def _normalize_input(kwargs: dict[str, Any]) -> str | dict[str, Any]:
         """Normalize kwargs to format expected by LangChain tools."""
@@ -231,11 +218,7 @@ async def {name}_async({params_str}):
 
     tool_wrapper = _create_dynamic_wrapper(langchain_tool, tool_name, args_schema)
 
-    ray_remote_func = ray.remote(
-        num_cpus=num_cpus,
-        memory=memory_bytes,
-        num_gpus=num_gpus,
-    )(tool_wrapper)
+    ray_remote_func = ray.remote(tool_wrapper)
 
     def sync_wrapper(**kwargs: Any) -> dict[str, Any]:
         """Synchronous wrapper that executes the Ray remote function."""

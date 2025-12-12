@@ -25,17 +25,13 @@ class ChatResponse(BaseModel):
 def create_agent_deployment(
     agent_class: Any,
     agent_name: str,
-    num_replicas: int,
-    ray_actor_options: dict[str, Any],
     app_title: str | None = None,
 ):
     """Create a Ray Serve deployment for an agent.
 
     Args:
-        agent_class: The RayAgent class to deploy
+        agent_class: The agent class to deploy
         agent_name: Name for the deployment
-        num_replicas: Number of replicas to deploy
-        ray_actor_options: Ray actor options (num_cpus, memory, num_gpus)
         app_title: Optional title for the FastAPI app
 
     Returns:
@@ -43,11 +39,7 @@ def create_agent_deployment(
     """
     app = FastAPI(title=app_title or f"{agent_name} Agent")
 
-    @serve.deployment(
-        name=f"{agent_name}-deployment",
-        num_replicas=num_replicas,
-        ray_actor_options=ray_actor_options,
-    )
+    @serve.deployment(name=f"{agent_name}-deployment")
     @serve.ingress(app)
     class AgentDeployment:
         def __init__(self, agent_cls=agent_class):
