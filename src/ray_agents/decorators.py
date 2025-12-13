@@ -1,5 +1,6 @@
 """Decorators for Ray agents."""
 
+import inspect
 from collections.abc import Callable
 from typing import Any
 
@@ -56,6 +57,11 @@ def tool(
 
         sync_wrapper.__name__ = func.__name__
         sync_wrapper.__doc__ = func.__doc__
+        sync_wrapper.__annotations__ = func.__annotations__
+        try:
+            sync_wrapper.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
+        except (ValueError, TypeError):
+            pass
 
         return sync_wrapper
 
