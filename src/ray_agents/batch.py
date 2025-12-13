@@ -2,29 +2,33 @@
 
 import inspect
 from collections.abc import Callable
-from typing import Any, get_type_hints
+from inspect import Signature
+from typing import Any
 
 import ray
 
+from ray_agents.adapters.core import RayTool, to_raytool
+
 
 def batch(
-    tool: Callable,
+    tool: Callable | RayTool,
     max_concurrency: int | None = None,
     description: str | None = None,
 ) -> Callable:
-    """Create a batch version of a @tool decorated function for parallel execution.
+    """Create a batch version of a tool for parallel execution.
 
     The batch tool allows LLMs to execute multiple instances of the same tool
     in parallel with a single tool call, reducing round trips and improving
     throughput.
 
     Args:
-        tool: A @tool decorated function or from_langchain_tool() result
+        tool: Any tool (decorated function, wrapped tool, or RayTool)
         max_concurrency: Optional limit on parallel executions (default: unlimited)
         description: Optional custom description for the batch tool
 
     Returns:
-        A new callable that accepts list inputs and executes in parallel
+        A new callable that accepts list inputs and executes in parallel.
+        Can be wrapped with RayToolWrapper for framework-specific format.
 
     Example:
         >>> from ray_agents import tool, batch
@@ -39,29 +43,37 @@ def batch(
         >>> # Call with multiple URLs
         >>> results = fetch_url_batch(urls=["url1", "url2", "url3"])
     """
-    if not hasattr(tool, "_remote_func"):
-        raise ValueError(
-            f"Tool '{getattr(tool, '__name__', tool)}' is not a valid ray-agents tool. "
-            "Use @tool decorator or from_langchain_tool()."
-        )
+    if isinstance(tool, RayTool):
+        ray_tool = tool
+    else:
+        ray_tool = to_raytool(tool)
 
-    if not hasattr(tool, "_tool_metadata"):
-        raise ValueError(
-            f"Tool '{getattr(tool, '__name__', tool)}' is missing _tool_metadata. "
-            "Ensure it was decorated with @tool or converted with from_langchain_tool()."
-        )
-
-    original_name = tool.__name__
+    original_name = ray_tool.name
     batch_name = f"{original_name}_batch"
-    original_metadata = tool._tool_metadata  # type: ignore[attr-defined]
-    original_doc = tool.__doc__ or original_metadata.get("description", "")
-    original_remote_func = tool._remote_func
+    original_doc = ray_tool.description
+    ray_remote = ray_tool.ray_remote
+    input_style = ray_tool.input_style
 
-    original_func = tool._original_func  # type: ignore[attr-defined]
-    sig = inspect.signature(original_func)
-    params = list(sig.parameters.values())
-    param_names = [p.name for p in params]
-    param_types = _get_param_types(original_func, params)
+    param_names = list(ray_tool.annotations.keys())
+    param_types = ray_tool.annotations.copy()
+
+    if not param_names and ray_tool.signature:
+        param_names = [
+            p.name
+            for p in ray_tool.signature.parameters.values()
+            if p.name not in ("self", "cls")
+        ]
+        param_types = {
+            p.name: p.annotation if p.annotation != inspect.Parameter.empty else Any
+            for p in ray_tool.signature.parameters.values()
+            if p.name not in ("self", "cls")
+        }
+
+    if not param_names:
+        raise ValueError(
+            f"Cannot create batch for tool '{original_name}': no parameters found. "
+            "Ensure the tool has type annotations."
+        )
 
     if description:
         batch_desc = description
@@ -72,47 +84,45 @@ def batch(
             f"Original: {original_doc}"
         )
 
-    def _execute_batch(**kwargs: Any) -> list[Any]:
-        """Execute multiple tool calls in parallel."""
-        inputs = _parse_batch_inputs(kwargs, param_names)
+    def _make_batch_executor(name: str) -> Any:
+        def executor(**kwargs: Any) -> list[Any]:
+            """Execute multiple tool calls in parallel."""
+            inputs = _parse_batch_inputs(kwargs, param_names, input_style)
 
-        if not inputs:
-            return []
+            if not inputs:
+                return []
 
-        if max_concurrency is None:
-            refs = [original_remote_func.remote(**inp) for inp in inputs]
-            return ray.get(refs)
-        else:
-            results = []
-            for i in range(0, len(inputs), max_concurrency):
-                batch_inputs = inputs[i : i + max_concurrency]
-                refs = [original_remote_func.remote(**inp) for inp in batch_inputs]
-                results.extend(ray.get(refs))
-            return results
+            if max_concurrency is None:
+                if input_style == "single_input":
+                    refs = [ray_remote.remote(inp) for inp in inputs]
+                else:
+                    refs = [ray_remote.remote(**inp) for inp in inputs]
+                return ray.get(refs)
+            else:
+                results = []
+                for i in range(0, len(inputs), max_concurrency):
+                    batch_inputs = inputs[i : i + max_concurrency]
+                    if input_style == "single_input":
+                        refs = [ray_remote.remote(inp) for inp in batch_inputs]
+                    else:
+                        refs = [ray_remote.remote(**inp) for inp in batch_inputs]
+                    results.extend(ray.get(refs))
+                return results
 
-    batch_remote_func = ray.remote(_execute_batch)
+        executor.__name__ = name
+        executor.__qualname__ = name
+        return ray.remote(executor)
+
+    batch_remote_func = _make_batch_executor(batch_name)
 
     def sync_wrapper(**kwargs: Any) -> list[Any]:
         """Synchronous wrapper for batch execution."""
-        return ray.get(batch_remote_func.remote(**kwargs))
+        result: list[Any] = ray.get(batch_remote_func.remote(**kwargs))
+        return result
 
     sync_wrapper.__name__ = batch_name
     sync_wrapper.__qualname__ = batch_name
     sync_wrapper.__doc__ = batch_desc
-
-    sync_wrapper._tool_metadata = {  # type: ignore[attr-defined]
-        "description": batch_desc,
-        "num_cpus": original_metadata.get("num_cpus", 1),
-        "num_gpus": original_metadata.get("num_gpus", 0),
-        "memory": original_metadata.get("memory"),
-        "is_batch": True,
-        "original_tool": original_name,
-        "max_concurrency": max_concurrency,
-    }
-
-    sync_wrapper._remote_func = batch_remote_func  # type: ignore[attr-defined]
-    sync_wrapper._original_func = _execute_batch  # type: ignore[attr-defined]
-    sync_wrapper._original_tool = tool  # type: ignore[attr-defined]
 
     batch_params = []
     batch_annotations = {}
@@ -129,8 +139,17 @@ def batch(
         batch_annotations[plural_name] = list[original_type]  # type: ignore[valid-type]
 
     batch_annotations["return"] = list[Any]
-    sync_wrapper.__signature__ = inspect.Signature(batch_params)  # type: ignore[attr-defined]
+    sync_wrapper.__signature__ = Signature(batch_params)  # type: ignore[attr-defined]
     sync_wrapper.__annotations__ = batch_annotations
+
+    sync_wrapper._remote_func = batch_remote_func  # type: ignore[attr-defined]
+    sync_wrapper._original_func = sync_wrapper  # type: ignore[attr-defined]
+    sync_wrapper._tool_metadata = {  # type: ignore[attr-defined]
+        "desc": batch_desc,
+        "is_batch": True,
+        "original_tool": original_name,
+        "max_concurrency": max_concurrency,
+    }
 
     sync_wrapper.args_schema = _create_batch_args_schema(  # type: ignore[attr-defined]
         batch_name, param_names, param_types
@@ -139,33 +158,18 @@ def batch(
     return sync_wrapper
 
 
-def _get_param_types(func: Callable, params: list) -> dict[str, type]:
-    """Extract parameter types from function signature."""
-    try:
-        hints = get_type_hints(func)
-    except Exception:
-        hints = {}
-
-    param_types = {}
-    for p in params:
-        if p.name in hints:
-            param_types[p.name] = hints[p.name]
-        else:
-            param_types[p.name] = Any
-
-    return param_types
-
-
 def _parse_batch_inputs(
-    kwargs: dict[str, Any], param_names: list[str]
-) -> list[dict[str, Any]]:
+    kwargs: dict[str, Any],
+    param_names: list[str],
+    input_style: str,
+) -> list[Any]:
     """Parse batch inputs from kwargs.
 
-    Supports plural parameter names:
-        {"urls": ["url1", "url2"]}
+    For kwargs-style tools:
+        {"urls": ["url1", "url2"]} -> [{"url": "url1"}, {"url": "url2"}]
 
-    For multi-param tools:
-        {"queries": ["q1", "q2"], "limits": [10, 20]}
+    For single_input-style tools (LangChain):
+        {"querys": ["q1", "q2"]} -> ["q1", "q2"]
     """
     parallel_lists: dict[str, list[Any]] = {}
     list_length: int | None = None
@@ -186,17 +190,20 @@ def _parse_batch_inputs(
                         f"'{plural_name}' has {current_len}, expected {list_length}"
                     )
 
-    if parallel_lists and list_length is not None:
+    if not parallel_lists or list_length is None:
+        raise ValueError(
+            f"Invalid batch input. Expected plural parameter names like: "
+            f"{_pluralize(param_names[0])}=[value1, value2, ...]"
+        )
+
+    if input_style == "single_input" and len(param_names) == 1:
+        return parallel_lists[param_names[0]]
+    else:
         result: list[dict[str, Any]] = []
         for i in range(list_length):
             inp = {name: vals[i] for name, vals in parallel_lists.items()}
             result.append(inp)
         return result
-
-    raise ValueError(
-        f"Invalid batch input. Expected plural parameter names like: "
-        f"{_pluralize(param_names[0])}=[value1, value2, ...]"
-    )
 
 
 def _pluralize(name: str) -> str:
