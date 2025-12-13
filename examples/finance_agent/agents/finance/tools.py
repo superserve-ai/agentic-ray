@@ -1,12 +1,16 @@
+"""Finance tools with Ray distributed execution."""
+
 import os
 import uuid
 
 import ray
 import requests
 
+from rayai import tool
 from rayai.sandbox import execute_code
 
 
+@tool(desc="Fetch top S&P 500 stocks from API Ninjas", num_cpus=1)
 def get_sp500(limit: int = 10) -> list[dict[str, str]]:
     """Fetch top S&P 500 stocks from API Ninjas.
 
@@ -29,6 +33,7 @@ def get_sp500(limit: int = 10) -> list[dict[str, str]]:
     return response.json()
 
 
+@tool(desc="Fetch daily time series data for a stock symbol", num_cpus=1)
 def get_daily_time_series(symbol: str) -> dict:
     """Fetch daily time series data for a stock symbol from Alpha Vantage.
 
@@ -62,6 +67,7 @@ RUN pip install --no-cache-dir pandas numpy
 """
 
 
+@tool(desc="Execute Python code to analyze stock data in a secure sandbox", num_cpus=1)
 def run_analysis_code(code: str, time_series_data: str) -> str:
     """Execute Python code to analyze stock time series data in a secure sandbox.
 
@@ -88,8 +94,7 @@ def run_analysis_code(code: str, time_series_data: str) -> str:
     # Generate unique session ID for each execution
     session_id = f"finance-agent-{uuid.uuid4()}"
 
-    # Wrap the code to include the data inline (avoid needing upload_file before session exists)
-    # Escape the data for safe embedding in Python code
+    # Wrap the code to include the data inline
     escaped_data = time_series_data.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
     wrapped_code = f'''
 import json
@@ -109,7 +114,7 @@ data = json.loads(_raw_data)
             wrapped_code,
             session_id=session_id,
             dockerfile=SANDBOX_DOCKERFILE,
-            timeout=120,  # longer timeout for first run (image build)
+            timeout=120,
         )
     )
     print(f"[SANDBOX] Status: {result.get('status')}", flush=True)
