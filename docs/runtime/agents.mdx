@@ -1,0 +1,31 @@
+---
+title: "Agents"
+description: "Configure Agents as Ray Actors"
+---
+
+The `@agent` decorator marks a class as a deployable agent and configures its [Ray Actor](https://docs.ray.io/en/latest/ray-core/actors.html) resources.
+
+```python
+from rayai import agent
+
+@agent(num_cpus=2, memory="4GB", num_replicas=3)
+class MyAgent:
+    def run(self, data: dict) -> dict:
+        messages = data.get("messages", [])
+        # Process messages and return response
+        return {"response": "Hello!"}
+```
+
+Each agent instance runs as a Ray Actor with dedicated resources, enabling:
+- **Statefulness**: Maintain state across requests
+- **Resource isolation**: Guaranteed CPU, GPU, and memory allocation
+- **Horizontal scaling**: Multiple replicas for high availability
+
+## Resource Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `num_cpus` | int | 1 | CPU cores per replica |
+| `num_gpus` | int | 0 | GPUs per replica |
+| `memory` | str | "2GB" | Memory per replica |
+| `num_replicas` | int | 1 | Number of replicas for scaling |

@@ -1,0 +1,42 @@
+---
+title: "Tools"
+description: "Run tools as distributed Ray tasks"
+---
+
+The `@tool` decorator converts Python functions into [Ray tasks](https://docs.ray.io/en/latest/ray-core/tasks.html) that execute in parallel across your cluster.
+
+```python
+from rayai import tool
+
+@tool(desc="Analyze data with heavy computation", num_cpus=2, memory="4GB")
+def analyze_data(dataset: str) -> dict:
+    # This runs as a Ray task with 2 CPUs and 4GB memory
+    return {"result": "analysis complete"}
+```
+
+When you call `analyze_data()`, RayAI:
+1. Submits the function as a Ray remote task
+2. Allocates the specified resources (CPUs, GPUs, memory)
+3. Waits for the result and returns it
+
+## Parallel Execution
+
+Multiple tool calls execute in parallel automatically:
+
+```python
+# These run concurrently on Ray
+results = [
+    analyze_data("dataset_1"),
+    analyze_data("dataset_2"),
+    analyze_data("dataset_3"),
+]
+```
+
+## Resource Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `desc` | str | Function docstring | Description for LLM schema generation |
+| `num_cpus` | int | 1 | CPU cores per task |
+| `num_gpus` | int | 0 | GPUs per task |
+| `memory` | str | None | Memory limit (e.g., "4GB", "512MB") |

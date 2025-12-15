@@ -20,13 +20,15 @@
           {
             "group": "Runtime",
             "pages": [
-              "runtime"
+              "runtime/tools",
+              "runtime/agents",
+              "runtime/serving"
             ]
           },
           {
-            "group": "Agent Frameworks",
+            "group": "Frameworks",
             "pages": [
-              "frameworks/pure-python",
+              "frameworks/no-framework",
               "frameworks/langchain",
               "frameworks/pydantic"
             ]

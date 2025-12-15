@@ -1,0 +1,121 @@
+---
+title: "Serving"
+description: "Deploy agents as HTTP endpoints with Ray Serve"
+---
+
+Use `rayai serve` to deploy agents as HTTP endpoints via [Ray Serve](https://docs.ray.io/en/latest/serve/index.html):
+
+```bash
+rayai serve
+```
+
+RayAI automatically:
+1. Discovers agents in the `agents/` directory
+2. Initializes Ray and Ray Serve
+3. Creates FastAPI endpoints for each agent
+
+## Endpoints
+
+Each agent gets a `/chat` endpoint:
+
+```
+POST /agents/{agent_name}/chat
+```
+
+Request body:
+```json
+{
+  "data": {
+    "messages": [{"role": "user", "content": "Hello!"}]
+  },
+  "session_id": "optional-session-id",
+  "stream": false
+}
+```
+
+## Streaming
+
+Agents can support streaming responses by implementing additional methods:
+
+| Stream Mode | Method Required | Response Format |
+|-------------|-----------------|-----------------|
+| `"text"` | `run_stream()` | Server-sent events with text chunks |
+| `"events"` | `run_stream_events()` | Server-sent events with JSON objects |
+
+```python
+@agent()
+class StreamingAgent:
+    def run(self, data: dict) -> dict:
+        return {"response": "Hello!"}
+
+    async def run_stream(self, data: dict):
+        """Yield text chunks for streaming."""
+        yield "Hello"
+        yield " world!"
+
+    async def run_stream_events(self, data: dict):
+        """Yield event dicts for streaming."""
+        yield {"type": "start"}
+        yield {"type": "token", "content": "Hello"}
+        yield {"type": "end"}
+```
+
+## CLI Options
+
+```bash
+rayai serve [PROJECT_PATH] [OPTIONS]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--port` | 8000 | HTTP server port |
+| `--agents` | All | Comma-separated list of agents to deploy |
+
+## Advanced Usage
+
+### Scaling with Replicas
+
+Ray Serve automatically load balances requests across replicas. Configure replicas in the `@agent` decorator:
+
+```python
+@agent(num_cpus=1, memory="2GB", num_replicas=4)
+class HighThroughputAgent:
+    def run(self, data: dict) -> dict:
+        return {"response": "Handled by one of 4 replicas"}
+```
+
+### GPU Agents
+
+For ML inference workloads, allocate GPUs per replica:
+
+```python
+@agent(num_gpus=1, memory="8GB", num_replicas=2)
+class MLAgent:
+    def __init__(self):
+        # Load model once per replica
+        self.model = load_model()
+
+    def run(self, data: dict) -> dict:
+        return {"prediction": self.model.predict(data)}
+```
+
+### Resource Planning
+
+When planning cluster resources, consider:
+
+| Agent Config | Cluster Requirement |
+|--------------|---------------------|
+| `num_replicas=3, num_cpus=2` | 6 CPUs total |
+| `num_replicas=2, num_gpus=1` | 2 GPUs total |
+| `num_replicas=4, memory="4GB"` | 16GB RAM total |
+
+## Monitoring
+
+When running, you can access:
+- **Agent endpoints**: `http://localhost:8000/agents/{name}/chat`
+- **Ray Dashboard**: `http://localhost:8265`
+
+The Ray Dashboard provides visibility into:
+- Cluster resources and utilization
+- Task and actor status
+- Logs and metrics
