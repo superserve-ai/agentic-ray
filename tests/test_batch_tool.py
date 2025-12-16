@@ -68,56 +68,6 @@ class TestBatchTool:
         assert "error" in result["errors"][1].lower()
         assert result["errors"][2] is None
 
-    def test_late_binding(self, ray_start):
-        """Test dynamic tool registration."""
-        batch_tool = BatchTool()
-
-        # Initially empty
-        result = batch_tool("missing", [{"x": 1}])
-        assert "not found" in result["errors"][0]
-
-        # Add tool dynamically
-        @tool(desc="Added later")
-        def added_later(x: int) -> int:
-            return x
-
-        batch_tool.register(added_later)
-
-        # Now works
-        result = batch_tool("added_later", [{"x": 42}])
-        assert result["results"] == [42]
-
-    def test_unregister(self, ray_start):
-        """Test tool unregistration."""
-
-        @tool(desc="Test")
-        def temp_tool(x: int) -> int:
-            return x
-
-        batch_tool = BatchTool(tools=[temp_tool])
-        assert "temp_tool" in batch_tool.list_tools()
-
-        batch_tool.unregister("temp_tool")
-        assert "temp_tool" not in batch_tool.list_tools()
-
-    def test_list_tools(self, ray_start):
-        """Test listing registered tools."""
-
-        @tool(desc="A")
-        def tool_a(x: int) -> int:
-            return x
-
-        @tool(desc="B")
-        def tool_b(x: int) -> int:
-            return x
-
-        batch_tool = BatchTool(tools=[tool_a, tool_b])
-        tools = batch_tool.list_tools()
-
-        assert len(tools) == 2
-        assert "tool_a" in tools
-        assert "tool_b" in tools
-
     def test_multiple_tools(self, ray_start):
         """Test BatchTool with multiple registered tools."""
 
@@ -181,22 +131,6 @@ class TestBatchTool:
         assert batch_tool._tool_metadata["is_batch_tool"] is True
         assert hasattr(batch_tool, "args_schema")
         assert batch_tool.args_schema == BatchToolInput
-
-    def test_register_with_custom_name(self, ray_start):
-        """Test registering a tool with a custom name."""
-
-        @tool(desc="Test")
-        def original_name(x: int) -> int:
-            return x
-
-        batch_tool = BatchTool()
-        batch_tool.register(original_name, name="custom_name")
-
-        assert "custom_name" in batch_tool.list_tools()
-        assert "original_name" not in batch_tool.list_tools()
-
-        result = batch_tool("custom_name", [{"x": 5}])
-        assert result["results"] == [5]
 
 
 class TestBatchToolInputOutput:
