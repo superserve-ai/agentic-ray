@@ -7,7 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_ai import Agent
 
-from ray_agents import agent
+from rayai import agent
 
 # Load .env from example directory
 load_dotenv(Path(__file__).parent.parent.parent / ".env")

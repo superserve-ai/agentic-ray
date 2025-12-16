@@ -18,7 +18,7 @@ A stock market analysis agent using Pydantic AI with Ray-distributed tools.
 
 1. Install the package:
    ```bash
-   pip install agentic-ray
+   pip install rayai
    ```
 
 2. Navigate to the example:
