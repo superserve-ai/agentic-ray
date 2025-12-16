@@ -3,11 +3,13 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agentic-ray"
-version = "0.1.0"  # Production PyPI version - TestPyPI is at 0.1.5 currently
-description = "Experimental API to run LLM Agents (LangGraph, CrewAI, etc.) on Ray"
+name = "rayai"
+version = "0.1.0"
+description = "Run agentic workloads on Ray"
+license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.12"
+keywords = ["ray", "agents", "ai", "llm", "distributed", "pydantic-ai", "langchain", "parallel tool call"]
 dependencies = [
     "langchain-openai>=0.3.35",
     "langgraph>=0.6.10",
@@ -18,6 +20,10 @@ dependencies = [
     "click>=8.0.0",
     "pydantic-ai-slim[openai]>=1.27.0",
 ]
+
+[project.urls]
+Homepage = "https://rayai.com"
+Repository = "https://github.com/rayai-labs/agentic-ray"
 
 [project.scripts]
 rayai = "rayai.cli:main"

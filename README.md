@@ -1,12 +1,12 @@
 <div align="center">
-  <a href="https://rayai.com/"><img src="assets/rayai-logo-full-color.svg" alt="RayAI Logo" width="280"/></a>
+  <a href="https://rayai.com/"><img src="https://raw.githubusercontent.com/rayai-labs/agentic-ray/main/assets/rayai-logo-full-color.svg" alt="RayAI Logo" width="280"/></a>
 
   <p><strong>Scalable runtime for Agents, MCP Servers, and coding sandboxes, orchestrated with Ray.</strong></p>
 
   <!-- [![PyPI version](https://img.shields.io/pypi/v/agentic-ray.svg)](https://pypi.org/project/agentic-ray/) -->
-  [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+  [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/rayai-labs/agentic-ray/blob/main/LICENSE)
   [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://python.org)
-  <!-- [![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white)](#) -->
+  [![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white)](https://discord.gg/utftfhSK)
   <!-- [![Slack](https://img.shields.io/badge/Slack-Join%20Us-4A154B?logo=slack&logoColor=white)](#) -->
 
 </div>
@@ -176,7 +176,7 @@ results = execute_tools([
 
 ## Examples
 
-See the [examples/](examples/) directory for complete implementations:
+See the [examples/](https://github.com/rayai-labs/agentic-ray/tree/main/examples) directory for complete implementations:
 
 - **Token-Efficient Agent** - Autonomous code execution in sandboxed environments
 - **Finance Agent** - Multi-step financial analysis with external APIs
@@ -184,11 +184,11 @@ See the [examples/](examples/) directory for complete implementations:
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome! See [CONTRIBUTING.md](https://github.com/rayai-labs/agentic-ray/blob/main/CONTRIBUTING.md) for guidelines.
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](https://github.com/rayai-labs/agentic-ray/blob/main/LICENSE) file for details.
 
 ---
 
