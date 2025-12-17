@@ -45,8 +45,7 @@ result = batch_tool(
 ### With LangChain Agent
 
 ```python
-from langchain_openai import ChatOpenAI
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 
 from rayai import tool, BatchTool
 from rayai.adapters import RayToolWrapper, AgentFramework
@@ -64,8 +63,7 @@ wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
 [lc_batch_tool] = wrapper.wrap_tools([batch_tool])
 
 # Create LangChain agent
-llm = ChatOpenAI(model="gpt-4o-mini")
-agent = create_react_agent(llm, tools=[lc_batch_tool])
+agent = create_agent(model="openai:gpt-4o-mini", tools=[lc_batch_tool])
 ```
 
 ## Input & Output

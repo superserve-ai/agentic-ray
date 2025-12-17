@@ -11,6 +11,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 keywords = ["ray", "agents", "ai", "llm", "distributed", "pydantic-ai", "langchain", "parallel tool call"]
 dependencies = [
+    "langchain>=1.0.0",
     "langchain-openai>=0.3.35",
     "langgraph>=0.6.10",
     "ray[serve]>=2.49.2",

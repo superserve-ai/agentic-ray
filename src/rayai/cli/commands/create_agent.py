@@ -144,8 +144,7 @@ def _get_langchain_template(agent_name: str) -> str:
     """Get LangChain agent template."""
     return f'''"""LangChain agent implementation for {agent_name}."""
 
-from langchain_openai import ChatOpenAI
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 
 from rayai import agent, tool
 from rayai.adapters import AgentFramework, RayToolWrapper
@@ -160,21 +159,22 @@ def example_tool(query: str) -> str:
 
 @agent(num_cpus=1, memory="2GB")
 class {agent_name.title().replace("_", "")}:
-    """Agent implementation using LangChain/LangGraph."""
+    """Agent implementation using LangChain."""
 
     def __init__(self):
         # Store Ray tools
         self.tools = [example_tool]
 
-        # Set up LLM (requires OPENAI_API_KEY env var)
-        self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
         # Wrap Ray tools for LangChain compatibility
         wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
         lc_tools = wrapper.wrap_tools(self.tools)
 
-        # Create LangChain ReAct agent
-        self.lc_agent = create_react_agent(self.llm, lc_tools)
+        # Create LangChain agent
+        self.lc_agent = create_agent(
+            model="openai:gpt-4o-mini",
+            tools=lc_tools,
+            system_prompt="You are a helpful assistant.",
+        )
 
     async def run(self, data: dict) -> dict:
         """Execute the LangChain agent.
@@ -195,21 +195,8 @@ class {agent_name.title().replace("_", "")}:
         if not messages:
             return {{"error": "No messages provided"}}
 
-        # Convert OpenAI format to LangChain tuples
-        lc_messages = []
-        for msg in messages:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            # LangChain uses "human" instead of "user", "ai" instead of "assistant"
-            if role == "user":
-                lc_messages.append(("user", content))
-            elif role == "assistant":
-                lc_messages.append(("assistant", content))
-            elif role == "system":
-                lc_messages.append(("system", content))
-
-        # Run the agent
-        result = await self.lc_agent.ainvoke({{"messages": lc_messages}})
+        # Run the agent with OpenAI-format messages
+        result = await self.lc_agent.ainvoke({{"messages": messages}})
 
         # Extract the final response
         agent_messages = result.get("messages", [])

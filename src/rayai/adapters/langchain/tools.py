@@ -31,6 +31,7 @@ def from_langchain_tool(
 
     Example:
         ```python
+        from langchain.agents import create_agent
         from langchain_community.tools import DuckDuckGoSearchRun
         from rayai.adapters import from_langchain_tool
 
@@ -38,7 +39,7 @@ def from_langchain_tool(
         search = from_langchain_tool(DuckDuckGoSearchRun(), num_cpus=1)
 
         # Use directly with LangChain agent
-        agent = create_react_agent(llm, [search])
+        agent = create_agent(model="openai:gpt-4o-mini", tools=[search])
         ```
     """
     try:
