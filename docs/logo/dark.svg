@@ -1,14 +1,14 @@
-<svg width="160" height="24" viewBox="58 28 230 44" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Logo Icon (left side) with original colors -->
+<svg width="160" height="24" viewBox="68 28 222 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Logo Icon (left side) with updated colors (brighter for dark mode) -->
   <g transform="translate(50, 50) scale(1.35)">
     <!-- Central circle with gradient -->
-    <circle cx="0" cy="0" r="3.2" fill="url(#gradient1)"/>
+    <circle cx="0" cy="0" r="3.5" fill="url(#gradient1)"/>
 
     <!-- Inner white core for contrast -->
-    <circle cx="0" cy="0" r="1.6" fill="#FFFFFF" opacity="0.4"/>
+    <circle cx="0" cy="0" r="1.8" fill="#FFFFFF" opacity="0.5"/>
 
     <!-- Radiating lines -->
-    <g stroke="url(#gradient2)" stroke-width="1.6" stroke-linecap="round">
+    <g stroke="url(#gradient2)" stroke-width="1.8" stroke-linecap="round">
       <!-- Diagonal directions only -->
       <line x1="9.048" y1="-9.048" x2="4.528" y2="-4.528"/>
       <line x1="9.048" y1="9.048" x2="4.528" y2="4.528"/>
@@ -19,47 +19,47 @@
     <!-- Outer dots -->
     <g>
       <!-- Glow behind dots -->
-      <circle cx="0" cy="-12" r="2" fill="#B19CD9" opacity="0.3"/>
-      <circle cx="12" cy="0" r="2" fill="#DDA0DD" opacity="0.3"/>
-      <circle cx="0" cy="12" r="2" fill="#FFB6C1" opacity="0.3"/>
-      <circle cx="-12" cy="0" r="2" fill="#ADD8E6" opacity="0.3"/>
+      <circle cx="0" cy="-12" r="2.2" fill="#8B6DE6" opacity="0.4"/>
+      <circle cx="12" cy="0" r="2.2" fill="#D57EE6" opacity="0.4"/>
+      <circle cx="0" cy="12" r="2.2" fill="#F86AAC" opacity="0.4"/>
+      <circle cx="-12" cy="0" r="2.2" fill="#AB7DE6" opacity="0.4"/>
 
       <!-- Main dots -->
-      <circle cx="0" cy="-12" r="1.2" fill="#B19CD9"/>
-      <circle cx="12" cy="0" r="1.2" fill="#DDA0DD"/>
-      <circle cx="0" cy="12" r="1.2" fill="#FFB6C1"/>
-      <circle cx="-12" cy="0" r="1.2" fill="#ADD8E6"/>
+      <circle cx="0" cy="-12" r="1.4" fill="#8B6DE6"/>
+      <circle cx="12" cy="0" r="1.4" fill="#D57EE6"/>
+      <circle cx="0" cy="12" r="1.4" fill="#F86AAC"/>
+      <circle cx="-12" cy="0" r="1.4" fill="#AB7DE6"/>
     </g>
   </g>
 
   <!-- RayAI Text (right side) with gradient -->
-  <text x="85" y="63" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="42" font-weight="700" fill="url(#textGradient)" letter-spacing="-1">
+  <text x="85" y="60" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="35" font-weight="700" fill="url(#textGradient)" letter-spacing="-0.5">
     Ray<tspan font-weight="300">AI</tspan>
   </text>
 
-  <!-- Docs text in purple -->
-  <text x="195" y="63" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="42" font-weight="400" fill="#9B88FF" letter-spacing="-1">
+  <!-- Docs text in purple (brighter for dark mode) -->
+  <text x="182" y="60" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="35" font-weight="400" fill="#9B7DFF" letter-spacing="-0.5">
     Docs
   </text>
 
-  <!-- Gradient definitions matching RayAI logo -->
+  <!-- Gradient definitions with brighter colors for dark mode -->
   <defs>
     <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#9B88FF"/>
-      <stop offset="50%" stop-color="#DA9FFF"/>
-      <stop offset="100%" stop-color="#FF88E8"/>
+      <stop offset="0%" stop-color="#8B6DE6"/>
+      <stop offset="50%" stop-color="#C86DE6"/>
+      <stop offset="100%" stop-color="#F86AAC"/>
     </linearGradient>
 
     <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#B19CD9"/>
-      <stop offset="50%" stop-color="#DDA0DD"/>
-      <stop offset="100%" stop-color="#87CEEB"/>
+      <stop offset="0%" stop-color="#8B6DE6"/>
+      <stop offset="50%" stop-color="#D57EE6"/>
+      <stop offset="100%" stop-color="#AB7DE6"/>
     </linearGradient>
 
     <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#9B88FF"/>
-      <stop offset="50%" stop-color="#DA9FFF"/>
-      <stop offset="100%" stop-color="#FF88E8"/>
+      <stop offset="0%" stop-color="#8B6DE6"/>
+      <stop offset="50%" stop-color="#C86DE6"/>
+      <stop offset="100%" stop-color="#F86AAC"/>
     </linearGradient>
   </defs>
 </svg>
