@@ -8,7 +8,7 @@ Usage:
 
 import click
 
-from .commands import create_agent, init, serve
+from .commands import analytics, create_agent, init, serve
 
 
 @click.group()
@@ -21,6 +21,7 @@ def cli():
 cli.add_command(init.init)
 cli.add_command(serve.serve)
 cli.add_command(create_agent.create_agent)
+cli.add_command(analytics.analytics)
 
 
 def main():

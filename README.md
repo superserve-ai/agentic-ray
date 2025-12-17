@@ -182,6 +182,19 @@ See the [examples/](https://github.com/rayai-labs/agentic-ray/tree/main/examples
 - **Finance Agent** - Multi-step financial analysis with external APIs
 
 
+## Telemetry
+
+RayAI collects anonymous usage data to help improve the CLI:
+- Commands run (init, create-agent, serve)
+- Framework choices (python, langchain, pydantic)
+
+No personal data, project names, or code is ever collected.
+
+To opt out:
+```bash
+rayai analytics off
+```
+
 ## Contributing
 
 Contributions are welcome! See [CONTRIBUTING.md](https://github.com/rayai-labs/agentic-ray/blob/main/CONTRIBUTING.md) for guidelines.

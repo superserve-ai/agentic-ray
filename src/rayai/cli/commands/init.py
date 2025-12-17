@@ -8,6 +8,8 @@ from pathlib import Path
 
 import click
 
+from rayai.cli.analytics import track
+
 
 @click.command()
 @click.argument("project_name")
@@ -60,6 +62,8 @@ def init(project_name: str, project_type: str):
 
                 click.echo(f"Created new {project_type} project: {project_name}")
                 click.echo(f"Project location: {target_dir}")
+
+                track("cli_init", {"project_type": project_type})
 
                 if pyproject_file.exists():
                     click.echo("\nInstalling project in editable mode...")

@@ -5,6 +5,8 @@ from pathlib import Path
 
 import click
 
+from rayai.cli.analytics import track
+
 SUPPORTED_FRAMEWORKS = ["python", "langchain", "pydantic"]
 
 
@@ -40,6 +42,9 @@ def create_agent(agent_name: str, framework: str):
 
         click.echo(f"Created {framework} agent: {agent_name}")
         click.echo(f"Location: {agent_dir}")
+
+        track("cli_create_agent", {"framework": framework})
+
         click.echo("\nNext steps:")
         click.echo(f"  Edit agents/{agent_name}/agent.py to implement your logic")
         click.echo("  Run with: rayai serve")
