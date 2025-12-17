@@ -1,66 +1,10 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14'",
     "python_full_version == '3.13.*'",
     "python_full_version < '3.13'",
-]
-
-[[package]]
-name = "agentic-ray"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "click" },
-    { name = "fastapi" },
-    { name = "langchain-openai" },
-    { name = "langgraph" },
-    { name = "openai" },
-    { name = "pydantic-ai-slim", extra = ["openai"] },
-    { name = "python-dotenv" },
-    { name = "ray", extra = ["serve"] },
-]
-
-[package.optional-dependencies]
-sandbox = [
-    { name = "docker" },
-    { name = "requests" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "black" },
-    { name = "docker" },
-    { name = "mypy" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "click", specifier = ">=8.0.0" },
-    { name = "docker", marker = "extra == 'sandbox'", specifier = ">=7.0.0" },
-    { name = "fastapi", specifier = ">=0.100.0" },
-    { name = "langchain-openai", specifier = ">=0.3.35" },
-    { name = "langgraph", specifier = ">=0.6.10" },
-    { name = "openai", specifier = ">=1.0.0" },
-    { name = "pydantic-ai-slim", extras = ["openai"], specifier = ">=1.27.0" },
-    { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "ray", extras = ["serve"], specifier = ">=2.49.2" },
-    { name = "requests", marker = "extra == 'sandbox'", specifier = ">=2.31.0" },
-]
-provides-extras = ["sandbox"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "black", specifier = ">=25.9.0" },
-    { name = "docker", specifier = ">=7.0.0" },
-    { name = "mypy", specifier = ">=1.18.2" },
-    { name = "pre-commit", specifier = ">=4.3.0" },
-    { name = "pytest", specifier = ">=8.4.2" },
-    { name = "ruff", specifier = ">=0.14.0" },
 ]
 
 [[package]]
@@ -221,6 +165,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6b/5c/685e6633917e101e5dcb62b9dd76946cbb57c26e133bae9e0cd36033c0a9/attrs-25.4.0.tar.gz", hash = "sha256:16d5969b87f0859ef33a48b35d55ac1be6e42ae49d5e853b597db70c35c57e11", size = 934251, upload-time = "2025-10-06T13:54:44.725Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3a/2a/7cc015f5b9f5db42b7d48157e23356022889fc354a2813c15934b7cb5c0e/attrs-25.4.0-py3-none-any.whl", hash = "sha256:adcf7e2a1fb3b36ac48d97835bb6d8ade15b8dcce26aba8bf1d14847b57a3373", size = 67615, upload-time = "2025-10-06T13:54:43.17Z" },
+]
+
+[[package]]
+name = "backoff"
+version = "2.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/d7/5bbeb12c44d7c4f2fb5b56abce497eb5ed9f34d85701de869acedd602619/backoff-2.2.1.tar.gz", hash = "sha256:03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba", size = 17001, upload-time = "2022-10-05T19:19:32.061Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/73/b6e24bd22e6720ca8ee9a85a0c4a2971af8497d8f3193fa05390cbd46e09/backoff-2.2.1-py3-none-any.whl", hash = "sha256:63579f9a0628e06278f7e47b7d7d5b6ce20dc65c5e96a6f3ca99a6adca0396e8", size = 15148, upload-time = "2022-10-05T19:19:30.546Z" },
 ]
 
 [[package]]
@@ -1344,6 +1297,23 @@ wheels = [
 ]
 
 [[package]]
+name = "posthog"
+version = "7.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "backoff" },
+    { name = "distro" },
+    { name = "python-dateutil" },
+    { name = "requests" },
+    { name = "six" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/14/e5/5262d1604a3eb19b23d4e896bce87b4603fd39ec366a96b27e19e3299aef/posthog-7.4.0.tar.gz", hash = "sha256:1fb97b11960e24fcf0b80f0a6450b2311478e5a3ee6ea3c6f9284ff89060a876", size = 143780, upload-time = "2025-12-16T23:42:05.829Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9f/8b/13066693d7a6f94fb5da3407417bbbc3f6aa8487051294d0ef766c1567fa/posthog-7.4.0-py3-none-any.whl", hash = "sha256:f9d4e32c1c0f2110256b1aae7046ed90af312c1dbb1eecc6a9cb427733b22970", size = 166079, upload-time = "2025-12-16T23:42:04.33Z" },
+]
+
+[[package]]
 name = "pre-commit"
 version = "4.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1656,6 +1626,18 @@ wheels = [
 ]
 
 [[package]]
+name = "python-dateutil"
+version = "2.9.0.post0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432, upload-time = "2024-03-01T18:36:20.211Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
+]
+
+[[package]]
 name = "python-dotenv"
 version = "1.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1781,6 +1763,64 @@ serve = [
     { name = "uvicorn", extra = ["standard"] },
     { name = "virtualenv" },
     { name = "watchfiles" },
+]
+
+[[package]]
+name = "rayai"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "click" },
+    { name = "fastapi" },
+    { name = "langchain-openai" },
+    { name = "langgraph" },
+    { name = "openai" },
+    { name = "posthog" },
+    { name = "pydantic-ai-slim", extra = ["openai"] },
+    { name = "python-dotenv" },
+    { name = "ray", extra = ["serve"] },
+]
+
+[package.optional-dependencies]
+sandbox = [
+    { name = "docker" },
+    { name = "requests" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "black" },
+    { name = "docker" },
+    { name = "mypy" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "click", specifier = ">=8.0.0" },
+    { name = "docker", marker = "extra == 'sandbox'", specifier = ">=7.0.0" },
+    { name = "fastapi", specifier = ">=0.100.0" },
+    { name = "langchain-openai", specifier = ">=0.3.35" },
+    { name = "langgraph", specifier = ">=0.6.10" },
+    { name = "openai", specifier = ">=1.0.0" },
+    { name = "posthog", specifier = ">=3.0.0" },
+    { name = "pydantic-ai-slim", extras = ["openai"], specifier = ">=1.27.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "ray", extras = ["serve"], specifier = ">=2.49.2" },
+    { name = "requests", marker = "extra == 'sandbox'", specifier = ">=2.31.0" },
+]
+provides-extras = ["sandbox"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "black", specifier = ">=25.9.0" },
+    { name = "docker", specifier = ">=7.0.0" },
+    { name = "mypy", specifier = ">=1.18.2" },
+    { name = "pre-commit", specifier = ">=4.3.0" },
+    { name = "pytest", specifier = ">=8.4.2" },
+    { name = "ruff", specifier = ">=0.14.0" },
 ]
 
 [[package]]

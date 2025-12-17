@@ -11,6 +11,7 @@ from typing import Any
 import click
 from dotenv import load_dotenv
 
+from rayai.cli.analytics import track
 from rayai.deployment import (
     create_agent_deployment,
 )
@@ -47,6 +48,8 @@ def serve(project_path: str, port: int, agents: str):
     agents_to_deploy = _select_agents(agents_dict, agents)
     if not agents_to_deploy:
         return
+
+    track("cli_serve", {"agent_count": len(agents_to_deploy)})
 
     _deploy_agents(agents_to_deploy, port)
 
