@@ -1,65 +1,59 @@
 <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
   <!-- Black background -->
   <rect x="0" y="0" width="40" height="40" fill="#000000"/>
-  
+
   <!-- Outer glow effect for dark backgrounds -->
   <circle cx="20" cy="20" r="8" fill="url(#glowGradient)" opacity="0.3"/>
   <circle cx="20" cy="20" r="12" fill="url(#glowGradient)" opacity="0.15"/>
-  
-  <!-- Central circle with brighter gradient -->
-  <circle cx="20" cy="20" r="4" fill="url(#gradient1)"/>
-  
+
+  <!-- Central circle with updated gradient -->
+  <circle cx="20" cy="20" r="4.5" fill="url(#gradient1)"/>
+
   <!-- Inner white core for contrast -->
-  <circle cx="20" cy="20" r="2" fill="#FFFFFF" opacity="0.4"/>
-  
-  <!-- Radiating lines with enhanced brightness -->
+  <circle cx="20" cy="20" r="2.2" fill="#FFFFFF" opacity="0.5"/>
+
+  <!-- Radiating lines with updated gradient -->
   <g stroke="url(#gradient2)" stroke-width="2" stroke-linecap="round">
-    <!-- Cardinal directions -->
-    <line x1="20" y1="4" x2="20" y2="12"/>
-    <line x1="36" y1="20" x2="28" y2="20"/>
-    <line x1="20" y1="36" x2="20" y2="28"/>
-    <line x1="4" y1="20" x2="12" y2="20"/>
-    
-    <!-- Diagonal directions -->
+    <!-- Diagonal directions only (matching main logo) -->
     <line x1="31.31" y1="8.69" x2="25.66" y2="14.34"/>
     <line x1="31.31" y1="31.31" x2="25.66" y2="25.66"/>
     <line x1="8.69" y1="31.31" x2="14.34" y2="25.66"/>
     <line x1="8.69" y1="8.69" x2="14.34" y2="14.34"/>
   </g>
-  
-  <!-- Outer dots with brighter colors and glow -->
+
+  <!-- Outer dots with updated colors and glow -->
   <g>
     <!-- Glow behind dots -->
-    <circle cx="20" cy="8" r="2.5" fill="#B19CD9" opacity="0.3"/>
-    <circle cx="32" cy="20" r="2.5" fill="#DDA0DD" opacity="0.3"/>
-    <circle cx="20" cy="32" r="2.5" fill="#FFB6C1" opacity="0.3"/>
-    <circle cx="8" cy="20" r="2.5" fill="#ADD8E6" opacity="0.3"/>
-    
+    <circle cx="20" cy="5" r="2.5" fill="#7B5DD6" opacity="0.4"/>
+    <circle cx="35" cy="20" r="2.5" fill="#C56ED6" opacity="0.4"/>
+    <circle cx="20" cy="35" r="2.5" fill="#E85A9C" opacity="0.4"/>
+    <circle cx="5" cy="20" r="2.5" fill="#9B6DD6" opacity="0.4"/>
+
     <!-- Main dots -->
-    <circle cx="20" cy="8" r="1.5" fill="#B19CD9"/>
-    <circle cx="32" cy="20" r="1.5" fill="#DDA0DD"/>
-    <circle cx="20" cy="32" r="1.5" fill="#FFB6C1"/>
-    <circle cx="8" cy="20" r="1.5" fill="#ADD8E6"/>
+    <circle cx="20" cy="5" r="1.6" fill="#7B5DD6"/>
+    <circle cx="35" cy="20" r="1.6" fill="#C56ED6"/>
+    <circle cx="20" cy="35" r="1.6" fill="#E85A9C"/>
+    <circle cx="5" cy="20" r="1.6" fill="#9B6DD6"/>
   </g>
-  
-  <!-- Gradient definitions optimized for dark backgrounds -->
+
+  <!-- Gradient definitions with updated colors -->
   <defs>
     <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#9B88FF"/>
-      <stop offset="50%" stop-color="#DA9FFF"/>
-      <stop offset="100%" stop-color="#FF88E8"/>
+      <stop offset="0%" stop-color="#7B5DD6"/>
+      <stop offset="50%" stop-color="#B85DD6"/>
+      <stop offset="100%" stop-color="#E85A9C"/>
     </linearGradient>
-    
+
     <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#B19CD9"/>
-      <stop offset="50%" stop-color="#DDA0DD"/>
-      <stop offset="100%" stop-color="#87CEEB"/>
+      <stop offset="0%" stop-color="#7B5DD6"/>
+      <stop offset="50%" stop-color="#C56ED6"/>
+      <stop offset="100%" stop-color="#9B6DD6"/>
     </linearGradient>
-    
+
     <radialGradient id="glowGradient">
-      <stop offset="0%" stop-color="#DA9FFF" stop-opacity="0.6"/>
-      <stop offset="50%" stop-color="#9B88FF" stop-opacity="0.3"/>
-      <stop offset="100%" stop-color="#FF88E8" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#B85DD6" stop-opacity="0.6"/>
+      <stop offset="50%" stop-color="#7B5DD6" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#E85A9C" stop-opacity="0"/>
     </radialGradient>
   </defs>
 </svg>
