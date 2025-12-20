@@ -114,7 +114,7 @@ def fetch_pr_files(pr_url: str) -> list[dict[str, Any]]:
 
 
 # =====================================================
-# Parallel File Review Tool (BatchTool)
+# Parallel File Review Worker (Ray task)
 # =====================================================
 
 """
