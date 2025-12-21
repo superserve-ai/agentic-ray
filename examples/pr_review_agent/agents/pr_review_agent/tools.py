@@ -167,10 +167,10 @@ def review_file_diff(file: dict[str, Any]) -> dict[str, Any]:
         start = raw_output.find("{")
         end = raw_output.rfind("}") + 1
         parsed = json.loads(raw_output[start:end])
-    except Exception:
-        # Fallback for bad LLM output
+    except (json.JSONDecodeError, TypeError, AttributeError, ValueError):
+        # Fallback for bad LLM output or unexpected format
         parsed = {
-            "summary": raw_output[:500],
+            "summary": str(raw_output)[:500],
             "issues": [],
             "suggestions": [],
             "severity": "low",

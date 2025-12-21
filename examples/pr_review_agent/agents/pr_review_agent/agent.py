@@ -87,9 +87,22 @@ class PrReviewAgent:
         if not user_message:
             return {"error": "No user message found"}
 
-        pr_url = extract_pr_url(user_message)
-        files = fetch_pr_files(pr_url)
-        print("files", files)
+        try:
+            pr_url = extract_pr_url(user_message)
+        except ValueError as exc:
+            return {
+                "error": "Invalid pull request URL",
+                "details": str(exc),
+            }
+
+        try:
+            files = fetch_pr_files(pr_url)
+        except RuntimeError as exc:
+            return {
+                "error": "Failed to fetch pull request files from GitHub",
+                "details": str(exc),
+            }
+
         # Parallel fan-out
         refs = [review_file_diff.remote(f) for f in files]
         reviews = ray.get(refs)

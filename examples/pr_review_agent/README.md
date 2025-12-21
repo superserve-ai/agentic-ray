@@ -51,7 +51,7 @@ This example demonstrates how to build a production-ready, deterministic agent u
 ## Test
 
 ```bash
-curl -X POST http://localhost:8000/agents/pr_review/chat \
+curl -X POST http://localhost:8000/agents/pr_review_agent/chat \
   -H "Content-Type: application/json" \
   -d '{
     "data": {
