@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 from typing import Match
 
+import requests
+
 from dotenv import load_dotenv
 from pydantic_ai import Agent
 
@@ -100,8 +102,17 @@ class PrReviewAgent:
 
         try:
             pr_context = fetch_pull_request(owner, repo, pr_number)
+        except RuntimeError as e:
+            # Raised when required auth is missing
+            return failure_payload(str(e))
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response else "unknown"
+            body = e.response.text if e.response else str(e)
+            return failure_payload(f"GitHub API error (status {status}): {body}")
+        except requests.exceptions.RequestException as e:
+            return failure_payload(f"Network error while calling GitHub API: {str(e)}")
         except Exception as e:
-            return failure_payload(f"Failed to fetch PR data: {str(e)}")
+            return failure_payload(f"Unexpected error fetching PR data: {str(e)}")
         
         batch_tool = BatchTool(
             tools=[review_file],
@@ -114,7 +125,7 @@ class PrReviewAgent:
         aggregated_summaries = []
         for file_review in result.get("results", []):
             if file_review.get("Status") == "Success":
-                aggregated_summaries.append(file_review.get("fileName", "") + ": " + file_review.get("Summary", ""))
+                aggregated_summaries.append(file_review.get("file_name", "") + ": " + file_review.get("Summary", ""))
 
         summary_text = "\n\n".join(aggregated_summaries)
 

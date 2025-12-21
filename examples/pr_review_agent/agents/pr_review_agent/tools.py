@@ -131,7 +131,7 @@ def review_file(file: dict) -> dict:
 	Returns:
 		String review of the file changes.
 	"""
-	filename = file.get("filename", "unknown")
+	file_name = file.get("filename", "unknown")
 	patch = file.get("patch", "")
 	additions = file.get("additions", 0)
 	deletions = file.get("deletions", 0)
@@ -140,7 +140,7 @@ def review_file(file: dict) -> dict:
 
 
 	if not patch:
-		return failure_payload(f"No patch available for file {filename}")
+		return failure_payload(f"No patch available for file {file_name}")
 
 	pydantic_agent = Agent(
 		"openai:gpt-4.1",
@@ -148,7 +148,7 @@ def review_file(file: dict) -> dict:
 	)
 
 	message = (
-		f"Review the following changes in file: {filename}\n"
+		f"Review the following changes in file: {file_name}\n"
 		f"Status: {status}\n"
 		f"Additions: {additions}, Deletions: {deletions}\n"
 		f"Patch:\n{patch}"
@@ -159,11 +159,11 @@ def review_file(file: dict) -> dict:
 	try:
 		parsed = json.loads(response.output)
 		if isinstance(parsed, dict):
-			return {"fileName": filename, **parsed}
+			return {"file_name": file_name, **parsed}
 	except json.JSONDecodeError:
 		pass
 	
-	return {"fileName": filename, **failure_payload(f"Failed to parse review output as JSON for file {filename}")}
+	return {"file_name": file_name, **failure_payload(f"Failed to parse review output as JSON for file {file_name}")}
 	
 
 def failure_payload(error: str) -> dict:
