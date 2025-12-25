@@ -1,0 +1,2 @@
+# This file ensures the agents/ directory is created during project initialization
+# Use 'rayai create-agent <name>' to create your first agent

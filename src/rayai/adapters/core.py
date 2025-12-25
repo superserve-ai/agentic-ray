@@ -24,6 +24,7 @@ class SourceFramework(Enum):
     RAY_TOOL = "ray_tool"
     LANGCHAIN = "langchain"
     PYDANTIC = "pydantic"
+    AGNO = "agno"
     CALLABLE = "callable"
 
 
@@ -102,6 +103,15 @@ def detect_framework(tool: Any) -> SourceFramework:
 
         if isinstance(tool, PydanticTool):
             return SourceFramework.PYDANTIC
+    except ImportError:
+        pass
+
+    # Try Agno (lazy import to avoid hard dependency)
+    try:
+        from agno.tools import Tool as AgnoTool
+
+        if isinstance(tool, AgnoTool):
+            return SourceFramework.AGNO
     except ImportError:
         pass
 
@@ -274,6 +284,61 @@ def to_raytool_from_pydantic(
     )
 
 
+def to_raytool_from_agno(
+    tool: Any,
+    num_cpus: int,
+    memory_bytes: int,
+    num_gpus: int,
+) -> RayTool:
+    """Convert Agno Tool to canonical RayTool."""
+    try:
+        from agno.tools import Tool as AgnoTool
+    except ImportError:
+        raise ImportError(
+            "Agno tool conversion requires 'agno'. " "Install with: pip install agno"
+        ) from None
+
+    if not isinstance(tool, AgnoTool):
+        raise ValueError(f"Expected Agno Tool, got {type(tool).__name__}")
+
+    func = tool._function
+    tool_name = tool.name or func.__name__
+    tool_description = tool.description or func.__doc__ or ""
+
+    def _make_executor(name: str) -> Any:
+        def executor(**kwargs: Any) -> Any:
+            return func(**kwargs)  # type: ignore[call-arg]
+
+        executor.__name__ = name
+        executor.__qualname__ = name
+        return ray.remote(num_cpus=num_cpus, memory=memory_bytes, num_gpus=num_gpus)(
+            executor
+        )
+
+    _execute = _make_executor(tool_name)
+
+    # Extract signature and annotations
+    try:
+        sig = inspect.signature(func)
+    except (ValueError, TypeError):
+        sig = None
+
+    annotations = getattr(func, "__annotations__", {}).copy()
+    return_annotation = annotations.pop("return", None)
+
+    return RayTool(
+        name=tool_name,
+        description=tool_description,
+        ray_remote=_execute,
+        func=func,
+        args_schema=None,  # Agno uses annotations, not schema
+        signature=sig,
+        annotations=annotations,
+        return_annotation=return_annotation,
+        source_framework="agno",
+    )
+
+
 def to_raytool_from_callable(
     func: Callable,
     num_cpus: int,
@@ -391,6 +456,8 @@ def to_raytool(
         return to_raytool_from_langchain(tool, num_cpus, memory_bytes, num_gpus)
     elif source == SourceFramework.PYDANTIC:
         return to_raytool_from_pydantic(tool, num_cpus, memory_bytes, num_gpus)
+    elif source == SourceFramework.AGNO:
+        return to_raytool_from_agno(tool, num_cpus, memory_bytes, num_gpus)
     elif source == SourceFramework.CALLABLE:
         return to_raytool_from_callable(tool, num_cpus, memory_bytes, num_gpus)
     else:
@@ -525,6 +592,49 @@ def from_raytool_to_pydantic(ray_tool: RayTool) -> Callable:
     return wrapper
 
 
+def from_raytool_to_agno(ray_tool: RayTool) -> Any:
+    """Convert canonical RayTool to Agno Tool."""
+    AgnoTool: Any | None
+    try:
+        from agno.tools import Tool as AgnoTool  # type: ignore[assignment]
+    except ImportError:
+        # Some Agno versions may not expose Tool in agno.tools.
+        # In that case, we gracefully fall back to returning a plain
+        # callable wrapper that Agno can register directly as a tool.
+        AgnoTool = None
+
+    ray_remote = ray_tool.ray_remote
+
+    def wrapper(**kwargs: Any) -> Any:
+        """Execute tool on Ray worker."""
+        result = ray.get(ray_remote.remote(**kwargs))
+        return _handle_result(result)
+
+    # Preserve metadata for Agno
+    wrapper.__name__ = ray_tool.name
+    wrapper.__qualname__ = ray_tool.name
+    wrapper.__doc__ = ray_tool.description
+
+    # Restore annotations for schema generation
+    if ray_tool.annotations:
+        wrapper.__annotations__ = ray_tool.annotations.copy()
+        if ray_tool.return_annotation:
+            wrapper.__annotations__["return"] = ray_tool.return_annotation
+
+    # If Agno Tool class is available, wrap using it. Otherwise return
+    # the plain callable, which works with newer Agno versions that
+    # accept functions directly as tools.
+    if AgnoTool is not None:
+        agno_tool = AgnoTool(
+            function=wrapper,
+            name=ray_tool.name,
+            description=ray_tool.description,
+        )
+        return agno_tool
+
+    return wrapper
+
+
 def from_raytool(ray_tool: RayTool, target: "AgentFramework") -> Any:
     """Convert canonical RayTool to target framework.
 
@@ -542,5 +652,7 @@ def from_raytool(ray_tool: RayTool, target: "AgentFramework") -> Any:
         return from_raytool_to_langchain(ray_tool)
     elif target == AgentFramework.PYDANTIC:
         return from_raytool_to_pydantic(ray_tool)
+    elif target == AgentFramework.AGNO:
+        return from_raytool_to_agno(ray_tool)
     else:
         raise ValueError(f"Unsupported target framework: {target}")

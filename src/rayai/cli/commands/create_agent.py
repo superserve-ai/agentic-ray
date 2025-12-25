@@ -7,7 +7,7 @@ import click
 
 from rayai.cli.analytics import track
 
-SUPPORTED_FRAMEWORKS = ["python", "langchain", "pydantic"]
+SUPPORTED_FRAMEWORKS = ["python", "langchain", "pydantic", "agno"]
 
 
 @click.command(name="create-agent")
@@ -66,6 +66,8 @@ def _create_agent_files(agent_dir: Path, agent_name: str, framework: str):
         content = _get_langchain_template(agent_name)
     elif framework == "pydantic":
         content = _get_pydantic_template(agent_name)
+    elif framework == "agno":
+        content = _get_agno_template(agent_name)
     else:
         content = _get_python_template(agent_name)
 
@@ -295,3 +297,74 @@ class {agent_name.title().replace("_", "")}:
 
         return {{"response": result.output}}
 '''
+
+
+def _get_agno_template(agent_name: str) -> str:
+    """Get Agno agent template."""
+    return f'''"""Agno agent implementation for {agent_name}."""
+
+from agno.agent import Agent
+
+from rayai import agent, tool
+from rayai.adapters import AgentFramework, RayToolWrapper
+
+
+@tool(desc="Example tool - replace with your own", num_cpus=1)
+def example_tool(query: str) -> str:
+    """Process a query and return a result."""
+    return f"Processed: {{query}}"
+
+
+@agent(num_cpus=1, memory="2GB")
+class {agent_name.title().replace("_", "")}:
+    """Agent implementation using Agno."""
+
+    def __init__(self):
+        # Store Ray tools
+        self.tools = [example_tool]
+
+        # Wrap Ray tools for Agno compatibility
+        wrapper = RayToolWrapper(framework=AgentFramework.AGNO)
+        agno_tools = wrapper.wrap_tools(self.tools)
+
+        # Create Agno agent (requires OPENAI_API_KEY env var)
+        self.agno_agent = Agent(
+            model="openai:gpt-4o-mini",
+            system_prompt="You are a helpful assistant.",
+            tools=agno_tools,
+        )
+
+    async def run(self, data: dict) -> dict:
+        """Execute the Agno agent.
+
+        Args:
+            data: OpenAI Chat API format:
+                {{"messages": [
+                    {{"role": "system", "content": "..."}},
+                    {{"role": "user", "content": "..."}},
+                    {{"role": "assistant", "content": "..."}},
+                    ...
+                ]}}
+
+        Returns:
+            Dict with 'response' key containing agent output
+        """
+        messages = data.get("messages", [])
+        if not messages:
+            return {{"error": "No messages provided"}}
+
+        # Get the last user message
+        user_message = None
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                user_message = msg.get("content", "")
+                break
+
+        if not user_message:
+            return {{"error": "No user message found"}}
+
+        # Run the agent with the user message
+        result = await self.agno_agent.run(user_message)
+
+        return {{"response": result.output}}
+    '''

@@ -1,0 +1,18 @@
+[project]
+name = "agno_agent"
+version = "0.1.0"
+description = "An AI agent project built with rayai"
+requires-python = ">=3.10"
+dependencies = [
+    "python-dotenv",
+    "rayai",
+    "agno",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agents*"]

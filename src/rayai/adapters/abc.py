@@ -13,6 +13,7 @@ class AgentFramework(Enum):
 
     LANGCHAIN = "langchain"
     PYDANTIC = "pydantic"
+    AGNO = "agno"
 
 
 class RayToolWrapper:

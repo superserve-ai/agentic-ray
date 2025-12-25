@@ -17,6 +17,7 @@ dist/
 env/
 venv/
 ENV/
+.venv312/
 
 # Unit test / coverage reports
 .pytest_cache/
