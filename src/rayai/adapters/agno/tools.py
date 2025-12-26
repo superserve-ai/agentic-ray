@@ -51,7 +51,7 @@ def from_agno_tool(
         ```
     """
     try:
-        from agno.tools import Tool
+        from agno.tools import Tool  # type: ignore[attr-defined]
     except ImportError:
         raise ImportError(
             "Agno tool conversion requires 'agno'. " "Install with: pip install agno"
@@ -75,7 +75,7 @@ def from_agno_tool(
     # Create Ray remote function
     @ray.remote(num_cpus=num_cpus, memory=memory_bytes, num_gpus=num_gpus)
     def _execute_tool(**kwargs: Any) -> Any:
-        return func(**kwargs)  # type: ignore[call-arg]
+        return func(**kwargs)
 
     # Create wrapper function that Agno can use directly
     def ray_wrapper(**kwargs: Any) -> Any:

@@ -108,7 +108,7 @@ def detect_framework(tool: Any) -> SourceFramework:
 
     # Try Agno (Tool-based detection only)
     try:
-        from agno.tools import Tool as AgnoTool  # type: ignore[import-not-found]
+        from agno.tools import Tool as AgnoTool  # type: ignore[attr-defined]
 
         if isinstance(tool, AgnoTool):
             return SourceFramework.AGNO
