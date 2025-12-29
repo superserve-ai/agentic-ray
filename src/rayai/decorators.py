@@ -31,22 +31,20 @@ from __future__ import annotations
 import asyncio
 import functools
 from collections.abc import Callable
-from typing import Any, TypeVar, overload
+from typing import Any, overload
 
 import ray
 
 from rayai.resource_loader import _parse_memory
 from rayai.resource_parser import parse_all_ray_resources
 
-F = TypeVar("F", bound=Callable[..., Any])
+
+@overload
+def tool[F: Callable[..., Any]](func: F) -> F: ...
 
 
 @overload
-def tool(func: F) -> F: ...
-
-
-@overload
-def tool(
+def tool[F: Callable[..., Any]](
     func: None = None,
     *,
     num_cpus: int | float | None = None,
