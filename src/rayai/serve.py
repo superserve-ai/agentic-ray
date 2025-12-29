@@ -105,7 +105,7 @@ def serve(
         num_gpus: GPUs per replica (default: 0).
         memory: Memory per replica (default: "2GB").
         replicas: Number of replicas (default: 1).
-        route_prefix: URL prefix for this agent (default: /agents/{name}).
+        route_prefix: URL prefix for this agent (default: /{name}).
 
     Example:
         # Single agent (blocks)
@@ -120,7 +120,7 @@ def serve(
 
     # Default route prefix
     if route_prefix is None:
-        route_prefix = f"/agents/{name}"
+        route_prefix = f"/{name}"
 
     config = AgentConfig(
         agent=agent,
@@ -263,7 +263,7 @@ def _start_serve(
 
     print(f"\n🚀 RayAI serving {len(configs)} agent(s) at http://{host}:{port}")
     for config in configs:
-        print(f"   • {config.name}: {config.route_prefix}/chat")
+        print(f"   • {config.name}: {config.route_prefix}")
     print("\nPress Ctrl+C to stop.\n")
 
     # Block forever
@@ -325,7 +325,7 @@ def _create_agent_deployment(
             self.runner = runner
             self.agent = agent
 
-        @app.post("/chat")
+        @app.post("/")
         async def chat(self, request: ChatRequest) -> ChatResponse | StreamingResponse:
             try:
                 if request.stream:

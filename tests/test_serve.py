@@ -118,7 +118,7 @@ class TestServeRegistration:
         serve(lambda x: x, name="myagent")
 
         config = get_registered_agents()[0]
-        assert config.route_prefix == "/agents/myagent"
+        assert config.route_prefix == "/myagent"
 
     def test_route_prefix_custom(self):
         """Custom route prefix."""

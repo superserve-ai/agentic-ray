@@ -120,8 +120,8 @@ def _get_langchain_template(agent_name: str) -> str:
     return f'''"""LangChain agent implementation for {agent_name}."""
 
 import rayai
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
-from langgraph.prebuilt import create_react_agent
 
 
 @rayai.tool
@@ -136,7 +136,7 @@ def example_tool(query: str) -> str:
 
 # Create LangChain agent with Ray-distributed tools
 llm = ChatOpenAI(model="gpt-4o-mini")
-agent = create_react_agent(llm, [example_tool])
+agent = create_agent(llm, tools=[example_tool])
 
 # Serve the agent
 rayai.serve(agent, name="{agent_name}", num_cpus=1, memory="2GB")
