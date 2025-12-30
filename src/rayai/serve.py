@@ -31,7 +31,7 @@ import inspect
 import json
 import sys
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -68,7 +68,7 @@ class ChatRequest(BaseModel):
 
     query: str
     session_id: str = "default"
-    stream: bool = False
+    stream: Literal[False, "text", "events"] = False
 
 
 class ChatResponse(BaseModel):
@@ -323,20 +323,38 @@ def _create_agent_deployment(
         @app.post("/", response_model=None)
         async def chat(self, request: ChatRequest) -> ChatResponse | StreamingResponse:
             try:
-                if request.stream:
-                    # Check for streaming support
-                    if hasattr(self.runner, "run_stream"):
-                        return StreamingResponse(
-                            _stream_generator(self.runner.run_stream(request.query)),
-                            media_type="text/event-stream",
-                            headers={
-                                "Cache-Control": "no-cache",
-                                "Connection": "keep-alive",
-                            },
+                if request.stream == "text":
+                    # Text streaming
+                    if not self.runner.supports_streaming():
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Agent does not support text streaming",
                         )
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Agent does not support streaming",
+                    return StreamingResponse(
+                        _stream_text_generator(self.runner.run_stream(request.query)),
+                        media_type="text/event-stream",
+                        headers={
+                            "Cache-Control": "no-cache",
+                            "Connection": "keep-alive",
+                        },
+                    )
+
+                if request.stream == "events":
+                    # Event streaming
+                    if not self.runner.supports_event_streaming():
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Agent does not support event streaming",
+                        )
+                    return StreamingResponse(
+                        _stream_events_generator(
+                            self.runner.run_stream_events(request.query)
+                        ),
+                        media_type="text/event-stream",
+                        headers={
+                            "Cache-Control": "no-cache",
+                            "Connection": "keep-alive",
+                        },
                     )
 
                 # Non-streaming
@@ -396,6 +414,159 @@ class _AgentRunner:
             return await self._run_callable(query)
         else:
             raise ValueError(f"Unknown agent type: {self.agent_type}")
+
+    def supports_streaming(self) -> bool:
+        """Check if the agent supports text streaming."""
+        if self.agent_type == "pydantic_ai":
+            return hasattr(self.agent, "run_stream")
+        elif self.agent_type == "langchain":
+            return hasattr(self.agent, "astream") or hasattr(self.agent, "stream")
+        elif self.agent_type == "rayai":
+            return hasattr(self.agent, "run_stream")
+        return False
+
+    def supports_event_streaming(self) -> bool:
+        """Check if the agent supports event streaming."""
+        if self.agent_type == "pydantic_ai":
+            return hasattr(self.agent, "run_stream_events")
+        elif self.agent_type == "langchain":
+            return hasattr(self.agent, "astream_events")
+        elif self.agent_type == "rayai":
+            return hasattr(self.agent, "run_stream_events")
+        return False
+
+    async def run_stream(self, query: str):
+        """Stream text chunks from the agent."""
+        if self.agent_type == "pydantic_ai":
+            async for chunk in self._stream_pydantic_ai(query):
+                yield chunk
+        elif self.agent_type == "langchain":
+            async for chunk in self._stream_langchain(query):
+                yield chunk
+        elif self.agent_type == "rayai":
+            async for chunk in self._stream_rayai(query):
+                yield chunk
+        else:
+            raise ValueError(f"Text streaming not supported for: {self.agent_type}")
+
+    async def run_stream_events(self, query: str):
+        """Stream structured events from the agent."""
+        if self.agent_type == "pydantic_ai":
+            async for event in self._stream_events_pydantic_ai(query):
+                yield event
+        elif self.agent_type == "langchain":
+            async for event in self._stream_events_langchain(query):
+                yield event
+        elif self.agent_type == "rayai":
+            async for event in self._stream_events_rayai(query):
+                yield event
+        else:
+            raise ValueError(f"Event streaming not supported for: {self.agent_type}")
+
+    async def _stream_pydantic_ai(self, query: str):
+        """Stream from a Pydantic AI agent."""
+        async with self.agent.run_stream(query) as result:
+            async for text in result.stream_text(delta=True):
+                yield text
+
+    async def _stream_langchain(self, query: str):
+        """Stream text tokens from a LangChain agent."""
+        from langchain_core.messages import HumanMessage
+
+        input_data = {"messages": [HumanMessage(content=query)]}
+
+        if hasattr(self.agent, "astream"):
+            async for chunk in self.agent.astream(input_data, stream_mode="messages"):
+                if isinstance(chunk, tuple) and len(chunk) >= 1:
+                    token = chunk[0]
+                    if hasattr(token, "content") and token.content:
+                        yield token.content
+                elif hasattr(chunk, "content") and chunk.content:
+                    yield chunk.content
+
+    async def _stream_rayai(self, query: str):
+        """Stream from a rayai.Agent."""
+        async for chunk in self.agent.run_stream(query):
+            yield chunk
+
+    async def _stream_events_pydantic_ai(self, query: str):
+        """Stream events from a Pydantic AI agent using run_stream_events()."""
+        async for event in self.agent.run_stream_events(query):
+            event_name = type(event).__name__
+
+            if event_name == "FunctionToolCallEvent":
+                part = event.part
+                args = getattr(part, "args", {})
+                if isinstance(args, bytes):
+                    try:
+                        args = json.loads(args.decode())
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        args = {}
+                elif isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except json.JSONDecodeError:
+                        args = {"input": args}
+                yield {
+                    "type": "tool_call",
+                    "tool": getattr(part, "tool_name", "unknown"),
+                    "input": args,
+                }
+
+            elif event_name == "FunctionToolResultEvent":
+                # Tool returned a result
+                result = getattr(event, "result", None)
+                tool_name = (
+                    getattr(result, "tool_name", "unknown") if result else "unknown"
+                )
+                content = getattr(result, "content", "") if result else str(event)
+                yield {
+                    "type": "tool_result",
+                    "tool": tool_name,
+                    "output": str(content),
+                }
+
+            elif event_name == "PartDeltaEvent":
+                delta = getattr(event, "delta", None)
+                if delta:
+                    delta_type = type(delta).__name__
+                    if delta_type == "TextPartDelta":
+                        content = getattr(delta, "content_delta", "")
+                        if content:
+                            yield {"type": "text", "content": content}
+
+    async def _stream_events_langchain(self, query: str):
+        """Stream events from a LangChain agent."""
+        from langchain_core.messages import HumanMessage
+
+        input_data = {"messages": [HumanMessage(content=query)]}
+
+        async for event in self.agent.astream_events(input_data, version="v2"):
+            event_type = event.get("event", "")
+            if event_type == "on_tool_start":
+                yield {
+                    "type": "tool_call",
+                    "tool": event.get("name", "unknown"),
+                    "input": event.get("data", {}).get("input", {}),
+                }
+            elif event_type == "on_tool_end":
+                output = event.get("data", {}).get("output", "")
+                if hasattr(output, "content"):
+                    output = output.content
+                yield {
+                    "type": "tool_result",
+                    "tool": event.get("name", "unknown"),
+                    "output": str(output),
+                }
+            elif event_type == "on_chat_model_stream":
+                chunk = event.get("data", {}).get("chunk")
+                if chunk and hasattr(chunk, "content") and chunk.content:
+                    yield {"type": "text", "content": chunk.content}
+
+    async def _stream_events_rayai(self, query: str):
+        """Stream events from a rayai.Agent."""
+        async for event in self.agent.run_stream_events(query):
+            yield event
 
     async def _run_pydantic_ai(self, query: str) -> str:
         """Run a Pydantic AI agent."""
@@ -503,12 +674,25 @@ def _is_agent_instance(obj: Any) -> bool:
     )
 
 
-async def _stream_generator(async_gen):
-    """Wrap async generator in SSE format."""
+async def _stream_text_generator(async_gen):
+    """Wrap async generator in SSE format for text streaming."""
     try:
         async for chunk in async_gen:
             if chunk:
-                yield f"data: {json.dumps({'content': str(chunk)})}\n\n"
+                yield f"data: {chunk}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+
+
+async def _stream_events_generator(async_gen):
+    """Wrap async generator in SSE format for event streaming."""
+    try:
+        async for event in async_gen:
+            if event:
+                yield f"data: {json.dumps(event)}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
     except asyncio.CancelledError:
         raise
