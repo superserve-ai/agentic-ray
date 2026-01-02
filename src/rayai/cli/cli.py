@@ -7,13 +7,15 @@ Usage:
     rayai create-agent <name> [--framework=pydantic|langchain|python]
 """
 
+from importlib.metadata import version
+
 import click
 
 from .commands import analytics, create_agent, init, up
 
 
 @click.group()
-@click.version_option(version="0.1.0")
+@click.version_option(version=version("rayai"))
 def cli():
     """RayAI CLI - Run agents and services with Ray Serve"""
     pass
