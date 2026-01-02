@@ -33,7 +33,7 @@ import sys
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -304,7 +304,15 @@ def _create_agent_deployment(
     """
     from ray import serve as ray_serve
 
-    app = FastAPI(title=f"{name} Agent", redirect_slashes=False)
+    app = FastAPI(title=f"{name} Agent")
+
+    @app.middleware("http")
+    async def normalize_path(request: Request, call_next):
+        """Add trailing slash to path if missing (avoids redirect)."""
+        if not request.url.path.endswith("/"):
+            scope = request.scope
+            scope["path"] = scope["path"] + "/"
+        return await call_next(request)
 
     @ray_serve.deployment(
         name=f"{name}-deployment",

@@ -1,5 +1,5 @@
 ---
-title: "BatchTool"
+title: "Batch Tool"
 description: "Let the LLM batch invocations of a tool into one call - Ray runs them in parallel"
 ---
 
@@ -11,7 +11,6 @@ Instead of calling a tool 50 times (e.g., `web_search`, `grep`, `update_row`), t
 
 ```python
 import rayai
-from rayai import BatchTool
 
 @rayai.tool
 def lookup_topic(topic: str) -> str:
@@ -24,10 +23,10 @@ def translate(text: str, target_lang: str) -> str:
     return f"Translated '{text}' to {target_lang}"
 
 # Create batch tool with your tools
-batch_tool = BatchTool(tools=[lookup_topic, translate])
+batch = rayai.batch_tool(tools=[lookup_topic, translate], name="batch")
 
 # LLM calls it like:
-result = batch_tool(
+result = batch(
     tool_name="lookup_topic",
     tool_inputs=[
         {"topic": "Python"},
@@ -47,11 +46,10 @@ result = batch_tool(
 
 ### With Pydantic AI
 
-BatchTool returns a plain callable that works with any agent framework:
+`batch_tool` returns a plain callable that works with any agent framework:
 
 ```python
 import rayai
-from rayai import BatchTool
 from pydantic_ai import Agent
 
 @rayai.tool
@@ -59,7 +57,7 @@ def search(query: str) -> str:
     """Search for information."""
     return f"Results for {query}"
 
-batch_search = BatchTool(tools=[search], name="batch_search")
+batch_search = rayai.batch_tool(tools=[search], name="batch_search")
 
 def make_agent():
     return Agent("openai:gpt-4o-mini", tools=[batch_search])
@@ -85,7 +83,7 @@ rayai.serve(make_agent, name="search-agent")
 
 ## API Reference
 
-### BatchTool
+### rayai.batch_tool
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -94,5 +92,5 @@ rayai.serve(make_agent, name="search-agent")
 | `description` | `str` | Custom description |
 
 <Info>
-BatchTool handles partial failures gracefully. If some inputs fail, others still return results. Check the `errors` list to see which inputs failed.
+`batch_tool` handles partial failures gracefully. If some inputs fail, others still return results. Check the `errors` list to see which inputs failed.
 </Info>

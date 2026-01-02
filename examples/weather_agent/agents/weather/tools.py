@@ -1,13 +1,13 @@
-"""Weather tools with BatchTool for parallel execution."""
+"""Weather tools with batch_tool for parallel execution."""
 
 import os
 
 import requests
 
-from rayai import BatchTool, tool
+import rayai
 
 
-@tool(desc="Get current weather for a city", num_cpus=1)
+@rayai.tool(num_cpus=1)
 def get_weather(city: str) -> dict:
     """Fetch current weather for a single city from WeatherAPI.com.
 
@@ -45,4 +45,4 @@ def get_weather(city: str) -> dict:
         return {"city": city, "error": str(e)}
 
 
-batch_weather = BatchTool(tools=[get_weather])
+batch_weather = rayai.batch_tool(tools=[get_weather], name="batch_weather")

@@ -1,4 +1,4 @@
-"""Weather agent using Pydantic AI with BatchTool for parallel execution."""
+"""Weather agent using Pydantic AI with batch_tool for parallel execution."""
 
 import os
 import sys
@@ -7,7 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_ai import Agent
 
-from rayai import agent
+import rayai
 
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
@@ -37,38 +37,14 @@ After receiving the weather data, provide a friendly summary to the user.
 """
 
 
-@agent(num_cpus=1, memory="1GB")
-class Weather:
-    """Weather agent with BatchTool for parallel city weather fetching."""
+def make_agent():
+    """Create and configure the Pydantic AI weather agent."""
+    return Agent(
+        "openai:gpt-4o-mini",
+        system_prompt=SYSTEM_PROMPT,
+        tools=[batch_weather],
+    )
 
-    def __init__(self):
-        self.pydantic_agent = Agent(
-            "openai:gpt-4o-mini",
-            system_prompt=SYSTEM_PROMPT,
-            tools=[batch_weather],
-        )
 
-    async def run(self, data: dict) -> dict:
-        """Execute the weather agent.
-
-        Args:
-            data: Input data in OpenAI Chat API format
-
-        Returns:
-            Dict with 'response' key containing agent output
-        """
-        messages = data.get("messages", [])
-        if not messages:
-            return {"error": "No messages provided"}
-
-        user_message = None
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                user_message = msg.get("content", "")
-                break
-
-        if not user_message:
-            return {"error": "No user message found"}
-
-        result = await self.pydantic_agent.run(user_message)
-        return {"response": result.output}
+# Serve the agent with Ray Serve
+rayai.serve(make_agent, name="weather", num_cpus=1, memory="1GB")
