@@ -74,12 +74,17 @@ Thank you for your interest in contributing to Agentic-Ray! We welcome contribut
    uv run black .
    ```
 
-5. Commit with a clear message:
+5. Run type checking:
+   ```bash
+   uv run mypy src/rayai
+   ```
+
+6. Commit with a clear message:
    ```bash
    git commit -m "feat: add your feature description"
    ```
 
-6. Push and open a Pull Request
+7. Push and open a Pull Request
 
 ### Commit Message Convention
 
@@ -96,6 +101,7 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 - We use [Black](https://github.com/psf/black) for formatting
 - We use [Ruff](https://github.com/astral-sh/ruff) for linting
+- We use [mypy](https://mypy-lang.org/) for static type checking (enforced in CI)
 - Type hints are encouraged
 
 ## Questions?
