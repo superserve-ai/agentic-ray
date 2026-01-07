@@ -392,7 +392,8 @@ class TestPlatformClient:
         from rayai.cli.platform.client import PlatformClient
 
         client = PlatformClient()
-        assert "rayai.com" in client.base_url
+        # Default URL is localhost for dev, rayai.com for prod
+        assert "localhost" in client.base_url or "rayai.com" in client.base_url
 
     def test_client_custom_url(self):
         """Client with custom base URL."""
