@@ -12,9 +12,8 @@ requires-python = ">=3.12"
 keywords = ["ray", "agents", "ai", "llm", "distributed", "pydantic-ai", "langchain", "parallel tool call"]
 dependencies = [
     "langchain>=1.0.0",
-    "langchain-openai>=0.3.35",
+    "langchain-openai>=1.0.0",
     "langgraph>=0.6.10",
-    "ray[serve]>=2.49.2",
     "openai>=1.0.0",
     "python-dotenv>=1.0.0",
     "fastapi>=0.100.0",
@@ -22,6 +21,8 @@ dependencies = [
     "pydantic-ai-slim[openai]>=1.42.0",
     "anyio>=4.0",  # Required for pydantic-ai type parameterization
     "posthog>=3.0.0",
+    # Ray is required but not pinned - allows Anyscale to provide its own version
+    "ray[serve]",
 ]
 
 [project.urls]

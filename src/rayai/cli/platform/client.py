@@ -9,7 +9,13 @@ import requests
 
 from .auth import get_credentials
 from .config import DEFAULT_TIMEOUT, PLATFORM_API_URL, USER_AGENT
-from .types import Credentials, DeploymentResponse, DeviceCodeResponse, LogEntry
+from .types import (
+    Credentials,
+    DeploymentManifest,
+    DeploymentResponse,
+    DeviceCodeResponse,
+    LogEntry,
+)
 
 
 class PlatformAPIError(Exception):
@@ -171,8 +177,25 @@ class PlatformClient:
             authenticated=False,
         )
         data = resp.json()
+
+        # Handle OAuth 2.0 device flow error responses (RFC 8628)
+        if "error" in data:
+            raise PlatformAPIError(
+                400,
+                data.get("error_description", data["error"]),
+                {"oauth_error": data["error"]},
+            )
+
+        # Handle different token key names from various OAuth implementations
+        token = data.get("access_token") or data.get("token")
+        if not token:
+            raise PlatformAPIError(
+                500,
+                f"Invalid response from auth server: missing token. Response keys: {list(data.keys())}",
+            )
+
         return Credentials(
-            token=data["access_token"],
+            token=token,
             expires_at=data.get("expires_at"),
             refresh_token=data.get("refresh_token"),
         )
@@ -181,6 +204,7 @@ class PlatformClient:
         self,
         name: str,
         package_path: str,
+        manifest: DeploymentManifest,
         env_vars: dict[str, str] | None = None,
     ) -> DeploymentResponse:
         """Create a new deployment.
@@ -188,14 +212,15 @@ class PlatformClient:
         Args:
             name: Deployment name.
             package_path: Path to deployment package (.tar.gz).
+            manifest: Deployment manifest with agent configurations.
             env_vars: Environment variables for the deployment.
 
         Returns:
             Deployment response with status and URL.
         """
         with open(package_path, "rb") as f:
-            files = {"package": (f"{name}.tar.gz", f, "application/gzip")}
-            form_data: dict[str, str] = {"name": name}
+            files = {"package": (f"{name}.zip", f, "application/zip")}
+            form_data: dict[str, str] = {"manifest": manifest.model_dump_json()}
             if env_vars:
                 form_data["env_vars"] = json.dumps(env_vars)
 

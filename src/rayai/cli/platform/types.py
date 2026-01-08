@@ -23,6 +23,7 @@ class AgentManifest(BaseModel):
     num_gpus: int | float
     memory: str
     replicas: int
+    pip: list[str] = Field(default_factory=list)
 
 
 class DeploymentManifest(BaseModel):
@@ -43,11 +44,13 @@ class DeploymentResponse(BaseModel):
     id: str
     name: str
     status: Literal["pending", "building", "deploying", "running", "failed", "stopped"]
-    url: str | None = None
+    url: str | None = Field(None, alias="endpoint_url")
     agents: list[AgentManifest] = Field(default_factory=list)
     created_at: str = ""
     updated_at: str = ""
-    error: str | None = None
+    error: str | None = Field(None, alias="error_message")
+
+    model_config = {"populate_by_name": True}
 
 
 class DeviceCodeResponse(BaseModel):

@@ -109,9 +109,10 @@ def _login_with_device_flow(client: PlatformClient) -> None:
             click.echo(click.style("\nAuthenticated successfully!", fg="green"))
             return
         except PlatformAPIError as e:
-            if e.status_code == 428:  # Authorization pending
+            oauth_error = e.details.get("oauth_error") if e.details else None
+            if oauth_error == "authorization_pending":
                 time.sleep(poll_interval)
-            elif e.status_code == 400:  # Slow down
+            elif oauth_error == "slow_down":
                 poll_interval += 1
                 time.sleep(poll_interval)
             else:

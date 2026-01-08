@@ -117,25 +117,50 @@ def deploy(
     # Deploy to Platform API
     click.echo(f"\nDeploying '{deployment_name}' to RayAI Cloud...")
     client = PlatformClient()
+    is_update = False
 
     try:
         deployment = client.create_deployment(
-            deployment_name, str(package_path), env_vars
+            deployment_name, str(package_path), manifest, env_vars
         )
     except PlatformAPIError as e:
-        click.echo(f"Error: {e.message}", err=True)
-        if e.details:
-            click.echo(f"Details: {e.details}", err=True)
-        sys.exit(1)
+        if e.status_code == 409:
+            # Deployment already exists, delete and recreate
+            click.echo("Deployment exists, redeploying...")
+            try:
+                client.delete_deployment(deployment_name)
+                # Wait for deployment to be fully terminated
+                click.echo("Waiting for existing deployment to terminate...")
+                _wait_for_termination(client, deployment_name)
+                deployment = client.create_deployment(
+                    deployment_name, str(package_path), manifest, env_vars
+                )
+                is_update = True
+            except PlatformAPIError as redeploy_err:
+                package_path.unlink(missing_ok=True)
+                click.echo(f"Error: {redeploy_err.message}", err=True)
+                if redeploy_err.details:
+                    click.echo(f"Details: {redeploy_err.details}", err=True)
+                sys.exit(1)
+        else:
+            package_path.unlink(missing_ok=True)
+            click.echo(f"Error: {e.message}", err=True)
+            if e.details:
+                click.echo(f"Details: {e.details}", err=True)
+            sys.exit(1)
     finally:
         # Clean up temporary package file
         package_path.unlink(missing_ok=True)
 
-    click.echo(f"Deployment '{deployment.name}' created (status: {deployment.status})")
+    action = "redeployed" if is_update else "created"
+    click.echo(f"Deployment '{deployment.name}' {action} (status: {deployment.status})")
 
     # Wait for deployment to complete
     if wait and deployment.status not in ("running", "failed", "stopped"):
         click.echo("\nWaiting for deployment to complete...")
+        click.echo(
+            click.style("  Note: ", fg="yellow") + "This may take about 5 minutes"
+        )
         deployment = _wait_for_deployment(client, deployment_name, timeout)
 
     # Print result
@@ -194,6 +219,61 @@ def _discover_agents(
     return get_registered_agents()
 
 
+def _wait_for_termination(
+    client: PlatformClient, name: str, timeout: int = 120
+) -> None:
+    """Wait for deployment to be fully terminated.
+
+    Args:
+        client: Platform API client.
+        name: Deployment name.
+        timeout: Maximum time to wait in seconds.
+    """
+    poll_interval = 5
+    # Anyscale needs time to process the termination - wait before first check
+    initial_delay = 10
+    start_time = time.time()
+    spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    spinner_idx = 0
+
+    # Initial delay to let Anyscale begin termination
+    for i in range(initial_delay):
+        spinner = spinner_chars[spinner_idx % len(spinner_chars)]
+        spinner_idx += 1
+        click.echo(f"\r  {spinner} Waiting for termination... ({i + 1}s)", nl=False)
+        time.sleep(1)
+
+    while True:
+        elapsed = time.time() - start_time
+        if elapsed >= timeout:
+            click.echo()
+            click.echo(
+                f"Warning: Timed out waiting for termination after {timeout}s, proceeding anyway...",
+                err=True,
+            )
+            return
+
+        spinner = spinner_chars[spinner_idx % len(spinner_chars)]
+        spinner_idx += 1
+        click.echo(
+            f"\r  {spinner} Waiting for termination... ({int(elapsed)}s)", nl=False
+        )
+
+        try:
+            deployment = client.get_deployment(name)
+            if deployment.status in ("stopped", "terminated", "failed"):
+                click.echo(f"\r  Terminated (took {int(elapsed)}s)           ")
+                return
+        except PlatformAPIError as e:
+            if e.status_code == 404:
+                # Deployment no longer exists, we're good
+                click.echo(f"\r  Terminated (took {int(elapsed)}s)           ")
+                return
+            raise
+
+        time.sleep(poll_interval)
+
+
 def _wait_for_deployment(
     client: PlatformClient, name: str, timeout: int
 ) -> "DeploymentResponse":
@@ -210,12 +290,17 @@ def _wait_for_deployment(
     terminal_states = {"running", "failed", "stopped"}
     poll_interval = 5
     start_time = time.time()
+    spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    spinner_idx = 0
+    # If deploying for this long with a URL, assume it's healthy
+    deploying_success_threshold = 60
 
     while True:
         elapsed = time.time() - start_time
         if elapsed >= timeout:
+            click.echo()  # Move to new line
             click.echo(
-                f"\nError: Deployment timed out after {timeout} seconds.", err=True
+                f"Error: Deployment timed out after {timeout} seconds.", err=True
             )
             click.echo("Check status with 'rayai status'.", err=True)
             sys.exit(1)
@@ -224,8 +309,20 @@ def _wait_for_deployment(
         try:
             deployment = client.get_deployment(name)
         except PlatformAPIError as e:
+            click.echo()  # Move to new line
             click.echo(f"Error checking status: {e.message}", err=True)
             sys.exit(1)
+
+        # If stuck in "deploying" but has a URL, it's likely healthy
+        if (
+            deployment.status == "deploying"
+            and deployment.url
+            and elapsed > deploying_success_threshold
+        ):
+            click.echo()  # Move to new line
+            click.echo("Deployment has URL and appears healthy, continuing...")
+            deployment.status = "running"  # Treat as running
+            return deployment
 
         status_color = {
             "running": "green",
@@ -235,7 +332,13 @@ def _wait_for_deployment(
             "deploying": "cyan",
         }.get(deployment.status, "white")
 
-        click.echo(f"  Status: {click.style(deployment.status, fg=status_color)}")
+        # Single-line spinner with status update
+        spinner = spinner_chars[spinner_idx % len(spinner_chars)]
+        spinner_idx += 1
+        elapsed_str = f"{int(elapsed)}s"
+        status_text = click.style(deployment.status, fg=status_color)
+        click.echo(f"\r  {spinner} Status: {status_text} ({elapsed_str})   ", nl=False)
 
         if deployment.status in terminal_states:
+            click.echo()  # Move to new line after completion
             return deployment

@@ -89,38 +89,47 @@ def tool(
 
     def make_ray_tool(fn: Callable[..., Any]) -> Callable[..., Any]:
         """Create a Ray-distributed async wrapper for a function."""
-        # Auto-init Ray if needed
-        if not ray.is_initialized():
-            ray.init()
-
         # Use decorator args or defaults
         resolved_cpus = num_cpus if num_cpus is not None else 1
         resolved_gpus = num_gpus if num_gpus is not None else 0
         resolved_memory = memory
 
-        # Build Ray options
-        ray_options: dict[str, Any] = {
-            "num_cpus": resolved_cpus,
-            "num_gpus": resolved_gpus,
-        }
-        if resolved_memory:
-            ray_options["memory"] = _parse_memory(resolved_memory)
+        # Lazy initialization - Ray remote function created on first call
+        _remote_fn_cache: list[Any] = []
 
-        # Create Ray remote function
-        remote_fn = ray.remote(**ray_options)(fn)
+        def _get_remote_fn() -> Any:
+            """Get or create the Ray remote function (lazy init)."""
+            if not _remote_fn_cache:
+                # Auto-init Ray if needed (deferred until first call)
+                if not ray.is_initialized():
+                    ray.init()
+
+                # Build Ray options
+                ray_options: dict[str, Any] = {
+                    "num_cpus": resolved_cpus,
+                    "num_gpus": resolved_gpus,
+                }
+                if resolved_memory:
+                    ray_options["memory"] = _parse_memory(resolved_memory)
+
+                # Create Ray remote function
+                _remote_fn_cache.append(ray.remote(**ray_options)(fn))
+
+            return _remote_fn_cache[0]
 
         # Async wrapper for non-blocking parallel execution
         @functools.wraps(fn)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             """Async wrapper - non-blocking, parallelizable with asyncio.gather()."""
+            remote_fn = _get_remote_fn()
             ref = remote_fn.remote(*args, **kwargs)
             # Use asyncio to await Ray ObjectRef without blocking event loop
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             return await loop.run_in_executor(None, ray.get, ref)
 
         # Store metadata for introspection
         async_wrapper._rayai_tool = True  # type: ignore[attr-defined]
-        async_wrapper._remote_func = remote_fn  # type: ignore[attr-defined]
+        async_wrapper._get_remote_func = _get_remote_fn  # type: ignore[attr-defined]
         async_wrapper._original_func = fn  # type: ignore[attr-defined]
         async_wrapper._tool_metadata = {  # type: ignore[attr-defined]
             "description": fn.__doc__ or f"Calls {fn.__name__}",

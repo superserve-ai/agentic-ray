@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import os
 import sys
-import tarfile
 import tempfile
+import zipfile
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
@@ -26,10 +25,10 @@ def package_deployment(
 ) -> tuple[Path, DeploymentManifest]:
     """Package agents for cloud deployment.
 
-    Creates a tarball containing:
+    Creates a zip archive containing:
     - agents/ directory with agent code
     - manifest.json with deployment metadata
-    - requirements.txt (if exists)
+    - pyproject.toml (if exists)
 
     Args:
         project_path: Path to project root.
@@ -39,6 +38,9 @@ def package_deployment(
     Returns:
         Tuple of (package_path, manifest).
     """
+    # Parse user dependencies to include in manifest
+    user_deps = _parse_user_dependencies(project_path)
+
     manifest = DeploymentManifest(
         name=deployment_name,
         rayai_version=version("rayai"),
@@ -52,50 +54,144 @@ def package_deployment(
                 num_gpus=config.num_gpus,
                 memory=config.memory,
                 replicas=config.replicas,
+                pip=user_deps,
             )
             for config in agents
         ],
     )
 
-    fd, package_path_str = tempfile.mkstemp(suffix=".tar.gz")
+    fd, package_path_str = tempfile.mkstemp(suffix=".zip")
     os.close(fd)
     package_path = Path(package_path_str)
 
-    with tarfile.open(package_path, "w:gz") as tar:
+    with zipfile.ZipFile(package_path, "w", zipfile.ZIP_DEFLATED) as zf:
         agents_dir = project_path / "agents"
         if agents_dir.exists():
             for agent_folder in agents_dir.iterdir():
                 if agent_folder.is_dir() and not agent_folder.name.startswith("__"):
-                    _add_directory_to_tar(
-                        tar, agent_folder, f"agents/{agent_folder.name}"
+                    _add_directory_to_zip(
+                        zf, agent_folder, f"agents/{agent_folder.name}"
                     )
 
-        req_file = project_path / "requirements.txt"
-        if req_file.exists():
-            tar.add(req_file, arcname="requirements.txt")
+        # Generate serve entry points for each agent
+        for config in agents:
+            entry_point = _generate_serve_entry_point(config.name)
+            zf.writestr(f"serve_{config.name}.py", entry_point)
 
         pyproject_file = project_path / "pyproject.toml"
         if pyproject_file.exists():
-            tar.add(pyproject_file, arcname="pyproject.toml")
+            zf.write(pyproject_file, arcname="pyproject.toml")
+
+        # Include any .whl files in the project root (for local package testing)
+        for whl_file in project_path.glob("*.whl"):
+            zf.write(whl_file, arcname=whl_file.name)
 
         manifest_json = manifest.model_dump_json(indent=2)
-        manifest_bytes = manifest_json.encode("utf-8")
-        manifest_info = tarfile.TarInfo(name="manifest.json")
-        manifest_info.size = len(manifest_bytes)
-        tar.addfile(manifest_info, io.BytesIO(manifest_bytes))
+        zf.writestr("manifest.json", manifest_json)
 
     manifest.checksum = _calculate_checksum(package_path)
 
     return package_path, manifest
 
 
-def _add_directory_to_tar(
-    tar: tarfile.TarFile, source_path: Path, arcname: str
-) -> None:
-    """Add directory to tarball, excluding __pycache__ and .pyc files.
+def _parse_user_dependencies(project_path: Path) -> list[str]:
+    """Parse user dependencies from pyproject.toml.
 
     Args:
-        tar: Open tarfile.
+        project_path: Path to project root.
+
+    Returns:
+        List of dependency strings (excluding rayai from PyPI, but including local wheels).
+    """
+    import tomllib
+
+    deps: list[str] = []
+    pyproject_file = project_path / "pyproject.toml"
+    if pyproject_file.exists():
+        with open(pyproject_file, "rb") as f:
+            data = tomllib.load(f)
+        dependencies = data.get("project", {}).get("dependencies", [])
+        for dep in dependencies:
+            dep_lower = dep.lower()
+            # Skip rayai from PyPI (handled by platform), but include local wheel references
+            if dep_lower.startswith("rayai"):
+                # Include if it's a local wheel reference (contains @ or path)
+                if "@" in dep or ".whl" in dep:
+                    deps.append(dep)
+                # Otherwise skip (platform will install from PyPI)
+            else:
+                deps.append(dep)
+    return deps
+
+
+def _generate_serve_entry_point(agent_name: str) -> str:
+    """Generate a Ray Serve entry point script for an agent.
+
+    Creates a self-contained module for cloud deployment.
+    """
+    return f'''"""Ray Serve entry point for {agent_name}."""
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from ray import serve
+
+class ChatRequest(BaseModel):
+    query: str
+    session_id: str = "default"
+
+class ChatResponse(BaseModel):
+    response: str
+    session_id: str
+
+from agents.{agent_name}.agent import make_agent
+
+fastapi_app = FastAPI(title="{agent_name}")
+
+@serve.deployment(name="{agent_name}")
+@serve.ingress(fastapi_app)
+class AgentDeployment:
+    def __init__(self):
+        self.agent = make_agent()
+
+    @fastapi_app.post("/")
+    async def chat(self, request: ChatRequest) -> ChatResponse:
+        try:
+            if hasattr(self.agent, "ainvoke"):
+                from langchain_core.messages import HumanMessage
+                result = await self.agent.ainvoke({{"messages": [HumanMessage(content=request.query)]}})
+                if isinstance(result, dict) and "messages" in result:
+                    response = str(result["messages"][-1].content)
+                else:
+                    response = str(result)
+            elif hasattr(self.agent, "run"):
+                result = await self.agent.run(request.query)
+                response = str(getattr(result, "output", result))
+            elif callable(self.agent):
+                result = self.agent(request.query)
+                response = str(result)
+            else:
+                response = str(self.agent)
+            return ChatResponse(response=response, session_id=request.session_id)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @fastapi_app.get("/health")
+    async def health(self):
+        return {{"status": "healthy", "agent": "{agent_name}"}}
+
+app = AgentDeployment.bind()
+'''
+
+
+def _add_directory_to_zip(zf: zipfile.ZipFile, source_path: Path, arcname: str) -> None:
+    """Add directory to zip archive, excluding __pycache__ and .pyc files.
+
+    Args:
+        zf: Open zipfile.
         source_path: Source directory path.
         arcname: Archive name for the directory.
     """
@@ -104,14 +200,10 @@ def _add_directory_to_tar(
             continue
 
         rel_path = item.relative_to(source_path)
-        tar_path = f"{arcname}/{rel_path}"
+        zip_path = f"{arcname}/{rel_path}"
 
         if item.is_file():
-            tar.add(item, arcname=tar_path)
-        elif item.is_dir():
-            info = tarfile.TarInfo(name=tar_path + "/")
-            info.type = tarfile.DIRTYPE
-            tar.addfile(info)
+            zf.write(item, arcname=zip_path)
 
 
 def _calculate_checksum(path: Path) -> str:

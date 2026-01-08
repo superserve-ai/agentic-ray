@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -1820,13 +1820,13 @@ requires-dist = [
     { name = "docker", marker = "extra == 'sandbox'", specifier = ">=7.0.0" },
     { name = "fastapi", specifier = ">=0.100.0" },
     { name = "langchain", specifier = ">=1.0.0" },
-    { name = "langchain-openai", specifier = ">=0.3.35" },
+    { name = "langchain-openai", specifier = ">=1.0.0" },
     { name = "langgraph", specifier = ">=0.6.10" },
     { name = "openai", specifier = ">=1.0.0" },
     { name = "posthog", specifier = ">=3.0.0" },
     { name = "pydantic-ai-slim", extras = ["openai"], specifier = ">=1.42.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "ray", extras = ["serve"], specifier = ">=2.49.2" },
+    { name = "ray", extras = ["serve"] },
     { name = "requests", marker = "extra == 'sandbox'", specifier = ">=2.31.0" },
 ]
 provides-extras = ["sandbox"]
