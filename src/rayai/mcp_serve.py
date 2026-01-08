@@ -191,10 +191,10 @@ def _start_serving(
 
         signal.pause()
     except (KeyboardInterrupt, AttributeError):
+        import time
+
         try:
             while True:
-                import time
-
                 time.sleep(1)
         except KeyboardInterrupt:
             pass

@@ -1,0 +1,149 @@
+---
+title: "MCP Servers"
+description: "Deploy MCP servers as HTTP endpoints with Ray Serve"
+---
+
+Use `rayai.serve_mcp()` to deploy [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) servers as scalable HTTP endpoints via Ray Serve.
+
+## Quick Start
+
+Create a new MCP server:
+
+```bash
+rayai create-mcp weather
+```
+
+This creates `mcp_servers/weather/server.py`:
+
+```python
+from mcp.server.fastmcp import FastMCP
+import rayai
+
+mcp = FastMCP("weather", stateless_http=True)
+
+
+@mcp.tool()
+async def get_weather(city: str) -> str:
+    """Get weather for a city."""
+    return f"Weather in {city}: Sunny, 72°F"
+
+
+rayai.serve_mcp(mcp, name="weather")
+```
+
+Run the server:
+
+```bash
+rayai mcp up
+```
+
+Your MCP server is now available at `http://localhost:8000/weather/mcp`.
+
+## serve_mcp Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `mcp_server` | FastMCP | required | FastMCP instance (must use `stateless_http=True`) |
+| `name` | str | None | Server name (inferred from directory if not set) |
+| `num_cpus` | float | 0.5 | CPU cores per replica |
+| `num_gpus` | float | 0 | GPUs per replica |
+| `memory` | str | "512MB" | Memory per replica |
+| `replicas` | int | 1 | Number of replicas |
+| `route_prefix` | str | /{name} | URL prefix (endpoint: /{name}/mcp) |
+
+## CLI: rayai mcp up
+
+Run all MCP servers in your project:
+
+```bash
+rayai mcp up
+```
+
+### Options
+
+```bash
+rayai mcp up [OPTIONS]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--port` | 8000 | HTTP server port |
+| `--host` | 0.0.0.0 | Host to bind to |
+| `--servers` | All | Comma-separated list of servers to run |
+
+## Connecting Clients
+
+Add your MCP server URL to your client's config. Example for Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "weather": {
+      "url": "http://localhost:8000/weather/mcp"
+    }
+  }
+}
+```
+
+Other clients (Cursor, Claude Code, etc.) use similar config with the `url` field.
+
+## Adding Tools
+
+Define tools using FastMCP's `@mcp.tool()` decorator:
+
+```python
+from mcp.server.fastmcp import FastMCP
+import rayai
+
+mcp = FastMCP("myserver", stateless_http=True)
+
+
+@mcp.tool()
+async def search(query: str) -> str:
+    """Search for information.
+
+    Args:
+        query: Search query
+    """
+    return f"Results for: {query}"
+
+
+@mcp.tool()
+async def add_numbers(a: int, b: int) -> int:
+    """Add two numbers together.
+
+    Args:
+        a: First number
+        b: Second number
+    """
+    return a + b
+
+
+rayai.serve_mcp(mcp, name="myserver")
+```
+
+<Info>
+Tool descriptions and argument docstrings are automatically exposed to MCP clients for tool discovery.
+</Info>
+
+## Scaling
+
+Replicas run multiple instances of your server in parallel. Ray Serve load balances requests across them.
+
+**When to use replicas:**
+- Multiple agents/clients calling the same server
+- Tools that take time (API calls, processing)
+- Production with many concurrent users
+
+```python
+rayai.serve_mcp(
+    mcp,
+    name="high-throughput",
+    num_cpus=1,
+    memory="2GB",
+    replicas=4,
+)
+```
+
+With 4 replicas, your server can handle 4x the concurrent requests.
+

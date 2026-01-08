@@ -22,7 +22,8 @@
             "pages": [
               "runtime/tools",
               "runtime/agents",
-              "runtime/serving"
+              "runtime/serving",
+              "runtime/mcp"
             ]
           },
           {
