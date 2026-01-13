@@ -20,6 +20,7 @@ dependencies = [
     "fastapi>=0.100.0",
     "click>=8.0.0",
     "pydantic-ai-slim[openai]>=1.42.0",
+    "anyio>=4.0",  # Required for pydantic-ai type parameterization
     "posthog>=3.0.0",
 ]
 
