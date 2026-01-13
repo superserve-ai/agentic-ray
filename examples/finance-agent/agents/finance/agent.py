@@ -48,12 +48,15 @@ After running analysis, provide a clear summary including:
 Keep summaries concise but informative. Focus on actionable insights.
 """
 
-# Create Pydantic AI agent with Ray-distributed tools
-agent = Agent(
-    "openai:gpt-4o",
-    system_prompt=SYSTEM_PROMPT,
-    tools=[get_sp500, get_daily_time_series, run_analysis_code],
-)
+
+def make_agent():
+    """Create and return the finance agent."""
+    return Agent(
+        "openai:gpt-4o",
+        system_prompt=SYSTEM_PROMPT,
+        tools=[get_sp500, get_daily_time_series, run_analysis_code],
+    )
+
 
 # Serve the agent with Ray Serve
-rayai.serve(agent, name="finance", num_cpus=1, memory="1GB")
+rayai.serve(make_agent, name="finance", num_cpus=1, memory="1GB")

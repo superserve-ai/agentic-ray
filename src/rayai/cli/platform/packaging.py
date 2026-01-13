@@ -132,6 +132,7 @@ def _generate_serve_entry_point(agent_name: str) -> str:
     return f'''"""Ray Serve entry point for {agent_name}."""
 import sys
 import os
+import inspect
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -151,30 +152,89 @@ from agents.{agent_name}.agent import make_agent
 
 fastapi_app = FastAPI(title="{agent_name}")
 
+
+def _is_pydantic_ai_agent(obj):
+    """Check if obj is a Pydantic AI Agent."""
+    try:
+        from pydantic_ai import Agent
+        return isinstance(obj, Agent)
+    except ImportError:
+        return False
+
+
+def _is_langchain_agent(obj):
+    """Check if obj is a LangChain agent."""
+    try:
+        from langchain.agents import AgentExecutor
+        if isinstance(obj, AgentExecutor):
+            return True
+    except ImportError:
+        pass
+    try:
+        from langgraph.graph.state import CompiledGraph
+        if isinstance(obj, CompiledGraph):
+            return True
+    except ImportError:
+        pass
+    try:
+        from langchain_core.runnables import Runnable
+        if isinstance(obj, Runnable):
+            return True
+    except ImportError:
+        pass
+    return False
+
+
 @serve.deployment(name="{agent_name}")
 @serve.ingress(fastapi_app)
 class AgentDeployment:
     def __init__(self):
         self.agent = make_agent()
+        self.agent_type = self._detect_type()
+
+    def _detect_type(self):
+        if _is_pydantic_ai_agent(self.agent):
+            return "pydantic_ai"
+        if _is_langchain_agent(self.agent):
+            return "langchain"
+        if callable(self.agent):
+            return "callable"
+        return "unknown"
 
     @fastapi_app.post("/")
     async def chat(self, request: ChatRequest) -> ChatResponse:
         try:
-            if hasattr(self.agent, "ainvoke"):
+            if self.agent_type == "pydantic_ai":
+                result = await self.agent.run(request.query)
+                response = str(result.output)
+
+            elif self.agent_type == "langchain":
                 from langchain_core.messages import HumanMessage
-                result = await self.agent.ainvoke({{"messages": [HumanMessage(content=request.query)]}})
+                input_data = {{"messages": [HumanMessage(content=request.query)]}}
+                if hasattr(self.agent, "ainvoke"):
+                    result = await self.agent.ainvoke(input_data)
+                elif hasattr(self.agent, "invoke"):
+                    result = self.agent.invoke(input_data)
+                else:
+                    result = self.agent(request.query)
                 if isinstance(result, dict) and "messages" in result:
-                    response = str(result["messages"][-1].content)
+                    messages = result["messages"]
+                    if messages and hasattr(messages[-1], "content"):
+                        response = str(messages[-1].content)
+                    else:
+                        response = str(result)
                 else:
                     response = str(result)
-            elif hasattr(self.agent, "run"):
-                result = await self.agent.run(request.query)
-                response = str(getattr(result, "output", result))
-            elif callable(self.agent):
+
+            elif self.agent_type == "callable":
                 result = self.agent(request.query)
+                if inspect.iscoroutine(result):
+                    result = await result
                 response = str(result)
+
             else:
                 response = str(self.agent)
+
             return ChatResponse(response=response, session_id=request.session_id)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
