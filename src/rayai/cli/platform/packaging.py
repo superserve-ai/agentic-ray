@@ -83,10 +83,12 @@ def package_deployment(
     package_path = Path(package_path_str)
 
     with zipfile.ZipFile(package_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Add only the agent directories that are in the filtered list
+        agent_names = {config.name for config in agents}
         agents_dir = project_path / "agents"
         if agents_dir.exists():
             for agent_folder in agents_dir.iterdir():
-                if agent_folder.is_dir() and not agent_folder.name.startswith("__"):
+                if agent_folder.is_dir() and agent_folder.name in agent_names:
                     _add_directory_to_zip(
                         zf, agent_folder, f"agents/{agent_folder.name}"
                     )
@@ -96,11 +98,12 @@ def package_deployment(
             entry_point = _generate_serve_entry_point(config.name)
             zf.writestr(f"serve_{config.name}.py", entry_point)
 
-        # Add MCP server directories
+        # Add only the MCP server directories that are in the filtered list
+        mcp_server_names = {mcp_config.name for mcp_config in mcp_servers}
         mcp_servers_dir = project_path / "mcp_servers"
         if mcp_servers_dir.exists():
             for mcp_folder in mcp_servers_dir.iterdir():
-                if mcp_folder.is_dir() and not mcp_folder.name.startswith("__"):
+                if mcp_folder.is_dir() and mcp_folder.name in mcp_server_names:
                     _add_directory_to_zip(
                         zf, mcp_folder, f"mcp_servers/{mcp_folder.name}"
                     )
