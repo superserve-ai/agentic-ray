@@ -26,16 +26,34 @@ class AgentManifest(BaseModel):
     pip: list[str] = Field(default_factory=list)
 
 
+class MCPToolInfo(BaseModel):
+    """Metadata for an MCP tool."""
+
+    name: str
+    description: str = ""
+
+
+class MCPResourceInfo(BaseModel):
+    """Metadata for an MCP resource."""
+
+    name: str
+    uri: str
+    description: str = ""
+
+
 class MCPServerManifest(BaseModel):
     """Metadata for a single MCP server in a deployment."""
 
     name: str
     route_prefix: str
+    import_path: str = ""
     num_cpus: int | float
     num_gpus: int | float
     memory: str
     replicas: int
     pip: list[str] = Field(default_factory=list)
+    tools: list[MCPToolInfo] = Field(default_factory=list)
+    resources: list[MCPResourceInfo] = Field(default_factory=list)
 
 
 class DeploymentManifest(BaseModel):

@@ -10,13 +10,81 @@ import zipfile
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from .types import AgentManifest, DeploymentManifest, MCPServerManifest
+from .types import (
+    AgentManifest,
+    DeploymentManifest,
+    MCPResourceInfo,
+    MCPServerManifest,
+    MCPToolInfo,
+)
 
 if TYPE_CHECKING:
     from rayai.mcp_serve import MCPServerConfig
     from rayai.serve import AgentConfig
+
+
+def _extract_mcp_tools(mcp_server: Any) -> list[MCPToolInfo]:
+    """Extract tool information from a FastMCP server instance.
+
+    Args:
+        mcp_server: FastMCP instance.
+
+    Returns:
+        List of MCPToolInfo with name and description.
+    """
+    tools: list[MCPToolInfo] = []
+    try:
+        if hasattr(mcp_server, "_tool_manager"):
+            for tool in mcp_server._tool_manager.list_tools():
+                tools.append(
+                    MCPToolInfo(
+                        name=tool.name,
+                        description=tool.description or "",
+                    )
+                )
+    except Exception:
+        pass  # If extraction fails, return empty list
+    return tools
+
+
+def _extract_mcp_resources(mcp_server: Any) -> list[MCPResourceInfo]:
+    """Extract resource information from a FastMCP server instance.
+
+    Args:
+        mcp_server: FastMCP instance.
+
+    Returns:
+        List of MCPResourceInfo with name, uri, and description.
+    """
+    resources: list[MCPResourceInfo] = []
+    try:
+        if hasattr(mcp_server, "_resource_manager"):
+            # Get concrete resources
+            for uri, resource in mcp_server._resource_manager.get_resources().items():
+                resources.append(
+                    MCPResourceInfo(
+                        name=getattr(resource, "name", str(uri)),
+                        uri=str(uri),
+                        description=getattr(resource, "description", "") or "",
+                    )
+                )
+            # Get resource templates
+            for (
+                uri,
+                template,
+            ) in mcp_server._resource_manager.get_resource_templates().items():
+                resources.append(
+                    MCPResourceInfo(
+                        name=getattr(template, "name", str(uri)),
+                        uri=str(uri),
+                        description=getattr(template, "description", "") or "",
+                    )
+                )
+    except Exception:
+        pass  # If extraction fails, return empty list
+    return resources
 
 
 def package_deployment(
@@ -68,11 +136,14 @@ def package_deployment(
             MCPServerManifest(
                 name=config.name,
                 route_prefix=config.route_prefix,
+                import_path=f"serve_mcp_{config.name}:app",
                 num_cpus=config.num_cpus,
                 num_gpus=config.num_gpus,
                 memory=config.memory,
                 replicas=config.replicas,
                 pip=user_deps,
+                tools=_extract_mcp_tools(config.mcp_server),
+                resources=_extract_mcp_resources(config.mcp_server),
             )
             for config in mcp_servers
         ],
