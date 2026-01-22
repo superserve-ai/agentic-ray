@@ -67,6 +67,12 @@ def deploy(
         click.echo("Error: Not logged in. Run 'rayai login' first.", err=True)
         sys.exit(1)
 
+    # Validate token with server before proceeding
+    client = PlatformClient()
+    if not client.validate_token():
+        click.echo("Error: Not logged in. Run 'rayai login' first.", err=True)
+        sys.exit(1)
+
     project_dir = Path(project_path).resolve()
 
     if not project_dir.exists():
@@ -125,7 +131,6 @@ def deploy(
 
     # Deploy to Platform API
     click.echo(f"\nDeploying project '{project_name}' to RayAI Cloud...")
-    client = PlatformClient()
 
     try:
         project = client.create_project(
