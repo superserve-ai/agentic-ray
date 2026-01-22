@@ -11,10 +11,10 @@ from .auth import get_credentials
 from .config import DEFAULT_TIMEOUT, PLATFORM_API_URL, USER_AGENT
 from .types import (
     Credentials,
-    DeploymentManifest,
-    DeploymentResponse,
     DeviceCodeResponse,
     LogEntry,
+    ProjectManifest,
+    ProjectResponse,
 )
 
 
@@ -214,23 +214,23 @@ class PlatformClient:
             refresh_token=data.get("refresh_token"),
         )
 
-    def create_deployment(
+    def create_project(
         self,
         name: str,
         package_path: str,
-        manifest: DeploymentManifest,
+        manifest: ProjectManifest,
         env_vars: dict[str, str] | None = None,
-    ) -> DeploymentResponse:
-        """Create a new deployment.
+    ) -> ProjectResponse:
+        """Create a new project.
 
         Args:
-            name: Deployment name.
-            package_path: Path to deployment package (.tar.gz).
-            manifest: Deployment manifest with agent configurations.
-            env_vars: Environment variables for the deployment.
+            name: Project name.
+            package_path: Path to project package (.zip).
+            manifest: Project manifest with agent configurations.
+            env_vars: Environment variables for the project.
 
         Returns:
-            Deployment response with status and URL.
+            Project response with status and URL.
         """
         with open(package_path, "rb") as f:
             files = {"package": (f"{name}.zip", f, "application/zip")}
@@ -238,58 +238,58 @@ class PlatformClient:
             if env_vars:
                 form_data["env_vars"] = json.dumps(env_vars)
 
-            resp = self._request("POST", "/deployments", files=files, data=form_data)
+            resp = self._request("POST", "/projects", files=files, data=form_data)
 
-        return self._parse_deployment_response(resp.json())
+        return self._parse_project_response(resp.json())
 
-    def get_deployment(self, name: str) -> DeploymentResponse:
-        """Get deployment by name.
-
-        Args:
-            name: Deployment name.
-
-        Returns:
-            Deployment response.
-        """
-        resp = self._request("GET", f"/deployments/{name}")
-        return self._parse_deployment_response(resp.json())
-
-    def list_deployments(self) -> list[DeploymentResponse]:
-        """List all deployments.
-
-        Returns:
-            List of deployment responses.
-        """
-        resp = self._request("GET", "/deployments")
-        deployments = resp.json().get("deployments", [])
-        return [self._parse_deployment_response(d) for d in deployments]
-
-    def delete_deployment(self, name: str) -> None:
-        """Delete a deployment.
+    def get_project(self, name: str) -> ProjectResponse:
+        """Get project by name.
 
         Args:
-            name: Deployment name.
-        """
-        self._request("DELETE", f"/deployments/{name}")
+            name: Project name.
 
-    def _parse_deployment_response(self, data: dict) -> DeploymentResponse:
-        """Parse deployment response from API.
+        Returns:
+            Project response.
+        """
+        resp = self._request("GET", f"/projects/{name}")
+        return self._parse_project_response(resp.json())
+
+    def list_projects(self) -> list[ProjectResponse]:
+        """List all projects.
+
+        Returns:
+            List of project responses.
+        """
+        resp = self._request("GET", "/projects")
+        projects = resp.json().get("projects", [])
+        return [self._parse_project_response(d) for d in projects]
+
+    def delete_project(self, name: str) -> None:
+        """Delete a project.
+
+        Args:
+            name: Project name.
+        """
+        self._request("DELETE", f"/projects/{name}")
+
+    def _parse_project_response(self, data: dict) -> ProjectResponse:
+        """Parse project response from API.
 
         Args:
             data: Raw response data.
 
         Returns:
-            Parsed DeploymentResponse.
+            Parsed ProjectResponse.
         """
-        return DeploymentResponse.model_validate(data)
+        return ProjectResponse.model_validate(data)
 
     def get_logs(
         self, name: str, tail: int = 100, agent: str | None = None
     ) -> list[LogEntry]:
-        """Get deployment logs.
+        """Get project logs.
 
         Args:
-            name: Deployment name.
+            name: Project name.
             tail: Number of lines to retrieve.
             agent: Filter by agent name.
 
@@ -300,15 +300,15 @@ class PlatformClient:
         if agent:
             query_params["agent"] = agent
 
-        resp = self._request("GET", f"/deployments/{name}/logs", params=query_params)
+        resp = self._request("GET", f"/projects/{name}/logs", params=query_params)
         logs = resp.json().get("logs", [])
         return [LogEntry.model_validate(log) for log in logs]
 
     def stream_logs(self, name: str, agent: str | None = None) -> Iterator[LogEntry]:
-        """Stream deployment logs via Server-Sent Events.
+        """Stream project logs via Server-Sent Events.
 
         Args:
-            name: Deployment name.
+            name: Project name.
             agent: Filter by agent name.
 
         Yields:
@@ -316,7 +316,7 @@ class PlatformClient:
         """
         query_params: dict[str, str] | None = {"agent": agent} if agent else None
         resp = self._request(
-            "GET", f"/deployments/{name}/logs/stream", params=query_params, stream=True
+            "GET", f"/projects/{name}/logs/stream", params=query_params, stream=True
         )
 
         for line in resp.iter_lines():

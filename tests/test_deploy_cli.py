@@ -9,9 +9,9 @@ from click.testing import CliRunner
 from rayai.cli.cli import cli
 from rayai.cli.platform.types import (
     Credentials,
-    DeploymentResponse,
     DeviceCodeResponse,
     LogEntry,
+    ProjectResponse,
 )
 
 
@@ -92,20 +92,20 @@ class TestStatusCommand:
             assert result.exit_code == 1
             assert "Not logged in" in result.output
 
-    def test_status_list_deployments(self, runner):
-        """Status command lists deployments."""
+    def test_status_list_projects(self, runner):
+        """Status command lists projects."""
         with patch("rayai.cli.commands.status.is_authenticated", return_value=True):
             with patch("rayai.cli.commands.status.PlatformClient") as mock_client_cls:
                 mock_client = MagicMock()
-                mock_client.list_deployments.return_value = [
-                    DeploymentResponse(
+                mock_client.list_projects.return_value = [
+                    ProjectResponse(
                         id="deploy-1",
                         name="myapp",
                         status="running",
                         url="https://myapp.rayai.com",
                         created_at="2025-01-01T00:00:00Z",
                     ),
-                    DeploymentResponse(
+                    ProjectResponse(
                         id="deploy-2",
                         name="otherapp",
                         status="pending",
@@ -121,12 +121,12 @@ class TestStatusCommand:
                 assert "running" in result.output
                 assert "otherapp" in result.output
 
-    def test_status_specific_deployment(self, runner):
-        """Status command for specific deployment."""
+    def test_status_specific_project(self, runner):
+        """Status command for specific project."""
         with patch("rayai.cli.commands.status.is_authenticated", return_value=True):
             with patch("rayai.cli.commands.status.PlatformClient") as mock_client_cls:
                 mock_client = MagicMock()
-                mock_client.get_deployment.return_value = DeploymentResponse(
+                mock_client.get_project.return_value = ProjectResponse(
                     id="deploy-1",
                     name="myapp",
                     status="running",
@@ -145,7 +145,7 @@ class TestStatusCommand:
         with patch("rayai.cli.commands.status.is_authenticated", return_value=True):
             with patch("rayai.cli.commands.status.PlatformClient") as mock_client_cls:
                 mock_client = MagicMock()
-                mock_client.get_deployment.return_value = DeploymentResponse(
+                mock_client.get_project.return_value = ProjectResponse(
                     id="deploy-1",
                     name="myapp",
                     status="running",
@@ -155,7 +155,7 @@ class TestStatusCommand:
                 result = runner.invoke(cli, ["status", "myapp", "--json"])
 
                 assert result.exit_code == 0
-                # Output is a JSON list of deployments
+                # Output is a JSON list of projects
                 data = json.loads(result.output)
                 assert isinstance(data, list)
                 assert data[0]["id"] == "deploy-1"
@@ -252,7 +252,7 @@ class TestDeleteCommand:
                 result = runner.invoke(cli, ["delete", "myapp"], input="y\n")
 
                 assert result.exit_code == 0
-                mock_client.delete_deployment.assert_called_once_with("myapp")
+                mock_client.delete_project.assert_called_once_with("myapp")
                 assert "deleted" in result.output.lower()
 
     def test_delete_cancelled(self, runner):
@@ -267,7 +267,7 @@ class TestDeleteCommand:
                 result = runner.invoke(cli, ["delete", "myapp"], input="n\n")
 
                 assert result.exit_code == 1  # Aborted
-                mock_client.delete_deployment.assert_not_called()
+                mock_client.delete_project.assert_not_called()
                 assert "Aborted" in result.output
 
     def test_delete_with_force(self, runner):
@@ -280,7 +280,7 @@ class TestDeleteCommand:
                 result = runner.invoke(cli, ["delete", "myapp", "--force"])
 
                 assert result.exit_code == 0
-                mock_client.delete_deployment.assert_called_once_with("myapp")
+                mock_client.delete_project.assert_called_once_with("myapp")
 
 
 class TestDeployCommand:
@@ -379,9 +379,9 @@ class TestPlatformAPIError:
         """Error with basic message."""
         from rayai.cli.platform.client import PlatformAPIError
 
-        error = PlatformAPIError(404, "Deployment not found")
+        error = PlatformAPIError(404, "Project not found")
         assert error.status_code == 404
-        assert error.message == "Deployment not found"
+        assert error.message == "Project not found"
         assert "[404]" in str(error)
 
     def test_error_with_details(self):

@@ -15,7 +15,6 @@ Usage:
 """
 
 import sys
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -25,7 +24,7 @@ from dotenv import dotenv_values
 from rayai.cli.analytics import track
 from rayai.cli.platform.auth import is_authenticated
 from rayai.cli.platform.client import PlatformAPIError, PlatformClient
-from rayai.cli.platform.packaging import package_deployment
+from rayai.cli.platform.packaging import package_project
 
 if TYPE_CHECKING:
     pass
@@ -39,7 +38,7 @@ if TYPE_CHECKING:
     "mcp_servers",
     help="Deploy specific MCP servers only (comma-separated)",
 )
-@click.option("--name", help="Deployment name (defaults to project directory name)")
+@click.option("--name", help="Project name (defaults to project directory name)")
 @click.option("--env", multiple=True, help="Environment variable (KEY=VALUE)")
 @click.option("--env-file", type=click.Path(exists=True), help="Path to .env file")
 def deploy(
@@ -74,8 +73,8 @@ def deploy(
         click.echo(f"Error: Directory not found: {project_dir}", err=True)
         sys.exit(1)
 
-    # Deployment name defaults to project directory name
-    deployment_name = name or project_dir.name
+    # Project name defaults to project directory name
+    project_name = name or project_dir.name
 
     # Collect environment variables
     env_vars: dict[str, str] = {}
@@ -113,56 +112,38 @@ def deploy(
         for mcp_config in registered_mcp_servers:
             click.echo(f"  - {mcp_config.name} ({mcp_config.route_prefix})")
 
-    # Package deployment
-    click.echo("\nPackaging deployment...")
+    # Package project
+    click.echo("\nPackaging project...")
     try:
-        package_path, manifest = package_deployment(
-            project_dir, registered_agents, deployment_name, registered_mcp_servers
+        package_path, manifest = package_project(
+            project_dir, registered_agents, project_name, registered_mcp_servers
         )
         click.echo(f"Package created: {manifest.checksum[:12]}...")
     except Exception as e:
-        click.echo(f"Error packaging deployment: {e}", err=True)
+        click.echo(f"Error packaging project: {e}", err=True)
         sys.exit(1)
 
     # Deploy to Platform API
-    click.echo(f"\nDeploying '{deployment_name}' to RayAI Cloud...")
+    click.echo(f"\nDeploying project '{project_name}' to RayAI Cloud...")
     client = PlatformClient()
 
     try:
-        deployment = client.create_deployment(
-            deployment_name, str(package_path), manifest, env_vars
+        project = client.create_project(
+            project_name, str(package_path), manifest, env_vars
         )
     except PlatformAPIError as e:
-        if e.status_code == 409:
-            # Deployment already exists, delete and recreate
-            click.echo("Deployment exists, redeploying...")
-            try:
-                client.delete_deployment(deployment_name)
-                # Wait for deployment to be fully terminated
-                click.echo("Waiting for existing deployment to terminate...")
-                _wait_for_termination(client, deployment_name)
-                deployment = client.create_deployment(
-                    deployment_name, str(package_path), manifest, env_vars
-                )
-            except PlatformAPIError as redeploy_err:
-                package_path.unlink(missing_ok=True)
-                click.echo(f"Error: {redeploy_err.message}", err=True)
-                if redeploy_err.details:
-                    click.echo(f"Details: {redeploy_err.details}", err=True)
-                sys.exit(1)
-        else:
-            package_path.unlink(missing_ok=True)
-            click.echo(f"Error: {e.message}", err=True)
-            if e.details:
-                click.echo(f"Details: {e.details}", err=True)
-            sys.exit(1)
+        package_path.unlink(missing_ok=True)
+        click.echo(f"Error: {e.message}", err=True)
+        if e.details:
+            click.echo(f"Details: {e.details}", err=True)
+        sys.exit(1)
     finally:
         # Clean up temporary package file
         package_path.unlink(missing_ok=True)
 
     from rayai.cli.platform.config import DASHBOARD_URL
 
-    click.echo(f"Deployment '{deployment.name}' submitted.")
+    click.echo(f"Project '{project.name}' submitted.")
     click.echo()
     click.echo("View status on the dashboard: " + click.style(DASHBOARD_URL, fg="cyan"))
 
@@ -173,58 +154,3 @@ def deploy(
             "mcp_server_count": len(registered_mcp_servers),
         },
     )
-
-
-def _wait_for_termination(
-    client: PlatformClient, name: str, timeout: int = 120
-) -> None:
-    """Wait for deployment to be fully terminated.
-
-    Args:
-        client: Platform API client.
-        name: Deployment name.
-        timeout: Maximum time to wait in seconds.
-    """
-    poll_interval = 5
-    # Anyscale needs time to process the termination - wait before first check
-    initial_delay = 10
-    start_time = time.time()
-    spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-    spinner_idx = 0
-
-    # Initial delay to let Anyscale begin termination
-    for i in range(initial_delay):
-        spinner = spinner_chars[spinner_idx % len(spinner_chars)]
-        spinner_idx += 1
-        click.echo(f"\r  {spinner} Waiting for termination... ({i + 1}s)", nl=False)
-        time.sleep(1)
-
-    while True:
-        elapsed = time.time() - start_time
-        if elapsed >= timeout:
-            click.echo()
-            click.echo(
-                f"Warning: Timed out waiting for termination after {timeout}s, proceeding anyway...",
-                err=True,
-            )
-            return
-
-        spinner = spinner_chars[spinner_idx % len(spinner_chars)]
-        spinner_idx += 1
-        click.echo(
-            f"\r  {spinner} Waiting for termination... ({int(elapsed)}s)", nl=False
-        )
-
-        try:
-            deployment = client.get_deployment(name)
-            if deployment.status in ("stopped", "terminated", "failed"):
-                click.echo(f"\r  Terminated (took {int(elapsed)}s)           ")
-                return
-        except PlatformAPIError as e:
-            if e.status_code == 404:
-                # Deployment no longer exists, we're good
-                click.echo(f"\r  Terminated (took {int(elapsed)}s)           ")
-                return
-            raise
-
-        time.sleep(poll_interval)

@@ -1,6 +1,6 @@
-"""Remove a cloud deployment.
+"""Remove a cloud project.
 
-The `rayai delete` command removes a deployment from RayAI Cloud.
+The `rayai delete` command removes a project from RayAI Cloud.
 
 Usage:
     rayai delete myapp          # Delete with confirmation
@@ -17,12 +17,12 @@ from rayai.cli.platform.client import PlatformAPIError, PlatformClient
 
 
 @click.command()
-@click.argument("deployment_name")
+@click.argument("project_name")
 @click.option("--force", "-f", is_flag=True, help="Skip confirmation prompt")
-def delete(deployment_name: str, force: bool) -> None:
-    """Remove a cloud deployment.
+def delete(project_name: str, force: bool) -> None:
+    """Remove a cloud project.
 
-    Deletes a deployment from RayAI Cloud. This action cannot be undone.
+    Deletes a project from RayAI Cloud. This action cannot be undone.
     Requires authentication via 'rayai login' first.
 
     Examples:
@@ -35,19 +35,19 @@ def delete(deployment_name: str, force: bool) -> None:
 
     if not force:
         click.confirm(
-            f"Are you sure you want to delete deployment '{deployment_name}'?",
+            f"Are you sure you want to delete project '{project_name}'?",
             abort=True,
         )
 
     client = PlatformClient()
 
     try:
-        client.delete_deployment(deployment_name)
-        click.echo(f"Deployment '{deployment_name}' deleted.")
+        client.delete_project(project_name)
+        click.echo(f"Project '{project_name}' deleted.")
         track("cli_delete", {})
     except PlatformAPIError as e:
         if e.status_code == 404:
-            click.echo(f"Error: Deployment '{deployment_name}' not found.", err=True)
+            click.echo(f"Error: Project '{project_name}' not found.", err=True)
         else:
             click.echo(f"Error: {e.message}", err=True)
         sys.exit(1)

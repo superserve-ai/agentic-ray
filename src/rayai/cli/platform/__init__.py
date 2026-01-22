@@ -1,16 +1,16 @@
-"""RayAI Platform API client for cloud deployments."""
+"""RayAI Platform API client for cloud projects."""
 
 from .auth import clear_credentials, get_credentials, is_authenticated, save_credentials
 from .client import PlatformAPIError, PlatformClient
 from .config import CREDENTIALS_FILE, PLATFORM_API_URL
-from .packaging import package_deployment
+from .packaging import package_project
 from .types import (
     AgentManifest,
     Credentials,
-    DeploymentManifest,
-    DeploymentResponse,
     DeviceCodeResponse,
     LogEntry,
+    ProjectManifest,
+    ProjectResponse,
 )
 
 __all__ = [
@@ -26,12 +26,12 @@ __all__ = [
     "PLATFORM_API_URL",
     "CREDENTIALS_FILE",
     # Packaging
-    "package_deployment",
+    "package_project",
     # Types
     "Credentials",
     "AgentManifest",
-    "DeploymentManifest",
-    "DeploymentResponse",
+    "ProjectManifest",
+    "ProjectResponse",
     "DeviceCodeResponse",
     "LogEntry",
 ]

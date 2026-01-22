@@ -15,7 +15,7 @@ class Credentials(BaseModel):
 
 
 class AgentManifest(BaseModel):
-    """Metadata for a single agent in a deployment."""
+    """Metadata for a single agent in a project."""
 
     name: str
     route_prefix: str
@@ -42,7 +42,7 @@ class MCPResourceInfo(BaseModel):
 
 
 class MCPServerManifest(BaseModel):
-    """Metadata for a single MCP server in a deployment."""
+    """Metadata for a single MCP server in a project."""
 
     name: str
     route_prefix: str
@@ -56,8 +56,8 @@ class MCPServerManifest(BaseModel):
     resources: list[MCPResourceInfo] = Field(default_factory=list)
 
 
-class DeploymentManifest(BaseModel):
-    """Deployment package manifest."""
+class ProjectManifest(BaseModel):
+    """Project package manifest."""
 
     version: str = "1.0"
     rayai_version: str = "0.1.0"
@@ -69,8 +69,8 @@ class DeploymentManifest(BaseModel):
     checksum: str = ""
 
 
-class DeploymentResponse(BaseModel):
-    """Response from deployment operations."""
+class ProjectResponse(BaseModel):
+    """Response from project operations."""
 
     id: str
     name: str

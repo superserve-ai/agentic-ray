@@ -15,10 +15,10 @@ from rayai.cli.platform.auth import (
 from rayai.cli.platform.types import (
     AgentManifest,
     Credentials,
-    DeploymentManifest,
-    DeploymentResponse,
     DeviceCodeResponse,
     LogEntry,
+    ProjectManifest,
+    ProjectResponse,
 )
 
 
@@ -95,22 +95,22 @@ class TestAgentManifest:
         assert manifest.num_gpus == 0.25
 
 
-class TestDeploymentManifest:
-    """Tests for DeploymentManifest model."""
+class TestProjectManifest:
+    """Tests for ProjectManifest model."""
 
-    def test_create_deployment_manifest(self):
-        """Create deployment manifest."""
-        manifest = DeploymentManifest(
-            name="mydeployment",
+    def test_create_project_manifest(self):
+        """Create project manifest."""
+        manifest = ProjectManifest(
+            name="myproject",
             python_version="3.11",
             created_at="2025-01-01T00:00:00Z",
         )
-        assert manifest.name == "mydeployment"
+        assert manifest.name == "myproject"
         assert manifest.version == "1.0"
         assert manifest.agents == []
 
-    def test_deployment_manifest_with_agents(self):
-        """Deployment manifest with agents."""
+    def test_project_manifest_with_agents(self):
+        """Project manifest with agents."""
         agent = AgentManifest(
             name="agent1",
             route_prefix="/agent1",
@@ -119,8 +119,8 @@ class TestDeploymentManifest:
             memory="4GB",
             replicas=2,
         )
-        manifest = DeploymentManifest(
-            name="deployment",
+        manifest = ProjectManifest(
+            name="myproject",
             python_version="3.11",
             agents=[agent],
         )
@@ -128,23 +128,23 @@ class TestDeploymentManifest:
         assert manifest.agents[0].name == "agent1"
 
 
-class TestDeploymentResponse:
-    """Tests for DeploymentResponse model."""
+class TestProjectResponse:
+    """Tests for ProjectResponse model."""
 
-    def test_create_deployment_response(self):
-        """Create deployment response."""
-        response = DeploymentResponse(
-            id="deploy-123",
-            name="mydeployment",
+    def test_create_project_response(self):
+        """Create project response."""
+        response = ProjectResponse(
+            id="project-123",
+            name="myproject",
             status="running",
-            url="https://mydeployment.rayai.com",
+            url="https://myproject.rayai.com",
         )
-        assert response.id == "deploy-123"
+        assert response.id == "project-123"
         assert response.status == "running"
-        assert response.url == "https://mydeployment.rayai.com"
+        assert response.url == "https://myproject.rayai.com"
 
-    def test_deployment_response_statuses(self):
-        """Test valid deployment statuses."""
+    def test_project_response_statuses(self):
+        """Test valid project statuses."""
         for status in [
             "pending",
             "building",
@@ -153,13 +153,13 @@ class TestDeploymentResponse:
             "failed",
             "stopped",
         ]:
-            response = DeploymentResponse(id="test", name="test", status=status)
+            response = ProjectResponse(id="test", name="test", status=status)
             assert response.status == status
 
-    def test_deployment_response_invalid_status(self):
+    def test_project_response_invalid_status(self):
         """Invalid status raises validation error."""
         with pytest.raises(ValidationError):
-            DeploymentResponse(id="test", name="test", status="invalid")
+            ProjectResponse(id="test", name="test", status="invalid")
 
 
 class TestDeviceCodeResponse:
@@ -261,7 +261,7 @@ class TestAuthModule:
 
 
 class TestPackaging:
-    """Tests for deployment packaging."""
+    """Tests for project packaging."""
 
     @pytest.fixture
     def temp_project(self, tmp_path):
@@ -284,9 +284,9 @@ class TestPackaging:
 
         return project_dir
 
-    def test_package_deployment(self, temp_project):
-        """Package deployment creates zip archive."""
-        from rayai.cli.platform.packaging import package_deployment
+    def test_package_project(self, temp_project):
+        """Package project creates zip archive."""
+        from rayai.cli.platform.packaging import package_project
 
         # Create mock agent configs
         class MockAgentConfig:
@@ -299,14 +299,12 @@ class TestPackaging:
 
         agents = [MockAgentConfig()]
 
-        package_path, manifest = package_deployment(
-            temp_project, agents, "test-deployment"
-        )
+        package_path, manifest = package_project(temp_project, agents, "test-project")
 
         try:
             assert package_path.exists()
             assert package_path.suffix == ".zip"
-            assert manifest.name == "test-deployment"
+            assert manifest.name == "test-project"
             assert len(manifest.agents) == 1
             assert manifest.agents[0].name == "myagent"
             assert manifest.checksum  # Should have checksum
@@ -322,7 +320,7 @@ class TestPackaging:
 
     def test_package_excludes_pycache(self, temp_project):
         """Package excludes __pycache__ directories."""
-        from rayai.cli.platform.packaging import package_deployment
+        from rayai.cli.platform.packaging import package_project
 
         # Create __pycache__ directory
         pycache = temp_project / "agents" / "myagent" / "__pycache__"
@@ -337,7 +335,7 @@ class TestPackaging:
             memory = "2GB"
             replicas = 1
 
-        package_path, manifest = package_deployment(
+        package_path, manifest = package_project(
             temp_project, [MockAgentConfig()], "test"
         )
 

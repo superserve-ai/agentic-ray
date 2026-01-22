@@ -14,10 +14,10 @@ from typing import TYPE_CHECKING, Any
 
 from .types import (
     AgentManifest,
-    DeploymentManifest,
     MCPResourceInfo,
     MCPServerManifest,
     MCPToolInfo,
+    ProjectManifest,
 )
 
 if TYPE_CHECKING:
@@ -87,24 +87,24 @@ def _extract_mcp_resources(mcp_server: Any) -> list[MCPResourceInfo]:
     return resources
 
 
-def package_deployment(
+def package_project(
     project_path: Path,
     agents: list[AgentConfig],
-    deployment_name: str,
+    project_name: str,
     mcp_servers: list[MCPServerConfig] | None = None,
-) -> tuple[Path, DeploymentManifest]:
+) -> tuple[Path, ProjectManifest]:
     """Package agents and MCP servers for cloud deployment.
 
     Creates a zip archive containing:
     - agents/ directory with agent code
     - mcp_servers/ directory with MCP server code
-    - manifest.json with deployment metadata
+    - manifest.json with project metadata
     - pyproject.toml (if exists)
 
     Args:
         project_path: Path to project root.
         agents: List of discovered agent configs.
-        deployment_name: Name for the deployment.
+        project_name: Name for the project.
         mcp_servers: List of discovered MCP server configs.
 
     Returns:
@@ -115,8 +115,8 @@ def package_deployment(
     # Parse user dependencies to include in manifest
     user_deps = _parse_user_dependencies(project_path)
 
-    manifest = DeploymentManifest(
-        name=deployment_name,
+    manifest = ProjectManifest(
+        name=project_name,
         rayai_version=version("rayai"),
         python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
         created_at=datetime.now(UTC).isoformat(),
