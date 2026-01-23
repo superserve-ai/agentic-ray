@@ -1,6 +1,14 @@
 """
 Ray Sandbox - Execute code and shell commands securely in isolated containers
 
+The sandbox automatically detects the environment and uses the appropriate backend:
+- Kubernetes: Uses agent-sandbox SDK (for Anyscale, GKE, etc.)
+- Docker: Uses Docker containers with optional gVisor (for local development)
+
+You can override the backend by setting RAYAI_SANDBOX_BACKEND environment variable:
+    export RAYAI_SANDBOX_BACKEND=kubernetes  # Force Kubernetes backend
+    export RAYAI_SANDBOX_BACKEND=docker      # Force Docker backend
+
 Basic usage:
     from rayai.sandbox import execute_code, execute_shell
 
@@ -22,7 +30,7 @@ With sessions:
     ray.get(execute_shell.remote("echo 'test' > /tmp/file.txt", session_id="user-123"))
     ray.get(execute_code.remote("print(open('/tmp/file.txt').read())", session_id="user-123"))
 
-With custom environments:
+With custom environments (Docker backend only):
     dockerfile = '''
     FROM python:3.11-slim
     RUN pip install pandas
@@ -32,8 +40,13 @@ With custom environments:
         dockerfile=dockerfile,
         session_id="custom-env"
     ))
+
+Kubernetes backend configuration:
+    export RAYAI_SANDBOX_TEMPLATE=python-runtime-template
+    export RAYAI_SANDBOX_NAMESPACE=default
 """
 
+from .backend import SandboxBackend, get_backend_type
 from .tools import (
     cleanup_session,
     execute_code,
@@ -66,4 +79,7 @@ __all__ = [
     "SessionStats",
     "CleanupResult",
     "CleanupError",
+    # Backend
+    "SandboxBackend",
+    "get_backend_type",
 ]

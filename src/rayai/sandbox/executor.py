@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from docker import DockerClient
     from docker.models.containers import Container
 
+from .backend import SandboxBackend
 from .config import (
     CPU_PERIOD,
     CPU_QUOTA,
@@ -27,6 +28,8 @@ from .config import (
     STRICT_GVISOR,
 )
 from .types import (
+    CleanupError,
+    CleanupResult,
     ExecutionError,
     ExecutionResult,
     SessionStats,
@@ -45,10 +48,13 @@ CONTAINER_STOP_TIMEOUT = 2
 
 
 @ray.remote(num_cpus=1, memory=1024 * 1024 * 1024)  # 1GB
-class CodeInterpreterExecutor:
+class CodeInterpreterExecutor(SandboxBackend):
     """
     Ray Actor that manages a Docker container for code execution.
     Each session gets one persistent container for state management.
+
+    This is the Docker-based sandbox backend, suitable for local development
+    and environments where Docker is available.
     """
 
     container: "Container | None"
@@ -76,12 +82,15 @@ class CodeInterpreterExecutor:
                 {'/host/path': {'bind': '/container/path', 'mode': 'ro'}}
             mcp_allowlist: List of allowed MCP server URLs for sidecar proxy
         """
-        self.session_id = session_id
-        self.image = image
-        self.dockerfile = dockerfile
-        self.environment = environment or {}
-        self.volumes = volumes or {}
-        self.mcp_allowlist = mcp_allowlist or []
+        super().__init__(
+            session_id=session_id,
+            image=image,
+            dockerfile=dockerfile,
+            environment=environment,
+            volumes=volumes,
+            mcp_allowlist=mcp_allowlist,
+        )
+
         self.container = None
         self.sidecar_container = None
         self.client = None
@@ -98,12 +107,21 @@ class CodeInterpreterExecutor:
             logger.info(f"MCP allowlist: {self.mcp_allowlist}")
 
     def _get_docker_client(self):
-        """Lazy initialization of Docker client"""
+        """Lazy initialization of Docker client.
+
+        Creates a Docker client that doesn't rely on credential helpers,
+        which can fail in non-interactive environments (like Anyscale) when
+        tokens expire and cannot be refreshed (e.g., gcloud auth).
+        """
         if self.client is None:
             try:
                 import docker
 
-                self.client = docker.from_env()
+                # Use DockerClient with explicit base_url instead of from_env()
+                # to avoid loading credential helpers from ~/.docker/config.json
+                # which can fail in non-interactive environments
+                base_url = os.environ.get("DOCKER_HOST", "unix://var/run/docker.sock")
+                self.client = docker.DockerClient(base_url=base_url)
                 logger.debug(f"Docker client initialized for session {self.session_id}")
             except ImportError as err:
                 raise ImportError(
@@ -725,11 +743,28 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
             logger.error(f"Failed to build sidecar image: {e}")
             raise RuntimeError(f"Failed to build sidecar image: {e}") from e
 
-    def cleanup(self):
-        """Cleanup container and resources"""
-        self._cleanup_sidecar()
-        self._cleanup_container()
-        self._cleanup_docker_client()
+    def cleanup(self) -> CleanupResult | CleanupError:
+        """Cleanup container and resources."""
+        logger.info(f"Session {self.session_id}: Cleaning up Docker sandbox")
+
+        try:
+            self._cleanup_sidecar()
+            self._cleanup_container()
+            self._cleanup_docker_client()
+
+            return CleanupResult(
+                status="success",
+                session_id=self.session_id,
+            )
+        except Exception as e:
+            logger.error(
+                f"Session {self.session_id}: Cleanup failed - {e}", exc_info=True
+            )
+            return CleanupError(
+                status="error",
+                error=str(e),
+                session_id=self.session_id,
+            )
 
     def _cleanup_sidecar(self):
         """Gracefully stop and remove sidecar container"""

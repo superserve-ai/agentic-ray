@@ -1,13 +1,19 @@
 """Configuration for Code Interpreter"""
 
+import os
+import platform
+
 # Default Docker image for code execution
-DEFAULT_IMAGE = "python:3.12-slim"
+DEFAULT_IMAGE = os.environ.get("RAYAI_SANDBOX_IMAGE", "python:3.12-slim")
 
 # Docker runtime (use "runsc" for gVisor isolation, "runc" for standard)
-RUNTIME = "runsc"  # gVisor for security
+# gVisor only works on Linux, so default to "runc" on other platforms
+_default_runtime = "runsc" if platform.system() == "Linux" else "runc"
+RUNTIME = os.environ.get("RAYAI_SANDBOX_RUNTIME", _default_runtime)
 
 # Strict mode: Fail if gVisor is unavailable
-STRICT_GVISOR = True
+# Default to False for easier local development; set RAYAI_STRICT_GVISOR=true for production
+STRICT_GVISOR = os.environ.get("RAYAI_STRICT_GVISOR", "false").lower() == "true"
 
 # Default execution timeout in seconds
 DEFAULT_TIMEOUT = 30

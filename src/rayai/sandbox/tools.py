@@ -7,8 +7,8 @@ from typing import cast
 
 import ray
 
+from .backend import get_backend_type
 from .config import DEFAULT_IMAGE, DEFAULT_TIMEOUT
-from .executor import CodeInterpreterExecutor
 from .types import (
     CleanupError,
     CleanupResult,
@@ -24,6 +24,34 @@ logger = logging.getLogger(__name__)
 # Namespace for all sandbox actors
 ACTOR_NAMESPACE = "sandbox"
 
+# Cache the backend type to avoid repeated detection
+_backend_type: str | None = None
+
+
+def _get_executor_class():
+    """Get the appropriate executor class based on environment."""
+    global _backend_type
+
+    if _backend_type is None:
+        _backend_type = get_backend_type()
+
+    if _backend_type == "kubernetes":
+        from .kubernetes_executor import KubernetesSandboxExecutor
+
+        return KubernetesSandboxExecutor
+    elif _backend_type == "docker":
+        from .executor import CodeInterpreterExecutor
+
+        return CodeInterpreterExecutor
+    else:
+        # Fallback to Docker executor (will fail gracefully if Docker unavailable)
+        from .executor import CodeInterpreterExecutor
+
+        logger.warning(
+            f"Unknown backend type '{_backend_type}', falling back to Docker executor"
+        )
+        return CodeInterpreterExecutor
+
 
 def _get_or_create_executor(
     session_id: str,
@@ -33,7 +61,12 @@ def _get_or_create_executor(
     volumes: dict[str, dict[str, str]] | None = None,
     mcp_allowlist: list[str] | None = None,
 ) -> ray.actor.ActorHandle:
-    """Get existing executor or create new one for session"""
+    """Get existing executor or create new one for session.
+
+    Automatically selects the appropriate executor backend based on environment:
+    - Kubernetes: Uses agent-sandbox SDK (for Anyscale, GKE, etc.)
+    - Docker: Uses Docker containers (for local development)
+    """
     actor_name = f"code-executor-{session_id}"
 
     try:
@@ -42,9 +75,14 @@ def _get_or_create_executor(
         logger.debug(f"Found existing executor for session {session_id}")
         return cast(ray.actor.ActorHandle, executor)
     except ValueError:
-        # Actor doesn't exist, create new one
-        logger.info(f"Creating new executor for session {session_id}")
-        executor = CodeInterpreterExecutor.options(  # type: ignore[attr-defined]
+        # Actor doesn't exist, create new one with appropriate backend
+        ExecutorClass = _get_executor_class()
+        executor_name = getattr(
+            ExecutorClass, "__ray_actor_class__", ExecutorClass
+        ).__name__
+        logger.info(f"Creating new {executor_name} executor for session {session_id}")
+
+        executor = ExecutorClass.options(
             name=actor_name,
             namespace=ACTOR_NAMESPACE,
             lifetime="detached",
