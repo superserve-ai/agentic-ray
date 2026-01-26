@@ -83,9 +83,6 @@ def up(
         },
     )
 
-    # Print summary
-    _print_discovery_summary(registered_agents, registered_mcp_servers)
-
     # Start serving
     try:
         _start_serving(registered_agents, registered_mcp_servers, host, port)
@@ -231,22 +228,6 @@ def _import_module(file_path: Path, module_name: str) -> None:
     spec.loader.exec_module(module)
 
 
-def _print_discovery_summary(
-    agents: list[AgentConfig],
-    mcp_servers: list[MCPServerConfig],
-) -> None:
-    """Print summary of discovered agents and MCP servers."""
-    if agents:
-        click.echo(f"\nAgents ({len(agents)}):")
-        for agent_config in agents:
-            click.echo(f"  {agent_config.name}")
-
-    if mcp_servers:
-        click.echo(f"\nMCP Servers ({len(mcp_servers)}):")
-        for mcp_config in mcp_servers:
-            click.echo(f"  {mcp_config.name}")
-
-
 def _start_serving(
     agents: list[AgentConfig],
     mcp_servers: list[MCPServerConfig],
@@ -301,13 +282,18 @@ def _start_serving(
     if agents:
         click.echo("  Agents:")
         for agent_config in agents:
-            click.echo(f"    POST {base_url}{agent_config.route_prefix}/")
+            click.echo(f"    - {agent_config.route_prefix}/")
+        click.echo()
+        click.echo("  Example:")
+        click.echo(f"    curl -X POST {base_url}/agents/<agent_name>/ \\")
+        click.echo('      -H "Content-Type: application/json" \\')
+        click.echo('      -d \'{"query": "Hello"}\'')
         click.echo()
 
     if mcp_servers:
         click.echo("  MCP Servers:")
         for mcp_config in mcp_servers:
-            click.echo(f"    {base_url}{mcp_config.route_prefix}/mcp")
+            click.echo(f"    - {base_url}{mcp_config.route_prefix}/mcp")
         click.echo()
 
     click.echo("  Press Ctrl+C to stop.\n")

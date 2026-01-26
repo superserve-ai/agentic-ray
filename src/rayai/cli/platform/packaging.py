@@ -10,39 +10,113 @@ import zipfile
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from .types import AgentManifest, DeploymentManifest
+from .types import (
+    AgentManifest,
+    MCPResourceInfo,
+    MCPServerManifest,
+    MCPToolInfo,
+    ProjectManifest,
+)
 
 if TYPE_CHECKING:
+    from rayai.mcp_serve import MCPServerConfig
     from rayai.serve import AgentConfig
 
 
-def package_deployment(
+def _extract_mcp_tools(mcp_server: Any) -> list[MCPToolInfo]:
+    """Extract tool information from a FastMCP server instance.
+
+    Args:
+        mcp_server: FastMCP instance.
+
+    Returns:
+        List of MCPToolInfo with name and description.
+    """
+    tools: list[MCPToolInfo] = []
+    try:
+        if hasattr(mcp_server, "_tool_manager"):
+            for tool in mcp_server._tool_manager.list_tools():
+                tools.append(
+                    MCPToolInfo(
+                        name=tool.name,
+                        description=tool.description or "",
+                    )
+                )
+    except Exception:
+        pass  # If extraction fails, return empty list
+    return tools
+
+
+def _extract_mcp_resources(mcp_server: Any) -> list[MCPResourceInfo]:
+    """Extract resource information from a FastMCP server instance.
+
+    Args:
+        mcp_server: FastMCP instance.
+
+    Returns:
+        List of MCPResourceInfo with name, uri, and description.
+    """
+    resources: list[MCPResourceInfo] = []
+    try:
+        if hasattr(mcp_server, "_resource_manager"):
+            # Get concrete resources
+            for uri, resource in mcp_server._resource_manager.get_resources().items():
+                resources.append(
+                    MCPResourceInfo(
+                        name=getattr(resource, "name", str(uri)),
+                        uri=str(uri),
+                        description=getattr(resource, "description", "") or "",
+                    )
+                )
+            # Get resource templates
+            for (
+                uri,
+                template,
+            ) in mcp_server._resource_manager.get_resource_templates().items():
+                resources.append(
+                    MCPResourceInfo(
+                        name=getattr(template, "name", str(uri)),
+                        uri=str(uri),
+                        description=getattr(template, "description", "") or "",
+                    )
+                )
+    except Exception:
+        pass  # If extraction fails, return empty list
+    return resources
+
+
+def package_project(
     project_path: Path,
     agents: list[AgentConfig],
-    deployment_name: str,
-) -> tuple[Path, DeploymentManifest]:
-    """Package agents for cloud deployment.
+    project_name: str,
+    mcp_servers: list[MCPServerConfig] | None = None,
+) -> tuple[Path, ProjectManifest]:
+    """Package agents and MCP servers for cloud deployment.
 
     Creates a zip archive containing:
     - agents/ directory with agent code
-    - manifest.json with deployment metadata
+    - mcp_servers/ directory with MCP server code
+    - manifest.json with project metadata
     - pyproject.toml (if exists)
 
     Args:
         project_path: Path to project root.
         agents: List of discovered agent configs.
-        deployment_name: Name for the deployment.
+        project_name: Name for the project.
+        mcp_servers: List of discovered MCP server configs.
 
     Returns:
         Tuple of (package_path, manifest).
     """
+    if mcp_servers is None:
+        mcp_servers = []
     # Parse user dependencies to include in manifest
     user_deps = _parse_user_dependencies(project_path)
 
-    manifest = DeploymentManifest(
-        name=deployment_name,
+    manifest = ProjectManifest(
+        name=project_name,
         rayai_version=version("rayai"),
         python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
         created_at=datetime.now(UTC).isoformat(),
@@ -58,6 +132,21 @@ def package_deployment(
             )
             for config in agents
         ],
+        mcp_servers=[
+            MCPServerManifest(
+                name=config.name,
+                route_prefix=config.route_prefix,
+                import_path=f"serve_mcp_{config.name}:app",
+                num_cpus=config.num_cpus,
+                num_gpus=config.num_gpus,
+                memory=config.memory,
+                replicas=config.replicas,
+                pip=user_deps,
+                tools=_extract_mcp_tools(config.mcp_server),
+                resources=_extract_mcp_resources(config.mcp_server),
+            )
+            for config in mcp_servers
+        ],
     )
 
     fd, package_path_str = tempfile.mkstemp(suffix=".zip")
@@ -65,10 +154,12 @@ def package_deployment(
     package_path = Path(package_path_str)
 
     with zipfile.ZipFile(package_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Add only the agent directories that are in the filtered list
+        agent_names = {config.name for config in agents}
         agents_dir = project_path / "agents"
         if agents_dir.exists():
             for agent_folder in agents_dir.iterdir():
-                if agent_folder.is_dir() and not agent_folder.name.startswith("__"):
+                if agent_folder.is_dir() and agent_folder.name in agent_names:
                     _add_directory_to_zip(
                         zf, agent_folder, f"agents/{agent_folder.name}"
                     )
@@ -77,6 +168,21 @@ def package_deployment(
         for config in agents:
             entry_point = _generate_serve_entry_point(config.name)
             zf.writestr(f"serve_{config.name}.py", entry_point)
+
+        # Add only the MCP server directories that are in the filtered list
+        mcp_server_names = {mcp_config.name for mcp_config in mcp_servers}
+        mcp_servers_dir = project_path / "mcp_servers"
+        if mcp_servers_dir.exists():
+            for mcp_folder in mcp_servers_dir.iterdir():
+                if mcp_folder.is_dir() and mcp_folder.name in mcp_server_names:
+                    _add_directory_to_zip(
+                        zf, mcp_folder, f"mcp_servers/{mcp_folder.name}"
+                    )
+
+        # Generate serve entry points for each MCP server
+        for mcp_config in mcp_servers:
+            entry_point = _generate_mcp_serve_entry_point(mcp_config.name)
+            zf.writestr(f"serve_mcp_{mcp_config.name}.py", entry_point)
 
         pyproject_file = project_path / "pyproject.toml"
         if pyproject_file.exists():
@@ -283,6 +389,51 @@ class AgentDeployment:
         return {{"status": "healthy", "agent": "{agent_name}"}}
 
 app = AgentDeployment.bind()
+'''
+
+
+def _generate_mcp_serve_entry_point(mcp_name: str) -> str:
+    """Generate a Ray Serve entry point script for an MCP server.
+
+    Creates a self-contained module for cloud deployment that wraps
+    the MCP server's streamable HTTP app with Ray Serve.
+    """
+    return f'''"""Ray Serve entry point for MCP server {mcp_name}."""
+import sys
+import os
+from contextlib import asynccontextmanager
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from fastapi import FastAPI
+from ray import serve
+
+from mcp_servers.{mcp_name}.server import mcp
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage MCP server lifecycle."""
+    app.mount("/", mcp.streamable_http_app())
+    async with mcp.session_manager.run():
+        yield
+
+
+fastapi_app = FastAPI(title="{mcp_name}-mcp", lifespan=lifespan)
+
+
+@fastapi_app.get("/health")
+async def health():
+    return {{"status": "healthy", "mcp_server": "{mcp_name}"}}
+
+
+@serve.deployment(name="{mcp_name}-mcp")
+@serve.ingress(fastapi_app)
+class MCPServerDeployment:
+    pass
+
+
+app = MCPServerDeployment.bind()
 '''
 
 

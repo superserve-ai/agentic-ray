@@ -9,9 +9,9 @@ Usage:
     rayai login [--api-key=KEY]
     rayai logout
     rayai deploy [--name=NAME] [--agents=<names>]
-    rayai status [deployment_name]
-    rayai logs <deployment_name> [-f]
-    rayai delete <deployment_name>
+    rayai status [project_name]
+    rayai logs <project_name> [-f]
+    rayai delete <project_name>
 """
 
 from importlib.metadata import version

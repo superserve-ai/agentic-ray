@@ -1,6 +1,6 @@
 """Stream logs from deployed agents.
 
-The `rayai logs` command retrieves and streams logs from cloud deployments.
+The `rayai logs` command retrieves and streams logs from cloud projects.
 
 Usage:
     rayai logs myapp              # Show recent logs
@@ -20,14 +20,14 @@ from rayai.cli.platform.types import LogEntry
 
 
 @click.command()
-@click.argument("deployment_name")
+@click.argument("project_name")
 @click.option("--follow", "-f", is_flag=True, help="Follow log output")
 @click.option("--tail", "-n", default=100, help="Number of lines to show")
 @click.option("--agent", help="Show logs for specific agent")
-def logs(deployment_name: str, follow: bool, tail: int, agent: str | None) -> None:
+def logs(project_name: str, follow: bool, tail: int, agent: str | None) -> None:
     """Stream logs from deployed agents.
 
-    Retrieves logs from a cloud deployment. Use --follow to stream
+    Retrieves logs from a cloud project. Use --follow to stream
     logs in real-time.
 
     Examples:
@@ -44,9 +44,9 @@ def logs(deployment_name: str, follow: bool, tail: int, agent: str | None) -> No
 
     try:
         if follow:
-            _stream_logs(client, deployment_name, agent)
+            _stream_logs(client, project_name, agent)
         else:
-            _get_logs(client, deployment_name, tail, agent)
+            _get_logs(client, project_name, tail, agent)
         track("cli_logs", {"follow": follow})
     except PlatformAPIError as e:
         click.echo(f"Error: {e.message}", err=True)
@@ -58,7 +58,7 @@ def _get_logs(client: PlatformClient, name: str, tail: int, agent: str | None) -
 
     Args:
         client: Platform API client.
-        name: Deployment name.
+        name: Project name.
         tail: Number of lines to retrieve.
         agent: Filter by agent name.
     """
@@ -77,7 +77,7 @@ def _stream_logs(client: PlatformClient, name: str, agent: str | None) -> None:
 
     Args:
         client: Platform API client.
-        name: Deployment name.
+        name: Project name.
         agent: Filter by agent name.
     """
     click.echo(f"Streaming logs for {name}... (Ctrl+C to stop)\n")
