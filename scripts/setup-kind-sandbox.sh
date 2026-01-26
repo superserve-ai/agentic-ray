@@ -33,17 +33,17 @@ kubectl cluster-info --context "kind-${CLUSTER_NAME}"
 
 # Install agent-sandbox controller
 echo "Installing agent-sandbox controller ${AGENT_SANDBOX_VERSION}..."
-kubectl apply \
+kubectl apply --context "kind-${CLUSTER_NAME}" \
     -f "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/manifest.yaml" \
     -f "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/extensions.yaml"
 
 # Wait for controller to be ready
 echo "Waiting for agent-sandbox controller to be ready..."
-kubectl wait --for=condition=available --timeout=120s deployment/agent-sandbox-controller -n agent-sandbox-system || true
+kubectl wait --context "kind-${CLUSTER_NAME}" --for=condition=available --timeout=120s deployment/agent-sandbox-controller -n agent-sandbox-system
 
 # Create sandbox template and warm pool
 echo "Creating SandboxTemplate and SandboxWarmPool..."
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply --context "kind-${CLUSTER_NAME}" -f -
 apiVersion: extensions.agents.x-k8s.io/v1alpha1
 kind: SandboxTemplate
 metadata:
@@ -86,7 +86,7 @@ EOF
 
 # Deploy sandbox router
 echo "Deploying sandbox router..."
-cat <<EOF | kubectl apply -f -
+cat <<EOF | kubectl apply --context "kind-${CLUSTER_NAME}" -f -
 apiVersion: v1
 kind: Service
 metadata:
@@ -128,7 +128,7 @@ spec:
 EOF
 
 echo "Waiting for router to be ready..."
-kubectl wait --for=condition=available --timeout=120s deployment/sandbox-router -n default || true
+kubectl wait --context "kind-${CLUSTER_NAME}" --for=condition=available --timeout=120s deployment/sandbox-router -n default
 
 echo ""
 echo "=== Setup complete! ==="

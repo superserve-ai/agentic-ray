@@ -93,7 +93,7 @@ class Sandbox:
         self.image = image
         self.timeout = timeout
         self.session_id = session_id or f"sandbox-{uuid.uuid4().hex[:8]}"
-        self._executor: "ActorHandle | None" = None
+        self._executor: ActorHandle | None = None
         self._started = False
 
         # Make run_code a rayai.tool for agent use
@@ -172,11 +172,6 @@ class Sandbox:
 
         backend_type = get_backend_type()
 
-        if backend_type == "kubernetes":
-            from .kubernetes_executor import KubernetesSandboxExecutor as ExecutorClass  # type: ignore[assignment]
-        else:
-            from .executor import CodeInterpreterExecutor as ExecutorClass
-
         actor_name = f"sandbox-{self.session_id}"
         namespace = "sandbox"
 
@@ -185,15 +180,30 @@ class Sandbox:
             logger.debug(f"Found existing sandbox: {self.session_id}")
         except ValueError:
             logger.info(f"Creating sandbox: {self.session_id}")
-            self._executor = ExecutorClass.options(
-                name=actor_name,
-                namespace=namespace,
-                lifetime="detached",
-            ).remote(
-                session_id=self.session_id,
-                image=self.image,
-                dockerfile=self.dockerfile,
-            )
+            if backend_type == "kubernetes":
+                from .kubernetes_executor import KubernetesSandboxExecutor
+
+                self._executor = KubernetesSandboxExecutor.options(  # type: ignore[attr-defined]
+                    name=actor_name,
+                    namespace=namespace,
+                    lifetime="detached",
+                ).remote(
+                    session_id=self.session_id,
+                    image=self.image,
+                    dockerfile=self.dockerfile,
+                )
+            else:
+                from .executor import CodeInterpreterExecutor
+
+                self._executor = CodeInterpreterExecutor.options(  # type: ignore[attr-defined]
+                    name=actor_name,
+                    namespace=namespace,
+                    lifetime="detached",
+                ).remote(
+                    session_id=self.session_id,
+                    image=self.image,
+                    dockerfile=self.dockerfile,
+                )
 
         self._started = True
         return self._executor
@@ -208,7 +218,9 @@ class Sandbox:
         return ExecutionResult(
             stdout=result.get("stdout", ""),
             stderr=result.get("stderr", result.get("error", "")),
-            exit_code=result.get("exit_code", 0 if result["status"] == "success" else 1),
+            exit_code=result.get(
+                "exit_code", 0 if result["status"] == "success" else 1
+            ),
         )
 
     def exec(self, command: str, timeout: int | None = None) -> ExecutionResult:
@@ -229,7 +241,9 @@ class Sandbox:
         return ExecutionResult(
             stdout=result.get("stdout", ""),
             stderr=result.get("stderr", result.get("error", "")),
-            exit_code=result.get("exit_code", 0 if result["status"] == "success" else 1),
+            exit_code=result.get(
+                "exit_code", 0 if result["status"] == "success" else 1
+            ),
         )
 
     def upload(self, path: str, content: bytes) -> None:

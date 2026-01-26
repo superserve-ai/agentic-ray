@@ -43,14 +43,16 @@ def _get_executor_class():
         from .executor import CodeInterpreterExecutor
 
         return CodeInterpreterExecutor
-    else:
-        # Fallback to Docker executor (will fail gracefully if Docker unavailable)
-        from .executor import CodeInterpreterExecutor
-
-        logger.warning(
-            f"Unknown backend type '{_backend_type}', falling back to Docker executor"
+    elif _backend_type == "subprocess":
+        raise NotImplementedError(
+            "A 'subprocess' backend is not yet implemented. "
+            "Please install Docker or run in a Kubernetes environment."
         )
-        return CodeInterpreterExecutor
+    else:
+        raise ValueError(
+            f"Unknown backend type '{_backend_type}' specified. "
+            "Supported backends are 'kubernetes' and 'docker'."
+        )
 
 
 def _get_or_create_executor(
@@ -363,10 +365,12 @@ def cleanup_session(session_id: str) -> CleanupResult | CleanupError:
 # LLM-callable tools (rayai.tool)
 # -----------------------------------------------------------------------------
 
+
 # Import rayai here to avoid circular imports at module level
 def _get_rayai_tool():
     """Lazy import of rayai.tool to avoid circular imports."""
     import rayai
+
     return rayai.tool
 
 
@@ -425,6 +429,8 @@ def create_execute_python_tool(
                 output += f"\n[stderr]: {result['stderr']}"
             return output
         else:
-            return f"Error: {result.get('stderr') or result.get('error', 'Unknown error')}"
+            return (
+                f"Error: {result.get('stderr') or result.get('error', 'Unknown error')}"
+            )
 
     return execute_python

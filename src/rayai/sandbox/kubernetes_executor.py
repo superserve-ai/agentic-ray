@@ -13,6 +13,7 @@ Installation:
 """
 
 import asyncio
+import base64
 import logging
 import os
 import tempfile
@@ -252,13 +253,11 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
 
                 # Execute in sandbox using the SDK
                 # Use base64 to write script to file, then execute
-                import base64
-
                 encoded_script = base64.b64encode(script_content.encode()).decode()
 
                 # Write script to temp file and execute it
                 # Using bash -c to properly handle the pipe
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 result = await loop.run_in_executor(
                     None,
                     lambda: sandbox.run(
@@ -344,7 +343,7 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
             sandbox = self._get_sandbox_client()
 
             # Execute command via sandbox SDK
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
                 None,
                 lambda: sandbox.run(command),
@@ -392,8 +391,6 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
             sandbox = self._get_sandbox_client()
 
             # Use base64 encoding to transfer file content
-            import base64
-
             encoded_content = base64.b64encode(content).decode("ascii")
 
             # Create file using shell command
