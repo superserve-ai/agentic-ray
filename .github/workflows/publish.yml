@@ -5,6 +5,15 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      target:
+        description: 'Publish to'
+        required: true
+        default: 'testpypi'
+        type: choice
+        options:
+          - testpypi
+          - pypi
 
 jobs:
   build:
@@ -32,10 +41,35 @@ jobs:
           name: dist
           path: dist/
 
-  publish:
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'push' && contains(github.ref, '-dev')) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'testpypi')
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
     name: Publish to PyPI
     needs: build
     runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-dev')) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'pypi')
     environment: pypi
     permissions:
       id-token: write
