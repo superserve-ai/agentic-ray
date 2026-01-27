@@ -147,7 +147,7 @@ class KubernetesSandboxExecutor(SandboxBackend):
                 self.sandbox = SandboxClient(
                     template_name=self.template_name,
                     namespace=self.namespace,
-                    router_url=router_url,
+                    api_url=router_url,
                 )
             else:
                 self.sandbox = SandboxClient(
