@@ -180,6 +180,15 @@ def set_rayai_up_mode(enabled: bool) -> None:
     _rayai_up_mode = enabled
 
 
+def is_discovery_mode() -> bool:
+    """Check if we're in discovery mode (rayai up/deploy importing modules).
+
+    Returns True when modules are being imported for agent discovery,
+    meaning side effects like starting Ray or prewarming should be skipped.
+    """
+    return _rayai_up_mode
+
+
 def _is_main_context() -> bool:
     """Check if the caller is running as __main__.
 
@@ -253,8 +262,15 @@ def _start_serve(
         )
         deployments.append((deployment, config.route_prefix))
 
-    # Start Ray Serve
-    ray_serve.start(http_options={"host": host, "port": port})
+    # Start Ray Serve with extended timeout for long-running sandbox operations
+    # Setting request_timeout_s=None disables the timeout (recommended for SSE streaming)
+    # For non-streaming requests, individual tools/operations have their own timeouts
+    http_options = {
+        "host": host,
+        "port": port,
+        "request_timeout_s": None,  # Disable HTTP timeout - rely on internal timeouts
+    }
+    ray_serve.start(http_options=http_options)
 
     for (deployment, route_prefix), config in zip(deployments, configs, strict=False):
         ray_serve.run(deployment, route_prefix=route_prefix, name=config.name)

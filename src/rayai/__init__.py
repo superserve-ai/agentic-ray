@@ -26,7 +26,7 @@ from rayai.base import AgentProtocol
 from rayai.batch import BatchTool, BatchToolInput, BatchToolOutput, batch_tool
 from rayai.decorators import tool
 from rayai.mcp_serve import serve_mcp
-from rayai.serve import serve
+from rayai.serve import is_discovery_mode, serve
 from rayai.utils import execute_tools
 
 try:
@@ -39,6 +39,7 @@ __all__ = [
     "tool",  # Unified decorator/wrapper for Ray tools
     "serve",  # Serve agents via HTTP
     "serve_mcp",  # Serve MCP servers via HTTP
+    "is_discovery_mode",  # Check if in rayai up/deploy discovery mode
     "Agent",  # Base class for custom agents
     "batch_tool",
     # Supporting types

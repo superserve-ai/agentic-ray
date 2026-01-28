@@ -743,6 +743,27 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
             logger.error(f"Failed to build sidecar image: {e}")
             raise RuntimeError(f"Failed to build sidecar image: {e}") from e
 
+    def prewarm(self) -> dict[str, str]:
+        """Pre-initialize the sandbox to reduce cold start latency.
+
+        This method eagerly creates the Docker container so that subsequent
+        code execution requests don't incur container startup time.
+
+        Returns:
+            Dict with status and session_id
+        """
+        logger.info(f"Session {self.session_id}: Pre-warming Docker sandbox")
+        try:
+            # This will create the container if it doesn't exist
+            self._ensure_container()
+            logger.info(f"Session {self.session_id}: Pre-warm complete")
+            return {"status": "ready", "session_id": self.session_id}
+        except Exception as e:
+            logger.error(
+                f"Session {self.session_id}: Pre-warm failed - {e}", exc_info=True
+            )
+            return {"status": "error", "error": str(e), "session_id": self.session_id}
+
     def cleanup(self) -> CleanupResult | CleanupError:
         """Cleanup container and resources."""
         logger.info(f"Session {self.session_id}: Cleaning up Docker sandbox")

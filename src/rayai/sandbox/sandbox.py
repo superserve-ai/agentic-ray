@@ -208,6 +208,39 @@ class Sandbox:
         self._started = True
         return self._executor
 
+    def prewarm(self, session_id: str = "default") -> dict[str, str]:
+        """Pre-initialize the sandbox to reduce cold start latency.
+
+        This method eagerly creates the sandbox executor and claims a
+        Kubernetes sandbox from the warm pool. Call this during service
+        initialization to avoid delays on the first request.
+
+        Args:
+            session_id: Session identifier for the sandbox (default: "default")
+
+        Returns:
+            Dict with status and session_id
+
+        Example:
+            # During agent initialization
+            sandbox = Sandbox()
+            sandbox.prewarm()  # Pre-warm the default session
+
+            # Or prewarm specific sessions
+            sandbox.prewarm(session_id="user-123")
+        """
+        # Create a sandbox with the specified session_id
+        prewarm_sandbox = Sandbox(
+            dockerfile=self.dockerfile,
+            image=self.image,
+            timeout=self.timeout,
+            session_id=session_id,
+        )
+        executor = prewarm_sandbox._get_executor()
+        result: dict[str, str] = ray.get(executor.prewarm.remote())
+        logger.info(f"Sandbox pre-warm result for session {session_id}: {result}")
+        return result
+
     def _run_code(self, code: str, timeout: int | None = None) -> ExecutionResult:
         """Internal implementation of run_code."""
         executor = self._get_executor()

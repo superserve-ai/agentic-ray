@@ -99,6 +99,19 @@ class SandboxBackend(ABC):
         ...
 
     @abstractmethod
+    def prewarm(self) -> dict[str, str]:
+        """Pre-initialize the sandbox to reduce cold start latency.
+
+        This method should eagerly create any resources needed for code
+        execution (containers, connections, etc.) so that subsequent
+        requests don't incur initialization overhead.
+
+        Returns:
+            Dict with 'status' ('ready' or 'error') and 'session_id'
+        """
+        ...
+
+    @abstractmethod
     def cleanup(self) -> CleanupResult | CleanupError:
         """Cleanup sandbox resources.
 
