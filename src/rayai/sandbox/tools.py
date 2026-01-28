@@ -337,11 +337,17 @@ def cleanup_session(session_id: str) -> CleanupResult | CleanupError:
     logger.info(f"Cleaning up session {session_id}")
 
     try:
-        # Cleanup container
-        ray.get(executor.cleanup.remote())
+        # Cleanup container - may fail if actor already dead
+        try:
+            ray.get(executor.cleanup.remote())
+        except Exception as e:
+            logger.debug(f"Cleanup call failed (actor may be dead): {e}")
 
         # Kill actor and wait for it to terminate
-        ray.kill(executor, no_restart=True)
+        try:
+            ray.kill(executor, no_restart=True)
+        except Exception as e:
+            logger.debug(f"Kill call failed (actor may be dead): {e}")
 
         # Wait for resources to be fully released
         # gVisor containers take longer to clean up than standard Docker

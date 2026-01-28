@@ -95,6 +95,7 @@ class Sandbox:
         self.session_id = session_id or f"sandbox-{uuid.uuid4().hex[:8]}"
         self._executor: ActorHandle | None = None
         self._started = False
+        self._owns_executor = False  # Only True if we created the actor
 
         # Make run_code a rayai.tool for agent use
         self._setup_tool()
@@ -177,9 +178,11 @@ class Sandbox:
 
         try:
             self._executor = ray.get_actor(actor_name, namespace=namespace)
+            self._owns_executor = False  # Found existing, don't terminate on cleanup
             logger.debug(f"Found existing sandbox: {self.session_id}")
         except ValueError:
             logger.info(f"Creating sandbox: {self.session_id}")
+            self._owns_executor = True  # We created it, responsible for cleanup
             if backend_type == "kubernetes":
                 from .kubernetes_executor import KubernetesSandboxExecutor
 
@@ -299,14 +302,21 @@ class Sandbox:
 
         try:
             ray.get(self._executor.cleanup.remote())
+        except Exception as e:
+            # Actor may already be dead, log at debug level
+            logger.debug(f"Sandbox cleanup call failed (actor may be dead): {e}")
+
+        try:
             ray.kill(self._executor, no_restart=True)
             time.sleep(1.0)
             logger.info(f"Sandbox terminated: {self.session_id}")
         except Exception as e:
-            logger.warning(f"Error terminating sandbox: {e}")
+            # Actor may already be dead
+            logger.debug(f"Sandbox kill failed (actor may be dead): {e}")
         finally:
             self._executor = None
             self._started = False
+            self._owns_executor = False
 
     def __enter__(self) -> "Sandbox":
         """Enter context manager."""
@@ -318,8 +328,12 @@ class Sandbox:
         self.terminate()
 
     def __del__(self):
-        """Cleanup on garbage collection."""
-        if self._started:
+        """Cleanup on garbage collection.
+
+        Only terminates the actor if this Sandbox instance created it.
+        Sandbox wrappers that found an existing actor leave it running.
+        """
+        if self._started and self._owns_executor:
             try:
                 self.terminate()
             except Exception:

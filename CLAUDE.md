@@ -182,3 +182,9 @@ scripts/             Developer/cluster helper scripts (gVisor setup)
 | `rayai create-agent <name> [--framework=...]` | Create agent (python/langchain/pydantic) |
 | `rayai up [--port=...] [--agents=...]` | Run agents with Ray Serve |
 | `rayai analytics [on\|off\|status]` | Manage anonymous usage analytics |
+
+## Git Commit Guidelines
+
+- Use single-line commit messages
+- Do not include "Co-Authored-By" or any AI attribution in commits
+- Keep commit messages concise and descriptive
