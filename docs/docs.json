@@ -57,7 +57,7 @@
         },
         {
           "anchor": "Blog",
-          "href": "https://superserve.com/blog",
+          "href": "https://superserve.ai/blog",
           "icon": "newspaper"
         }
       ]
@@ -71,7 +71,7 @@
     "links": [
       {
         "label": "Support",
-        "href": "mailto:hello@superserve.com"
+        "href": "mailto:hello@superserve.ai"
       }
     ],
     "primary": {

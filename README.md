@@ -1,14 +1,14 @@
 <div align="center">
-  <a href="https://superserve.com/"><img width="1185" height="395" alt="Superserve" src="./assets/superserve-logo-dark-transparent.svg" /></a>
+  <a href="https://superserve.ai/"><img width="1185" height="395" alt="Superserve" src="https://raw.githubusercontent.com/superserve-ai/agentic-ray/main/assets/superserve-logo-light-transparent.svg" /></a>
 
   <p><strong>Scalable runtime for Agents, MCP Servers, and coding sandboxes, orchestrated with Ray.</strong></p>
 
   <!-- [![PyPI version](https://img.shields.io/pypi/v/agentic-ray.svg)](https://pypi.org/project/agentic-ray/) -->
-  [![Docs](https://img.shields.io/badge/Docs-latest-blue)](https://docs.superserve.com/)
+  [![Docs](https://img.shields.io/badge/Docs-latest-blue)](https://docs.superserve.ai/)
   [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/superserve-ai/agentic-ray/blob/main/LICENSE)
   [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://python.org)
   [![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white)](https://discord.gg/utftfhSK)
-  [![Slack](https://img.shields.io/badge/Slack-Join%20Us-4A154B?logo=slack&logoColor=white)](https://superserve.com/join-slack)
+  [![Slack](https://img.shields.io/badge/Slack-Join%20Us-4A154B?logo=slack&logoColor=white)](https://superserve.ai/join-slack)
 
 </div>
 

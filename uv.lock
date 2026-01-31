@@ -2064,7 +2064,7 @@ wheels = [
 
 [[package]]
 name = "superserve"
-version = "0.1.12"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
