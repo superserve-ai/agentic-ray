@@ -2,8 +2,8 @@
 
 from pydantic_ai import Agent
 
-import rayai
-from rayai.sandbox import Sandbox
+import superserve
+from superserve.sandbox import Sandbox
 
 # Create sandbox - works in both Docker and Kubernetes modes
 # Packages are installed at runtime via pip
@@ -12,7 +12,7 @@ sandbox = Sandbox(timeout=120)
 # Pre-warm the sandbox to reduce cold start latency
 # This creates the executor actor and claims a K8s sandbox ahead of time
 # Skip during discovery mode (rayai deploy) to avoid starting Ray locally
-if not rayai.is_discovery_mode():
+if not superserve.is_discovery_mode():
     sandbox.prewarm()
 
 SYSTEM_PROMPT = """You are a synthetic data generator agent. Your job is to generate realistic synthetic datasets based on user requirements.
@@ -46,4 +46,4 @@ def make_agent():
 
 
 # Serve the agent
-rayai.serve(make_agent, name="datagen", num_cpus=1, memory="2GB")
+superserve.serve(make_agent, name="datagen", num_cpus=1, memory="2GB")
