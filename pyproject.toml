@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "superserve"
 
-version = "0.1.12"
+version = "0.1.2"
 description = "Run agentic workloads on Ray"
 license = { file = "LICENSE" }
 readme = "README.md"
@@ -27,7 +27,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://superserve.com"
+Homepage = "https://superserve.ai"
 Repository = "https://github.com/superserve-ai/agentic-ray"
 
 [project.scripts]
