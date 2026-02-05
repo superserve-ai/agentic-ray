@@ -10,43 +10,35 @@
   "favicon": "/favicon.svg",
   "navigation": {
     "groups": [
-          {
-            "group": "Getting started",
-            "pages": [
-              "index",
-              "quickstart"
-            ]
-          },
-          {
-            "group": "Core",
-            "pages": [
-              "runtime/tools",
-              "runtime/agents",
-              "runtime/serving",
-              "runtime/mcp"
-            ]
-          },
-          {
-            "group": "Frameworks",
-            "pages": [
-              "frameworks/build-from-scratch",
-              "frameworks/langchain",
-              "frameworks/pydantic"
-            ]
-          },
-          {
-            "group": "Native Tools",
-            "pages": [
-              "tools/native/batch",
-              "tools/native/sandbox"
-            ]
-          },
-          {
-            "group": "Examples",
-            "pages": [
-              
-            ]
-          }
+      {
+        "group": "Getting started",
+        "pages": ["index", "quickstart"]
+      },
+      {
+        "group": "Core",
+        "pages": [
+          "runtime/tools",
+          "runtime/agents",
+          "runtime/serving",
+          "runtime/mcp"
+        ]
+      },
+      {
+        "group": "Frameworks",
+        "pages": [
+          "frameworks/build-from-scratch",
+          "frameworks/langchain",
+          "frameworks/pydantic"
+        ]
+      },
+      {
+        "group": "Native Tools",
+        "pages": ["tools/native/batch", "tools/native/sandbox"]
+      },
+      {
+        "group": "Examples",
+        "pages": []
+      }
     ],
     "global": {
       "anchors": [
@@ -82,21 +74,21 @@
   },
   "contextual": {
     "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "mcp",
+      "cursor",
+      "vscode"
+    ]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/RayAI_HQ",
-      "github": "https://github.com/rayai-labs",
-      "linkedin": "https://www.linkedin.com/company/rayai"
+      "x": "https://x.com/superserve_ai",
+      "github": "https://github.com/superserve-ai/",
+      "linkedin": "https://www.linkedin.com/company/super-serve-ai/"
     }
   },
   "integrations": {
