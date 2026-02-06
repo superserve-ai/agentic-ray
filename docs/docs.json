@@ -7,7 +7,7 @@
     "light": "#105C60",
     "dark": "#119CA3"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "/images/Subtract.svg",
   "navigation": {
     "groups": [
       {
@@ -93,5 +93,9 @@
       "apiKey": "phc_gjpDKKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre",
       "apiHost": "https://us.i.posthog.com"
     }
+  },
+  "appearance": {
+    "strict": false,
+    "default": "system"
   }
 }
