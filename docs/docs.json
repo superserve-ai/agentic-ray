@@ -3,9 +3,9 @@
   "theme": "mint",
   "name": "Superserve Docs",
   "colors": {
-    "primary": "#ffadad",
-    "light": "#ffc4c4",
-    "dark": "#e89999"
+    "primary": "#105C60",
+    "light": "#105C60",
+    "dark": "#119CA3"
   },
   "favicon": "/favicon.svg",
   "navigation": {
@@ -55,10 +55,7 @@
       ]
     }
   },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
+  "logo": "/logo/superserve_logo.svg",
   "navbar": {
     "links": [
       {
