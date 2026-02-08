@@ -10,11 +10,15 @@ import requests
 from .auth import get_credentials
 from .config import DEFAULT_TIMEOUT, PLATFORM_API_URL, USER_AGENT
 from .types import (
+    AgentConfig,
+    AgentResponse,
     Credentials,
     DeviceCodeResponse,
     LogEntry,
     ProjectManifest,
     ProjectResponse,
+    RunEvent,
+    RunResponse,
 )
 
 
@@ -328,3 +332,196 @@ class PlatformClient:
                     yield LogEntry.model_validate(data)
                 except (json.JSONDecodeError, ValueError):
                     continue
+
+    # ==================== AGENTS ====================
+
+    def create_agent(self, config: AgentConfig) -> AgentResponse:
+        """Create a new hosted agent.
+
+        Args:
+            config: Agent configuration.
+
+        Returns:
+            Created agent.
+        """
+        resp = self._request(
+            "POST",
+            "/agents",
+            json_data={
+                "name": config.name,
+                "model": config.model,
+                "system_prompt": config.system_prompt,
+                "tools": config.tools,
+                "max_turns": config.max_turns,
+                "timeout_seconds": config.timeout_seconds,
+            },
+        )
+        return AgentResponse.model_validate(resp.json())
+
+    def list_agents(self) -> list[AgentResponse]:
+        """List all hosted agents.
+
+        Returns:
+            List of agents.
+        """
+        resp = self._request("GET", "/agents")
+        data = resp.json()
+        return [AgentResponse.model_validate(a) for a in data.get("agents", [])]
+
+    def get_agent(self, name_or_id: str) -> AgentResponse:
+        """Get a hosted agent by name or ID.
+
+        Args:
+            name_or_id: Agent name or ID (with or without agt_ prefix).
+
+        Returns:
+            Agent details.
+        """
+        # If it looks like a name (no prefix), try to find by name
+        if not name_or_id.startswith("agt_"):
+            agents = self.list_agents()
+            for agent in agents:
+                if agent.name == name_or_id:
+                    return agent
+            raise PlatformAPIError(404, f"Agent '{name_or_id}' not found")
+
+        resp = self._request("GET", f"/agents/{name_or_id}")
+        return AgentResponse.model_validate(resp.json())
+
+    def delete_agent(self, name_or_id: str) -> None:
+        """Delete a hosted agent.
+
+        Args:
+            name_or_id: Agent name or ID.
+        """
+        # Resolve name to ID if needed
+        if not name_or_id.startswith("agt_"):
+            agent = self.get_agent(name_or_id)
+            name_or_id = agent.id
+
+        self._request("DELETE", f"/agents/{name_or_id}")
+
+    # ==================== RUNS ====================
+
+    def create_run(
+        self,
+        agent_id: str,
+        prompt: str,
+        session_id: str | None = None,
+    ) -> RunResponse:
+        """Create a new run for an agent.
+
+        Args:
+            agent_id: Agent ID or name.
+            prompt: User prompt.
+            session_id: Optional session ID for multi-turn.
+
+        Returns:
+            Created run.
+        """
+        # Resolve name to ID if needed
+        if not agent_id.startswith("agt_"):
+            agent = self.get_agent(agent_id)
+            agent_id = agent.id
+
+        data: dict[str, str] = {
+            "agent_id": agent_id,
+            "prompt": prompt,
+        }
+        if session_id:
+            data["session_id"] = session_id
+
+        resp = self._request("POST", "/runs", json_data=data)
+        return RunResponse.model_validate(resp.json())
+
+    def list_runs(
+        self,
+        agent_id: str | None = None,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> list[RunResponse]:
+        """List runs.
+
+        Args:
+            agent_id: Filter by agent ID or name.
+            status: Filter by status.
+            limit: Maximum number of runs to return.
+
+        Returns:
+            List of runs.
+        """
+        params: dict[str, int | str] = {"limit": limit}
+
+        if agent_id:
+            if not agent_id.startswith("agt_"):
+                agent = self.get_agent(agent_id)
+                agent_id = agent.id
+            params["agent_id"] = agent_id
+
+        if status:
+            params["status"] = status
+
+        resp = self._request("GET", "/runs", params=params)
+        data = resp.json()
+        return [RunResponse.model_validate(r) for r in data.get("runs", [])]
+
+    def get_run(self, run_id: str) -> RunResponse:
+        """Get a run by ID.
+
+        Args:
+            run_id: Run ID (with or without run_ prefix).
+
+        Returns:
+            Run details.
+        """
+        if not run_id.startswith("run_"):
+            run_id = f"run_{run_id}"
+
+        resp = self._request("GET", f"/runs/{run_id}")
+        return RunResponse.model_validate(resp.json())
+
+    def cancel_run(self, run_id: str) -> RunResponse:
+        """Cancel a running run.
+
+        Args:
+            run_id: Run ID.
+
+        Returns:
+            Updated run.
+        """
+        if not run_id.startswith("run_"):
+            run_id = f"run_{run_id}"
+
+        resp = self._request("POST", f"/runs/{run_id}/cancel")
+        return RunResponse.model_validate(resp.json())
+
+    def stream_run(self, run_id: str) -> Iterator[RunEvent]:
+        """Stream run events via SSE.
+
+        Args:
+            run_id: Run ID.
+
+        Yields:
+            Run events as they arrive.
+        """
+        if not run_id.startswith("run_"):
+            run_id = f"run_{run_id}"
+
+        resp = self._request("GET", f"/runs/{run_id}/events", stream=True)
+
+        current_event_type = None
+        for line in resp.iter_lines():
+            if not line:
+                continue
+
+            line_str = line.decode("utf-8") if isinstance(line, bytes) else line
+
+            if line_str.startswith("event: "):
+                current_event_type = line_str[7:]
+            elif line_str.startswith("data: ") and current_event_type:
+                try:
+                    data = json.loads(line_str[6:])
+                    yield RunEvent(type=current_event_type, data=data)
+                except json.JSONDecodeError:
+                    continue
+                current_event_type = None

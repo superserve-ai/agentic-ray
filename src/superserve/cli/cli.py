@@ -31,7 +31,9 @@ from .commands import (
     status,
     up,
 )
+from .commands.agents import agents
 from .commands.mcp import mcp
+from .commands.run import run_agent, runs
 
 
 @click.group()
@@ -60,6 +62,11 @@ cli.add_command(deploy.deploy)
 cli.add_command(status.status)
 cli.add_command(logs.logs)
 cli.add_command(delete.delete)
+
+# Hosted agents commands
+cli.add_command(agents)
+cli.add_command(run_agent)
+cli.add_command(runs)
 
 
 def main():

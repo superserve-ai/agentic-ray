@@ -114,3 +114,78 @@ class LogEntry(BaseModel):
     level: str
     message: str
     agent: str | None = None
+
+
+# ==================== HOSTED AGENTS ====================
+
+
+class AgentConfig(BaseModel):
+    """Agent configuration."""
+
+    name: str
+    model: str = "claude-sonnet-4-20250514"
+    system_prompt: str = ""
+    tools: list[str] = ["Bash", "Read", "Write", "Glob", "Grep"]
+    max_turns: int = 10
+    timeout_seconds: int = 300
+
+
+class AgentResponse(BaseModel):
+    """Response from agent API."""
+
+    id: str
+    name: str
+    model: str
+    system_prompt: str
+    tools: list[str]
+    max_turns: int
+    timeout_seconds: int
+    status: str
+    created_at: str
+    updated_at: str
+
+
+class AgentListResponse(BaseModel):
+    """Response containing list of agents."""
+
+    agents: list[AgentResponse]
+
+
+class UsageMetrics(BaseModel):
+    """Token usage metrics."""
+
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+
+
+class RunResponse(BaseModel):
+    """Response from run API."""
+
+    id: str
+    agent_id: str
+    status: Literal["pending", "running", "completed", "failed", "cancelled"]
+    prompt: str
+    output: str | None = None
+    error_message: str | None = None
+    session_id: str | None = None
+    usage: UsageMetrics | None = None
+    turns: int = 0
+    duration_ms: int = 0
+    tools_used: list[str] = []
+    created_at: str
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
+class RunListResponse(BaseModel):
+    """Response containing list of runs."""
+
+    runs: list[RunResponse]
+
+
+class RunEvent(BaseModel):
+    """SSE event from run stream."""
+
+    type: str
+    data: dict
