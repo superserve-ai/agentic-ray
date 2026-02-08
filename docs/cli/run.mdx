@@ -1,0 +1,161 @@
+---
+title: superserve run
+description: Execute agents and view runs via CLI
+---
+
+# superserve run
+
+Execute a hosted agent with a prompt and stream the output.
+
+```bash
+superserve run <AGENT> "<PROMPT>" [OPTIONS]
+```
+
+## Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `AGENT` | Agent name or ID |
+| `PROMPT` | Text prompt for the agent |
+
+## Options
+
+| Option | Description |
+|--------|-------------|
+| `--session` | Session ID for multi-turn conversations |
+| `--json` | Output raw JSON events |
+
+## Examples
+
+### Basic Run
+
+```bash
+superserve run my-agent "What is the capital of France?"
+```
+
+Output:
+```
+The capital of France is Paris.
+
+Completed in 1.2s (150 input / 12 output tokens)
+```
+
+### With Tool Usage
+
+```bash
+superserve run code-helper "Read the README.md and summarize it"
+```
+
+Output:
+```
+[Read] README.md (52ms)
+Based on the README, this project is a Python web application...
+
+Completed in 3.5s (500 input / 150 output tokens)
+```
+
+### Multi-turn Session
+
+```bash
+# Start a session
+superserve run assistant "Hello, I need help with Python" --session my-session
+
+# Continue the conversation
+superserve run assistant "Show me an example of list comprehension" --session my-session
+```
+
+### JSON Output
+
+```bash
+superserve run my-agent "Hello" --json
+```
+
+Output:
+```json
+{"type": "run.started", "data": {"run_id": "run_abc123"}}
+{"type": "message.delta", "data": {"content": "Hello"}}
+{"type": "message.delta", "data": {"content": "!"}}
+{"type": "run.completed", "data": {"run_id": "run_abc123", "usage": {...}}}
+```
+
+### Cancel with Ctrl+C
+
+Press `Ctrl+C` to cancel a running execution:
+
+```bash
+superserve run my-agent "Very long task..."
+^C
+Cancelling run...
+Run cancelled.
+```
+
+---
+
+# superserve runs
+
+View and manage run history.
+
+## runs list
+
+List recent runs.
+
+```bash
+superserve runs list [OPTIONS]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--agent` | Filter by agent name or ID |
+| `--status` | Filter by status |
+| `--limit` | Max number of runs |
+| `--json` | Output as JSON |
+
+### Example
+
+```bash
+$ superserve runs list --agent researcher --limit 5
+
+ID                   AGENT                STATUS       DURATION   CREATED
+run_def456...        agt_abc123...        completed    2.5s       2026-02-07 10:05
+run_ghi789...        agt_abc123...        completed    1.8s       2026-02-07 09:30
+```
+
+---
+
+## runs get
+
+Get details of a specific run.
+
+```bash
+superserve runs get <RUN_ID> [OPTIONS]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--full` | Show full output without truncation |
+| `--json` | Output as JSON |
+
+### Example
+
+```bash
+$ superserve runs get run_def456
+
+ID:        run_def456
+Agent:     agt_abc123
+Status:    completed
+Created:   2026-02-07T10:05:00Z
+Completed: 2026-02-07T10:05:02Z
+Duration:  2.5s
+Tokens:    500 input / 150 output
+Tools:     Read, Grep
+
+Prompt:
+  Find all TODO comments in the codebase
+
+Output:
+  I found 5 TODO comments across 3 files...
+```

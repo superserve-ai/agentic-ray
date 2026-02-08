@@ -1,0 +1,132 @@
+---
+title: Agents
+description: Configure and manage hosted agent definitions
+---
+
+# Agents
+
+An Agent is a reusable configuration that defines how Claude should behave when executing tasks.
+
+## Agent Configuration
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `name` | string | Yes | - | Unique name (lowercase, alphanumeric, hyphens) |
+| `model` | string | No | `claude-sonnet-4-20250514` | Claude model to use |
+| `system_prompt` | string | No | `""` | Instructions for the agent |
+| `tools` | array | No | `["Bash","Read","Write","Glob","Grep"]` | Allowed tools |
+| `max_turns` | integer | No | `10` | Maximum conversation turns |
+| `timeout_seconds` | integer | No | `300` | Maximum execution time |
+
+## Available Models
+
+| Model | Description | Best For |
+|-------|-------------|----------|
+| `claude-sonnet-4-20250514` | Balanced performance and cost | Most use cases |
+| `claude-opus-4-20250514` | Highest capability | Complex reasoning |
+| `claude-haiku-3-5-20241022` | Fastest, lowest cost | Simple tasks |
+
+## Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `Bash` | Execute shell commands |
+| `Read` | Read file contents |
+| `Write` | Write to files |
+| `Glob` | Find files by pattern |
+| `Grep` | Search file contents |
+| `WebSearch` | Search the web |
+| `WebFetch` | Fetch web page content |
+
+## Creating an Agent
+
+### Via CLI
+
+```bash
+superserve agents create \
+  --name code-reviewer \
+  --model claude-sonnet-4-20250514 \
+  --system-prompt "You are an expert code reviewer. Focus on security, performance, and best practices." \
+  --tools Bash,Read,Grep \
+  --max-turns 20 \
+  --timeout 600
+```
+
+### Via API
+
+```bash
+curl -X POST https://api.superserve.ai/v1/agents \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "code-reviewer",
+    "model": "claude-sonnet-4-20250514",
+    "system_prompt": "You are an expert code reviewer...",
+    "tools": ["Bash", "Read", "Grep"],
+    "max_turns": 20,
+    "timeout_seconds": 600
+  }'
+```
+
+### Response
+
+```json
+{
+  "id": "agt_abc123def456",
+  "name": "code-reviewer",
+  "model": "claude-sonnet-4-20250514",
+  "system_prompt": "You are an expert code reviewer...",
+  "tools": ["Bash", "Read", "Grep"],
+  "max_turns": 20,
+  "timeout_seconds": 600,
+  "status": "active",
+  "created_at": "2026-02-07T10:00:00Z",
+  "updated_at": "2026-02-07T10:00:00Z"
+}
+```
+
+## Listing Agents
+
+### CLI
+
+```bash
+superserve agents list
+```
+
+### API
+
+```bash
+curl https://api.superserve.ai/v1/agents \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Updating an Agent
+
+You can update any field except `name`:
+
+```bash
+curl -X PATCH https://api.superserve.ai/v1/agents/agt_abc123 \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "system_prompt": "Updated instructions...",
+    "max_turns": 30
+  }'
+```
+
+## Deleting an Agent
+
+```bash
+superserve agents delete code-reviewer --yes
+```
+
+Or via API:
+
+```bash
+curl -X DELETE https://api.superserve.ai/v1/agents/agt_abc123 \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+<Note>
+Deleting an agent is a soft delete. Existing runs are preserved for history.
+</Note>
