@@ -282,14 +282,21 @@ class TestRunCommand:
 class TestClientSSEParsing:
     """Tests for PlatformClient.create_and_stream_run SSE parsing."""
 
-    def _make_sse_lines(self, events: list[tuple[str, dict]]) -> list[bytes]:
-        """Build raw SSE byte lines from (event_type, data) tuples."""
-        lines = []
+    @staticmethod
+    def _make_sse_chunks(events: list[tuple[str, dict]]) -> list[str]:
+        """Build raw SSE text chunks from (event_type, data) tuples."""
+        chunks = []
         for event_type, data in events:
-            lines.append(f"event: {event_type}".encode())
-            lines.append(f"data: {json.dumps(data)}".encode())
-            lines.append(b"")  # blank line = end of event
-        return lines
+            chunks.append(f"event: {event_type}\ndata: {json.dumps(data)}\n\n")
+        return chunks
+
+    @staticmethod
+    def _make_sse_response(chunks: list[str], headers: dict | None = None) -> MagicMock:
+        """Build a mock response with iter_content returning SSE chunks."""
+        mock_resp = MagicMock()
+        mock_resp.iter_content.return_value = iter(chunks)
+        mock_resp.headers = headers or {}
+        return mock_resp
 
     def test_parses_single_event(self):
         """Client parses a single SSE event."""
@@ -297,15 +304,8 @@ class TestClientSSEParsing:
 
         client = PlatformClient(base_url="https://test.api.com")
 
-        raw_lines = self._make_sse_lines(
-            [
-                ("run.started", {"run_id": "run_123"}),
-            ]
-        )
-
-        mock_resp = MagicMock()
-        mock_resp.iter_lines.return_value = iter(raw_lines)
-        mock_resp.headers = {"X-Run-ID": "run_123"}
+        chunks = self._make_sse_chunks([("run.started", {"run_id": "run_123"})])
+        mock_resp = self._make_sse_response(chunks, {"X-Run-ID": "run_123"})
 
         with patch.object(client, "_request", return_value=mock_resp):
             with patch.object(client, "_resolve_agent_id", return_value="agt_abc"):
@@ -321,7 +321,7 @@ class TestClientSSEParsing:
 
         client = PlatformClient(base_url="https://test.api.com")
 
-        raw_lines = self._make_sse_lines(
+        chunks = self._make_sse_chunks(
             [
                 ("run.started", {"run_id": "run_123"}),
                 ("message.delta", {"content": "Hello"}),
@@ -332,10 +332,7 @@ class TestClientSSEParsing:
                 ),
             ]
         )
-
-        mock_resp = MagicMock()
-        mock_resp.iter_lines.return_value = iter(raw_lines)
-        mock_resp.headers = {"X-Run-ID": "run_123"}
+        mock_resp = self._make_sse_response(chunks, {"X-Run-ID": "run_123"})
 
         with patch.object(client, "_request", return_value=mock_resp):
             with patch.object(client, "_resolve_agent_id", return_value="agt_abc"):
@@ -355,16 +352,8 @@ class TestClientSSEParsing:
         client = PlatformClient(base_url="https://test.api.com")
 
         # Multiline data: two data: lines before blank line
-        raw_lines = [
-            b"event: message.delta",
-            b'data: {"content":',
-            b'data: "hello"}',
-            b"",
-        ]
-
-        mock_resp = MagicMock()
-        mock_resp.iter_lines.return_value = iter(raw_lines)
-        mock_resp.headers = {"X-Run-ID": "run_123"}
+        chunks = ['event: message.delta\ndata: {"content":\ndata: "hello"}\n\n']
+        mock_resp = self._make_sse_response(chunks, {"X-Run-ID": "run_123"})
 
         with patch.object(client, "_request", return_value=mock_resp):
             with patch.object(client, "_resolve_agent_id", return_value="agt_abc"):
@@ -379,25 +368,19 @@ class TestClientSSEParsing:
 
         client = PlatformClient(base_url="https://test.api.com")
 
-        raw_lines = [
-            b"event: message.delta",
-            b"data: {invalid json}",
-            b"",
-            b"event: message.delta",
-            b'data: {"content": "valid"}',
-            b"",
+        chunks = [
+            "event: message.delta\ndata: {invalid json}\n\n",
+            'event: message.delta\ndata: {"content": "valid"}\n\n',
         ]
-
-        mock_resp = MagicMock()
-        mock_resp.iter_lines.return_value = iter(raw_lines)
-        mock_resp.headers = {"X-Run-ID": "run_123"}
+        mock_resp = self._make_sse_response(chunks, {"X-Run-ID": "run_123"})
 
         with patch.object(client, "_request", return_value=mock_resp):
             with patch.object(client, "_resolve_agent_id", return_value="agt_abc"):
                 events = list(client.create_and_stream_run("my-agent", "Hello"))
 
-        assert len(events) == 1
-        assert events[0].data["content"] == "valid"
+        # Malformed JSON now returns {"raw": ...} instead of being skipped
+        assert len(events) == 2
+        assert events[1].data["content"] == "valid"
 
     def test_passes_session_id(self):
         """Client includes session_id in the request."""
@@ -405,9 +388,7 @@ class TestClientSSEParsing:
 
         client = PlatformClient(base_url="https://test.api.com")
 
-        mock_resp = MagicMock()
-        mock_resp.iter_lines.return_value = iter([])
-        mock_resp.headers = {}
+        mock_resp = self._make_sse_response([])
 
         with patch.object(client, "_request", return_value=mock_resp) as mock_req:
             with patch.object(client, "_resolve_agent_id", return_value="agt_abc"):
@@ -430,9 +411,7 @@ class TestClientSSEParsing:
 
         client = PlatformClient(base_url="https://test.api.com")
 
-        mock_resp = MagicMock()
-        mock_resp.iter_lines.return_value = iter([])
-        mock_resp.headers = {"X-Run-ID": "run_my-run-id"}
+        mock_resp = self._make_sse_response([], {"X-Run-ID": "run_my-run-id"})
 
         with patch.object(client, "_request", return_value=mock_resp):
             with patch.object(client, "_resolve_agent_id", return_value="agt_abc"):
@@ -446,9 +425,7 @@ class TestClientSSEParsing:
 
         client = PlatformClient(base_url="https://test.api.com")
 
-        mock_resp = MagicMock()
-        mock_resp.iter_lines.return_value = iter([])
-        mock_resp.headers = {}
+        mock_resp = self._make_sse_response([])
 
         with patch.object(client, "_request", return_value=mock_resp) as mock_req:
             with patch.object(client, "_resolve_agent_id", return_value="agt_abc"):

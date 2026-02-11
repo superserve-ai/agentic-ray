@@ -525,6 +525,40 @@ class PlatformClient:
         resp = self._request("POST", f"/runs/{run_id}/cancel")
         return RunResponse.model_validate(resp.json())
 
+    def _parse_sse_stream(self, resp: requests.Response) -> Iterator[RunEvent]:
+        """Parse SSE events from a streaming response using chunk-based reading.
+
+        Uses iter_content(chunk_size=None) for real-time streaming instead of
+        iter_lines() which buffers in 512-byte chunks.
+        """
+        buffer = ""
+        current_event_type: str | None = None
+        data_lines: list[str] = []
+
+        for chunk in resp.iter_content(chunk_size=None, decode_unicode=True):
+            buffer += chunk
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                line = line.rstrip("\r")
+
+                if not line:
+                    # Empty line = end of SSE event
+                    if current_event_type and data_lines:
+                        full_data = "\n".join(data_lines)
+                        try:
+                            parsed = json.loads(full_data)
+                        except json.JSONDecodeError:
+                            parsed = {"raw": full_data}
+                        yield RunEvent(type=current_event_type, data=parsed)
+                    current_event_type = None
+                    data_lines = []
+                    continue
+
+                if line.startswith("event: "):
+                    current_event_type = line[7:]
+                elif line.startswith("data: "):
+                    data_lines.append(line[6:])
+
     def create_and_stream_run(
         self,
         agent_id: str,
@@ -555,34 +589,11 @@ class PlatformClient:
 
         resp = self._request("POST", "/runs/stream", json_data=data, stream=True)
 
-        # Extract run ID from response header for cancel support
+        # Extract run ID and session ID from response headers
         self._current_stream_run_id = resp.headers.get("X-Run-ID")
+        self._current_stream_session_id = resp.headers.get("X-Session-ID")
 
-        current_event_type: str | None = None
-        data_lines: list[str] = []
-
-        for line in resp.iter_lines():
-            line_str = line.decode("utf-8") if isinstance(line, bytes) else line
-
-            # Empty line signals the end of an event (per SSE spec)
-            if not line_str:
-                if current_event_type and data_lines:
-                    try:
-                        # Join multiple data lines with newlines per SSE spec
-                        full_data = "\n".join(data_lines)
-                        parsed = json.loads(full_data)
-                        yield RunEvent(type=current_event_type, data=parsed)
-                    except json.JSONDecodeError:
-                        pass
-                # Reset for next event
-                current_event_type = None
-                data_lines = []
-                continue
-
-            if line_str.startswith("event: "):
-                current_event_type = line_str[7:]
-            elif line_str.startswith("data: "):
-                data_lines.append(line_str[6:])
+        yield from self._parse_sse_stream(resp)
 
     # ==================== AGENT SECRETS ====================
 
@@ -730,24 +741,4 @@ class PlatformClient:
             json_data={"prompt": prompt},
             stream=True,
         )
-        # Reuse the same SSE parsing as stream_run
-        current_event_type: str | None = None
-        data_lines: list[str] = []
-        for line in resp.iter_lines():
-            if isinstance(line, bytes):
-                line = line.decode("utf-8")
-            if not line:
-                if current_event_type and data_lines:
-                    data_str = "\n".join(data_lines)
-                    try:
-                        data = json.loads(data_str)
-                    except json.JSONDecodeError:
-                        data = {"raw": data_str}
-                    yield RunEvent(type=current_event_type, data=data)
-                current_event_type = None
-                data_lines = []
-                continue
-            if line.startswith("event: "):
-                current_event_type = line[7:]
-            elif line.startswith("data: "):
-                data_lines.append(line[6:])
+        yield from self._parse_sse_stream(resp)

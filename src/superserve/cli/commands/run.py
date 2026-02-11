@@ -10,20 +10,82 @@ from ..platform.client import PlatformAPIError, PlatformClient
 from ..utils import echo_truncated, format_duration, sanitize_terminal_output
 
 
+def _stream_events(client, event_iter, as_json: bool) -> int:
+    """Stream SSE events to terminal. Returns 0 on success, non-zero exit code on failure."""
+    for event in event_iter:
+        if as_json:
+            click.echo(json.dumps({"type": event.type, "data": event.data}))
+            continue
+
+        if event.type == "run.started":
+            pass
+
+        elif event.type == "message.delta":
+            content = event.data.get("content", "")
+            click.echo(sanitize_terminal_output(content), nl=False)
+
+        elif event.type == "tool.start":
+            tool = event.data.get("tool", "unknown")
+            tool_input = event.data.get("input", {})
+            input_str = sanitize_terminal_output(str(tool_input))
+            input_preview = input_str[:50]
+            if len(input_str) > 50:
+                input_preview += "..."
+            click.echo(f"\n[{tool}] {input_preview}", nl=False, err=True)
+
+        elif event.type == "tool.end":
+            duration = event.data.get("duration_ms", 0)
+            click.echo(f" ({format_duration(duration)})", err=True)
+
+        elif event.type == "run.completed":
+            usage = event.data.get("usage", {})
+            duration = event.data.get("duration_ms", 0)
+            input_tokens = usage.get("input_tokens", 0)
+            output_tokens = usage.get("output_tokens", 0)
+            click.echo()  # Newline after content
+            click.echo(
+                f"\nCompleted in {format_duration(duration)} "
+                f"({input_tokens:,} input / {output_tokens:,} output tokens)",
+                err=True,
+            )
+            return 0
+
+        elif event.type == "run.failed":
+            error = event.data.get("error", {})
+            message = error.get("message", "Unknown error")
+            click.echo(f"\nError: {message}", err=True)
+            return 1
+
+        elif event.type == "run.cancelled":
+            click.echo("\nRun was cancelled.", err=True)
+            return 130
+
+    return 0
+
+
 @click.command("run")
 @click.argument("agent")
-@click.argument("prompt")
+@click.argument("prompt", required=False, default=None)
 @click.option("--session", help="Session ID for multi-turn conversations")
+@click.option(
+    "--single", is_flag=True, help="Exit after a single response (no interactive loop)"
+)
 @click.option("--json", "as_json", is_flag=True, help="Output raw JSON events")
-def run_agent(agent: str, prompt: str, session: str | None, as_json: bool):
-    """Run a hosted agent with a prompt.
+def run_agent(
+    agent: str, prompt: str | None, session: str | None, single: bool, as_json: bool
+):
+    """Run a hosted agent interactively.
 
     AGENT is the agent name or ID.
-    PROMPT is the text prompt to send to the agent.
+    PROMPT is an optional initial prompt. If omitted, starts interactive mode immediately.
+
+    The conversation continues until you press Ctrl+C or submit an empty line.
 
     Examples:
+        superserve run my-agent
         superserve run my-agent "What is 2+2?"
-        superserve run research-bot "Summarize the latest AI news" --session sess-123
+        superserve run my-agent "Hello" --single
+        superserve run my-agent "Continue our chat" --session ses_abc123
     """
     client = PlatformClient()
     cancelled = False
@@ -43,59 +105,59 @@ def run_agent(agent: str, prompt: str, session: str | None, as_json: bool):
 
     signal.signal(signal.SIGINT, handle_interrupt)
 
+    session_id = session
+
+    # If no prompt, ask for input immediately
+    if not prompt:
+        try:
+            prompt = click.prompt("You", prompt_suffix="> ")
+        except (EOFError, click.Abort):
+            return
+        if not prompt.strip():
+            return
+
     try:
-        # Create and stream run in a single request for real-time output
-        for event in client.create_and_stream_run(agent, prompt, session):
-            if as_json:
-                click.echo(json.dumps({"type": event.type, "data": event.data}))
-                continue
+        # First message: create run + stream
+        exit_code = _stream_events(
+            client,
+            client.create_and_stream_run(agent, prompt, session_id),
+            as_json,
+        )
+        if exit_code:
+            sys.exit(exit_code)
 
-            if event.type == "run.started":
-                # Silent start
-                pass
+        # Capture session ID from response for subsequent messages
+        if not session_id:
+            session_id = getattr(client, "_current_stream_session_id", None)
 
-            elif event.type == "message.delta":
-                content = event.data.get("content", "")
-                # Sanitize LLM output to prevent terminal injection via ANSI sequences
-                click.echo(sanitize_terminal_output(content), nl=False)
+        # Single-shot mode: exit after first response
+        if single or as_json or not sys.stdin.isatty():
+            return
 
-            elif event.type == "tool.start":
-                tool = event.data.get("tool", "unknown")
-                tool_input = event.data.get("input", {})
-                # Show tool usage in dim text
-                # Sanitize tool input as it may contain LLM-controlled content
-                input_str = sanitize_terminal_output(str(tool_input))
-                input_preview = input_str[:50]
-                if len(input_str) > 50:
-                    input_preview += "..."
-                click.echo(f"\n[{tool}] {input_preview}", nl=False, err=True)
+        # Interactive loop for multi-turn conversation
+        while True:
+            try:
+                next_prompt = click.prompt("\nYou", prompt_suffix="> ")
+            except (EOFError, click.Abort):
+                click.echo()
+                break
+            if not next_prompt.strip():
+                break
 
-            elif event.type == "tool.end":
-                tool = event.data.get("tool", "unknown")
-                duration = event.data.get("duration_ms", 0)
-                click.echo(f" ({format_duration(duration)})", err=True)
-
-            elif event.type == "run.completed":
-                usage = event.data.get("usage", {})
-                duration = event.data.get("duration_ms", 0)
-                input_tokens = usage.get("input_tokens", 0)
-                output_tokens = usage.get("output_tokens", 0)
-                click.echo()  # Newline after content
-                click.echo(
-                    f"\nCompleted in {format_duration(duration)} "
-                    f"({input_tokens:,} input / {output_tokens:,} output tokens)",
-                    err=True,
+            if session_id:
+                exit_code = _stream_events(
+                    client,
+                    client.stream_session_message(session_id, next_prompt),
+                    as_json,
                 )
-
-            elif event.type == "run.failed":
-                error = event.data.get("error", {})
-                message = error.get("message", "Unknown error")
-                click.echo(f"\nError: {message}", err=True)
-                sys.exit(1)
-
-            elif event.type == "run.cancelled":
-                click.echo("\nRun was cancelled.", err=True)
-                sys.exit(130)
+            else:
+                exit_code = _stream_events(
+                    client,
+                    client.create_and_stream_run(agent, next_prompt, None),
+                    as_json,
+                )
+            if exit_code:
+                sys.exit(exit_code)
 
     except PlatformAPIError as e:
         if e.status_code == 401:
