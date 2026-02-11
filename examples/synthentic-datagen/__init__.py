@@ -1,1 +1,0 @@
-"""Agent project template."""

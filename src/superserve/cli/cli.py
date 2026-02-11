@@ -16,7 +16,6 @@ import click
 
 from .commands import login, logout
 from .commands.agents import agents
-from .commands.mcp import mcp
 from .commands.run import run_agent, runs
 from .commands.secrets import secrets
 from .commands.session import sessions
@@ -39,9 +38,6 @@ cli.add_command(run_agent)
 cli.add_command(runs)
 cli.add_command(secrets)
 cli.add_command(sessions)
-
-# MCP commands
-cli.add_command(mcp)
 
 
 def main():

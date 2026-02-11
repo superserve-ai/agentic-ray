@@ -4,9 +4,9 @@
 
 /** Valid models that can be used with agents. */
 export type AgentModel =
-  | "claude-sonnet-4-20250514"
-  | "claude-opus-4-20250514"
-  | "claude-haiku-3-5-20241022";
+  | "claude-sonnet-4-5-20250929"
+  | "claude-opus-4-6"
+  | "claude-haiku-4-5-20251001";
 
 /** Valid tools that can be assigned to agents. */
 export type AgentTool =
@@ -17,9 +17,6 @@ export type AgentTool =
   | "Grep"
   | "WebSearch"
   | "WebFetch";
-
-/** Agent status. */
-export type AgentStatus = "active" | "deleted";
 
 /**
  * Configuration for creating a new agent.
@@ -73,8 +70,6 @@ export interface Agent {
   maxTurns: number;
   /** Timeout in seconds for each run. */
   timeoutSeconds: number;
-  /** Agent status. */
-  status: AgentStatus;
   /** ISO 8601 timestamp when the agent was created. */
   createdAt: string;
   /** ISO 8601 timestamp when the agent was last updated. */
@@ -107,7 +102,6 @@ export interface AgentAPIResponse {
   tools: string[];
   max_turns: number;
   timeout_seconds: number;
-  status: string;
   created_at: string;
   updated_at: string;
 }
@@ -122,7 +116,6 @@ export function agentFromAPI(response: AgentAPIResponse): Agent {
     tools: response.tools as AgentTool[],
     maxTurns: response.max_turns,
     timeoutSeconds: response.timeout_seconds,
-    status: response.status as AgentStatus,
     createdAt: response.created_at,
     updatedAt: response.updated_at,
   };

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 from .client import Superserve
+from .constants import DEFAULT_MODEL
 from .events import RunEvent
 from .metrics import MetricsCollector, RunMetrics
 from .models import Agent, Run
@@ -68,7 +69,7 @@ class SuperserveSync:
             # Create an agent
             agent = client.create_agent(
                 name="my-agent",
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-5-20250929",
             )
 
             # Run the agent
@@ -118,8 +119,8 @@ class SuperserveSync:
     def create_agent(
         self,
         name: str,
-        model: str = "claude-sonnet-4-20250514",
-        system_prompt: str = "",
+        model: str = DEFAULT_MODEL,
+        system_prompt: str = "You are a helpful assistant.",
         tools: list[str] | None = None,
         max_turns: int = 10,
         timeout_seconds: int = 300,
@@ -128,7 +129,7 @@ class SuperserveSync:
 
         Args:
             name: Agent name (lowercase, alphanumeric with hyphens).
-            model: Model to use (e.g., "claude-sonnet-4-20250514").
+            model: Model to use (e.g., "claude-sonnet-4-5-20250929").
             system_prompt: System prompt for the agent.
             tools: List of tools the agent can use.
             max_turns: Maximum conversation turns.

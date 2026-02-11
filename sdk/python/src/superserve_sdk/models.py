@@ -7,16 +7,20 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .constants import DEFAULT_MODEL
+
 
 class AgentConfig(BaseModel):
     """Configuration for creating or updating an agent."""
 
     name: str = Field(..., min_length=1, max_length=63, description="Agent name")
     model: str = Field(
-        default="claude-sonnet-4-20250514",
+        default=DEFAULT_MODEL,
         description="Model to use for the agent",
     )
-    system_prompt: str = Field(default="", description="System prompt for the agent")
+    system_prompt: str = Field(
+        default="You are a helpful assistant.", description="System prompt for the agent"
+    )
     tools: list[str] = Field(
         default_factory=lambda: ["Bash", "Read", "Write", "Glob", "Grep"],
         description="List of tools the agent can use",
@@ -45,7 +49,6 @@ class Agent(BaseModel):
     tools: list[str] = Field(default_factory=list, description="Available tools")
     max_turns: int = Field(..., description="Maximum conversation turns")
     timeout_seconds: int = Field(..., description="Timeout in seconds")
-    status: str = Field(..., description="Agent status (active, deleted)")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
@@ -63,6 +66,7 @@ class Run(BaseModel):
 
     id: str = Field(..., description="Run ID with run_ prefix")
     agent_id: str = Field(..., description="Agent ID")
+    agent_name: str | None = Field(None, description="Human-readable agent name")
     status: Literal["pending", "running", "completed", "failed", "cancelled"] = Field(
         ..., description="Run status"
     )

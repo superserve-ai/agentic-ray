@@ -53,7 +53,7 @@ export class AgentsAPI {
       headers: this.headers,
       body: JSON.stringify({
         name: config.name,
-        model: config.model ?? "claude-sonnet-4-20250514",
+        model: config.model ?? "claude-sonnet-4-5-20250929",
         system_prompt: config.systemPrompt ?? "",
         tools: config.tools ?? ["Bash", "Read", "Write", "Glob", "Grep"],
         max_turns: config.maxTurns ?? 10,
