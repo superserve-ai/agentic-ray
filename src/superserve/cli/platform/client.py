@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from typing import cast
+from typing import Any, cast
 
 import requests
 
@@ -636,3 +636,118 @@ class PlatformClient:
 
         resp = self._request("DELETE", f"/agents/{agent_id}/secrets/{key}")
         return cast(list[str], resp.json().get("keys", []))
+
+    # ==================== SESSIONS ====================
+
+    def create_session(
+        self,
+        agent_name_or_id: str,
+        title: str | None = None,
+        idle_timeout_seconds: int = 1800,
+    ) -> dict[str, Any]:
+        """Create a new session.
+
+        Args:
+            agent_name_or_id: Agent name or ID.
+            title: Optional session title.
+            idle_timeout_seconds: Idle timeout in seconds.
+
+        Returns:
+            Session data dictionary.
+        """
+        agent_id = self._resolve_agent_id(agent_name_or_id)
+        resp = self._request(
+            "POST",
+            "/sessions",
+            json_data={
+                "agent_id": agent_id,
+                "title": title,
+                "idle_timeout_seconds": idle_timeout_seconds,
+            },
+        )
+        return cast(dict[str, Any], resp.json())
+
+    def list_sessions(
+        self, agent_id: str | None = None, status: str | None = None, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        """List sessions.
+
+        Args:
+            agent_id: Filter by agent name or ID.
+            status: Filter by status.
+            limit: Maximum number of sessions to return.
+
+        Returns:
+            List of session dictionaries.
+        """
+        params: dict[str, str] = {"limit": str(limit)}
+        if agent_id:
+            params["agent_id"] = self._resolve_agent_id(agent_id)
+        if status:
+            params["status"] = status
+        resp = self._request("GET", "/sessions", params=params)
+        return cast(list[dict[str, Any]], resp.json().get("sessions", []))
+
+    def get_session(self, session_id: str) -> dict[str, Any]:
+        """Get session details.
+
+        Args:
+            session_id: Session ID.
+
+        Returns:
+            Session data dictionary.
+        """
+        resp = self._request("GET", f"/sessions/{session_id}")
+        return cast(dict[str, Any], resp.json())
+
+    def end_session(self, session_id: str) -> dict[str, Any]:
+        """End a session.
+
+        Args:
+            session_id: Session ID.
+
+        Returns:
+            Updated session data dictionary.
+        """
+        resp = self._request("POST", f"/sessions/{session_id}/end")
+        return cast(dict[str, Any], resp.json())
+
+    def stream_session_message(
+        self, session_id: str, prompt: str
+    ) -> Iterator[RunEvent]:
+        """Send a message to a session and stream the response.
+
+        Args:
+            session_id: Session ID.
+            prompt: User prompt.
+
+        Yields:
+            Run events as they arrive.
+        """
+        resp = self._request(
+            "POST",
+            f"/sessions/{session_id}/messages",
+            json_data={"prompt": prompt},
+            stream=True,
+        )
+        # Reuse the same SSE parsing as stream_run
+        current_event_type: str | None = None
+        data_lines: list[str] = []
+        for line in resp.iter_lines():
+            if isinstance(line, bytes):
+                line = line.decode("utf-8")
+            if not line:
+                if current_event_type and data_lines:
+                    data_str = "\n".join(data_lines)
+                    try:
+                        data = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        data = {"raw": data_str}
+                    yield RunEvent(type=current_event_type, data=data)
+                current_event_type = None
+                data_lines = []
+                continue
+            if line.startswith("event: "):
+                current_event_type = line[7:]
+            elif line.startswith("data: "):
+                data_lines.append(line[6:])

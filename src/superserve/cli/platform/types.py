@@ -177,3 +177,32 @@ class RunEvent(BaseModel):
 
     type: str
     data: dict
+
+
+# ==================== SESSIONS ====================
+
+
+class SessionResponse(BaseModel):
+    """Session details from the API."""
+
+    id: str
+    agent_id: str
+    title: str | None = None
+    ephemeral: bool = False
+    status: Literal["active", "idle", "completed", "failed"]
+    sandbox_name: str | None = None
+    message_count: int = 0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    idle_timeout_seconds: int = 1800
+    created_at: str
+    updated_at: str
+    last_activity_at: str
+    completed_at: str | None = None
+
+
+class SessionEvent(BaseModel):
+    """Session SSE event."""
+
+    type: str
+    data: dict
