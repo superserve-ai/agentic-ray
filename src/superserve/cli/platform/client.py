@@ -563,7 +563,6 @@ class PlatformClient:
         self,
         agent_id: str,
         prompt: str,
-        session_id: str | None = None,
     ) -> Iterator[RunEvent]:
         """Create a run and stream events in real-time via SSE.
 
@@ -573,7 +572,6 @@ class PlatformClient:
         Args:
             agent_id: Agent ID or name.
             prompt: User prompt.
-            session_id: Optional session ID for multi-turn.
 
         Yields:
             Run events as they arrive.
@@ -584,14 +582,10 @@ class PlatformClient:
             "agent_id": resolved_id,
             "prompt": prompt,
         }
-        if session_id:
-            data["session_id"] = session_id
 
         resp = self._request("POST", "/runs/stream", json_data=data, stream=True)
 
-        # Extract run ID and session ID from response headers
         self._current_stream_run_id = resp.headers.get("X-Run-ID")
-        self._current_stream_session_id = resp.headers.get("X-Session-ID")
 
         yield from self._parse_sse_stream(resp)
 

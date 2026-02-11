@@ -66,14 +66,11 @@ def _stream_events(client, event_iter, as_json: bool) -> int:
 @click.command("run")
 @click.argument("agent")
 @click.argument("prompt", required=False, default=None)
-@click.option("--session", help="Session ID for multi-turn conversations")
 @click.option(
     "--single", is_flag=True, help="Exit after a single response (no interactive loop)"
 )
 @click.option("--json", "as_json", is_flag=True, help="Output raw JSON events")
-def run_agent(
-    agent: str, prompt: str | None, session: str | None, single: bool, as_json: bool
-):
+def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
     """Run a hosted agent interactively.
 
     AGENT is the agent name or ID.
@@ -85,7 +82,6 @@ def run_agent(
         superserve run my-agent
         superserve run my-agent "What is 2+2?"
         superserve run my-agent "Hello" --single
-        superserve run my-agent "Continue our chat" --session ses_abc123
     """
     client = PlatformClient()
     cancelled = False
@@ -105,8 +101,6 @@ def run_agent(
 
     signal.signal(signal.SIGINT, handle_interrupt)
 
-    session_id = session
-
     # If no prompt, ask for input immediately
     if not prompt:
         try:
@@ -116,22 +110,33 @@ def run_agent(
         if not prompt.strip():
             return
 
+    # Interactive mode needs a persistent session so the sandbox stays alive
+    # across turns. Single-shot / JSON / piped input use one-shot runs.
+    interactive = not single and not as_json and sys.stdin.isatty()
+
     try:
-        # First message: create run + stream
-        exit_code = _stream_events(
-            client,
-            client.create_and_stream_run(agent, prompt, session_id),
-            as_json,
-        )
+        if interactive:
+            # Create a session with a persistent sandbox for multi-turn
+            click.echo("Creating session...", err=True)
+            session_data = client.create_session(agent)
+            session_id = session_data["id"]
+
+            exit_code = _stream_events(
+                client,
+                client.stream_session_message(session_id, prompt),
+                as_json,
+            )
+        else:
+            # One-shot run (sandbox destroyed after response)
+            exit_code = _stream_events(
+                client,
+                client.create_and_stream_run(agent, prompt),
+                as_json,
+            )
         if exit_code:
             sys.exit(exit_code)
 
-        # Capture session ID from response for subsequent messages
-        if not session_id:
-            session_id = getattr(client, "_current_stream_session_id", None)
-
-        # Single-shot mode: exit after first response
-        if single or as_json or not sys.stdin.isatty():
+        if not interactive:
             return
 
         # Interactive loop for multi-turn conversation
@@ -144,18 +149,11 @@ def run_agent(
             if not next_prompt.strip():
                 break
 
-            if session_id:
-                exit_code = _stream_events(
-                    client,
-                    client.stream_session_message(session_id, next_prompt),
-                    as_json,
-                )
-            else:
-                exit_code = _stream_events(
-                    client,
-                    client.create_and_stream_run(agent, next_prompt, None),
-                    as_json,
-                )
+            exit_code = _stream_events(
+                client,
+                client.stream_session_message(session_id, next_prompt),
+                as_json,
+            )
             if exit_code:
                 sys.exit(exit_code)
 

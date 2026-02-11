@@ -77,34 +77,7 @@ class TestRunCommand:
             assert result.exit_code == 0
             assert "Hello world!" in result.output
             mock_client.create_and_stream_run.assert_called_once_with(
-                "my-agent", "Hello", None
-            )
-
-    def test_run_with_session(self, runner):
-        """Run command passes session ID."""
-        events = [
-            RunEvent(
-                type="run.completed",
-                data={
-                    "run_id": "run_123",
-                    "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
-                    "duration_ms": 100,
-                },
-            ),
-        ]
-
-        with patch("superserve.cli.commands.run.PlatformClient") as mock_client_cls:
-            mock_client = MagicMock()
-            mock_client.create_and_stream_run.return_value = iter(events)
-            mock_client_cls.return_value = mock_client
-
-            result = runner.invoke(
-                cli, ["run", "my-agent", "Hello", "--session", "sess-abc"]
-            )
-
-            assert result.exit_code == 0
-            mock_client.create_and_stream_run.assert_called_once_with(
-                "my-agent", "Hello", "sess-abc"
+                "my-agent", "Hello"
             )
 
     def test_run_json_mode(self, runner):
@@ -381,29 +354,6 @@ class TestClientSSEParsing:
         # Malformed JSON now returns {"raw": ...} instead of being skipped
         assert len(events) == 2
         assert events[1].data["content"] == "valid"
-
-    def test_passes_session_id(self):
-        """Client includes session_id in the request."""
-        from superserve.cli.platform.client import PlatformClient
-
-        client = PlatformClient(base_url="https://test.api.com")
-
-        mock_resp = self._make_sse_response([])
-
-        with patch.object(client, "_request", return_value=mock_resp) as mock_req:
-            with patch.object(client, "_resolve_agent_id", return_value="agt_abc"):
-                list(client.create_and_stream_run("my-agent", "Hello", "sess-123"))
-
-        mock_req.assert_called_once_with(
-            "POST",
-            "/runs/stream",
-            json_data={
-                "agent_id": "agt_abc",
-                "prompt": "Hello",
-                "session_id": "sess-123",
-            },
-            stream=True,
-        )
 
     def test_extracts_run_id_from_header(self):
         """Client extracts run ID from X-Run-ID response header."""
