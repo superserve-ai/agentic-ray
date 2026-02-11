@@ -525,24 +525,38 @@ class PlatformClient:
         resp = self._request("POST", f"/runs/{run_id}/cancel")
         return RunResponse.model_validate(resp.json())
 
-    def stream_run(self, run_id: str) -> Iterator[RunEvent]:
-        """Stream run events via SSE.
+    def create_and_stream_run(
+        self,
+        agent_id: str,
+        prompt: str,
+        session_id: str | None = None,
+    ) -> Iterator[RunEvent]:
+        """Create a run and stream events in real-time via SSE.
+
+        Uses POST /runs/stream which proxies the SSE stream directly from
+        the sandbox, delivering tokens as they're generated.
 
         Args:
-            run_id: Run ID.
+            agent_id: Agent ID or name.
+            prompt: User prompt.
+            session_id: Optional session ID for multi-turn.
 
         Yields:
             Run events as they arrive.
-
-        Note:
-            This implementation follows the SSE specification which allows
-            event data to be split across multiple 'data:' lines. The full
-            data is the concatenation of all data lines, joined by newlines.
         """
-        if not run_id.startswith("run_"):
-            run_id = f"run_{run_id}"
+        resolved_id = self._resolve_agent_id(agent_id)
 
-        resp = self._request("GET", f"/runs/{run_id}/events", stream=True)
+        data: dict[str, str] = {
+            "agent_id": resolved_id,
+            "prompt": prompt,
+        }
+        if session_id:
+            data["session_id"] = session_id
+
+        resp = self._request("POST", "/runs/stream", json_data=data, stream=True)
+
+        # Extract run ID from response header for cancel support
+        self._current_stream_run_id = resp.headers.get("X-Run-ID")
 
         current_event_type: str | None = None
         data_lines: list[str] = []
@@ -556,8 +570,8 @@ class PlatformClient:
                     try:
                         # Join multiple data lines with newlines per SSE spec
                         full_data = "\n".join(data_lines)
-                        data = json.loads(full_data)
-                        yield RunEvent(type=current_event_type, data=data)
+                        parsed = json.loads(full_data)
+                        yield RunEvent(type=current_event_type, data=parsed)
                     except json.JSONDecodeError:
                         pass
                 # Reset for next event

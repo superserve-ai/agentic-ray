@@ -7,7 +7,6 @@ import sys
 import click
 
 from ..platform.client import PlatformAPIError, PlatformClient
-from ..platform.types import RunResponse
 from ..utils import echo_truncated, format_duration, sanitize_terminal_output
 
 
@@ -27,16 +26,16 @@ def run_agent(agent: str, prompt: str, session: str | None, as_json: bool):
         superserve run research-bot "Summarize the latest AI news" --session sess-123
     """
     client = PlatformClient()
-    run_response: RunResponse | None = None
     cancelled = False
 
     def handle_interrupt(signum, frame):
         nonlocal cancelled
-        if run_response is not None and not cancelled:
+        run_id = getattr(client, "_current_stream_run_id", None)
+        if run_id and not cancelled:
             cancelled = True
             click.echo("\nCancelling run...", err=True)
             try:
-                client.cancel_run(run_response.id)
+                client.cancel_run(run_id)
                 click.echo("Run cancelled.", err=True)
             except PlatformAPIError:
                 pass
@@ -45,16 +44,8 @@ def run_agent(agent: str, prompt: str, session: str | None, as_json: bool):
     signal.signal(signal.SIGINT, handle_interrupt)
 
     try:
-        # Create the run
-        run_response = client.create_run(agent, prompt, session)
-
-        if as_json:
-            click.echo(
-                json.dumps({"type": "run.created", "data": run_response.model_dump()})
-            )
-
-        # Stream events
-        for event in client.stream_run(run_response.id):
+        # Create and stream run in a single request for real-time output
+        for event in client.create_and_stream_run(agent, prompt, session):
             if as_json:
                 click.echo(json.dumps({"type": event.type, "data": event.data}))
                 continue
