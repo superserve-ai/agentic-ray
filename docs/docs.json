@@ -15,6 +15,23 @@
         "pages": ["index", "quickstart"]
       },
       {
+        "group": "Hosted Agents",
+        "pages": [
+          "hosted-agents/index",
+          "hosted-agents/quickstart",
+          "hosted-agents/agents",
+          "hosted-agents/runs",
+          "hosted-agents/api-reference"
+        ]
+      },
+      {
+        "group": "CLI",
+        "pages": [
+          "cli/agents",
+          "cli/run"
+        ]
+      },
+      {
         "group": "Core",
         "pages": [
           "runtime/tools",

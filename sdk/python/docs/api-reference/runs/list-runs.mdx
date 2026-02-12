@@ -1,0 +1,80 @@
+---
+title: 'list_runs'
+description: 'List runs with optional filters'
+icon: 'list'
+---
+
+Lists runs with optional filtering and pagination.
+
+## Signature
+
+```python
+async def list_runs(
+    agent_id: str | None = None,
+    status: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> list[Run]
+```
+
+## Parameters
+
+<ParamField path="agent_id" type="str | None" default="None">
+  Filter by agent ID or name.
+</ParamField>
+
+<ParamField path="status" type="str | None" default="None">
+  Filter by status: `pending`, `running`, `completed`, `failed`, `cancelled`.
+</ParamField>
+
+<ParamField path="limit" type="int" default="20">
+  Maximum runs to return.
+</ParamField>
+
+<ParamField path="offset" type="int" default="0">
+  Number of runs to skip.
+</ParamField>
+
+## Returns
+
+<ResponseField name="list[Run]" type="list[Run]">
+  List of runs.
+</ResponseField>
+
+## Errors
+
+| Error | Cause |
+|-------|-------|
+| `AuthenticationError` | Invalid API key |
+
+## Examples
+
+<CodeGroup>
+```python Async
+from superserve_sdk import Superserve
+
+async with Superserve() as client:
+    # All runs
+    runs = await client.list_runs()
+
+    # Filter by agent
+    runs = await client.list_runs(agent_id="my-agent")
+
+    # Filter by status
+    running = await client.list_runs(status="running")
+    failed = await client.list_runs(status="failed")
+
+    # Pagination
+    page_1 = await client.list_runs(limit=50, offset=0)
+    page_2 = await client.list_runs(limit=50, offset=50)
+```
+
+```python Sync
+from superserve_sdk import SuperserveSync
+
+with SuperserveSync() as client:
+    runs = client.list_runs(status="completed")
+    for run in runs:
+        print(f"{run.id}: {run.duration_ms}ms")
+```
+</CodeGroup>

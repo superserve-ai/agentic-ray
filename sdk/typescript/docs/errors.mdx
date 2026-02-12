@@ -1,0 +1,636 @@
+---
+title: "Error Handling"
+description: "Comprehensive error hierarchy and best practices for handling SDK errors"
+icon: "shield-check"
+---
+
+The Superserve SDK provides a comprehensive error hierarchy for handling different failure scenarios. This guide covers all error types and best practices for error handling.
+
+## Error Hierarchy
+
+```
+SuperserveError (base)
+├── SuperserveAPIError (HTTP errors)
+│   ├── AuthenticationError (401/403)
+│   ├── NotFoundError (404)
+│   ├── ConflictError (409)
+│   └── ValidationError (422)
+├── RunFailedError (execution failure)
+├── RunCancelledError (user cancellation)
+└── StreamAbortedError (stream interruption)
+```
+
+<CardGroup cols={2}>
+  <Card title="SuperserveError" icon="triangle-exclamation">
+    Base class for all SDK errors
+  </Card>
+  <Card title="SuperserveAPIError" icon="server">
+    HTTP API errors with status codes
+  </Card>
+  <Card title="AuthenticationError" icon="lock">
+    Authentication failures (401/403)
+  </Card>
+  <Card title="NotFoundError" icon="magnifying-glass">
+    Resource not found (404)
+  </Card>
+  <Card title="ConflictError" icon="code-branch">
+    Resource conflicts (409)
+  </Card>
+  <Card title="ValidationError" icon="circle-xmark">
+    Validation failures (422)
+  </Card>
+  <Card title="RunFailedError" icon="xmark">
+    Run execution failures
+  </Card>
+  <Card title="RunCancelledError" icon="ban">
+    User-cancelled runs
+  </Card>
+  <Card title="StreamAbortedError" icon="wifi">
+    Stream interruptions
+  </Card>
+</CardGroup>
+
+## SuperserveError
+
+Base class for all SDK errors.
+
+```typescript
+import { SuperserveError } from '@superserve/sdk';
+
+class SuperserveError extends Error {
+  name: string;      // "SuperserveError"
+  message: string;   // Error description
+  stack?: string;    // Stack trace
+}
+```
+
+Use this to catch any SDK error:
+
+```typescript
+try {
+  await client.runs.run({ agentId, prompt });
+} catch (error) {
+  if (error instanceof SuperserveError) {
+    console.error('SDK error:', error.message);
+  }
+}
+```
+
+## SuperserveAPIError
+
+Thrown for HTTP API errors with status codes.
+
+```typescript
+import { SuperserveAPIError } from '@superserve/sdk';
+
+class SuperserveAPIError extends SuperserveError {
+  status: number;                           // HTTP status code
+  code: string | undefined;                 // Error code from API
+  details: Record<string, unknown> | undefined; // Additional details
+}
+```
+
+```typescript Example
+try {
+  await client.agents.get('invalid');
+} catch (error) {
+  if (error instanceof SuperserveAPIError) {
+    console.error(`API error (${error.status}): ${error.message}`);
+    if (error.code) {
+      console.error('Code:', error.code);
+    }
+    if (error.details) {
+      console.error('Details:', error.details);
+    }
+  }
+}
+```
+
+## AuthenticationError
+
+Thrown when authentication fails (HTTP 401 or 403).
+
+```typescript
+import { AuthenticationError } from '@superserve/sdk';
+
+class AuthenticationError extends SuperserveAPIError {
+  status: 401;
+  code: 'authentication_error';
+}
+```
+
+<Warning>
+  Common causes:
+  - Invalid API key
+  - Expired API key
+  - Insufficient permissions
+</Warning>
+
+```typescript Example
+try {
+  await client.agents.list();
+} catch (error) {
+  if (error instanceof AuthenticationError) {
+    console.error('Authentication failed. Check your API key.');
+    // Prompt user to re-enter API key or refresh token
+  }
+}
+```
+
+## NotFoundError
+
+Thrown when a resource is not found (HTTP 404).
+
+```typescript
+import { NotFoundError } from '@superserve/sdk';
+
+class NotFoundError extends SuperserveAPIError {
+  status: 404;
+  code: 'not_found';
+}
+```
+
+<Note>
+  Common causes:
+  - Invalid agent ID
+  - Invalid run ID
+  - Deleted resource
+</Note>
+
+```typescript Example
+try {
+  await client.agents.get('agt_doesnotexist');
+} catch (error) {
+  if (error instanceof NotFoundError) {
+    console.error('Agent not found');
+    // Create the agent or show "not found" UI
+  }
+}
+```
+
+## ConflictError
+
+Thrown when there is a resource conflict (HTTP 409).
+
+```typescript
+import { ConflictError } from '@superserve/sdk';
+
+class ConflictError extends SuperserveAPIError {
+  status: 409;
+  code: 'conflict';
+}
+```
+
+<Note>
+  Common causes:
+  - Agent name already exists
+  - Trying to cancel a completed run
+  - Concurrent modification conflict
+</Note>
+
+```typescript Example
+try {
+  await client.agents.create({ name: 'my-agent' });
+} catch (error) {
+  if (error instanceof ConflictError) {
+    console.error('An agent with this name already exists');
+    // Suggest a different name or update existing agent
+  }
+}
+```
+
+## ValidationError
+
+Thrown when request validation fails (HTTP 422).
+
+```typescript
+import { ValidationError } from '@superserve/sdk';
+
+class ValidationError extends SuperserveAPIError {
+  status: 422;
+  code: 'validation_error';
+  details: Record<string, unknown> | undefined;
+}
+```
+
+<Note>
+  Common causes:
+  - Invalid agent name format
+  - Invalid model name
+  - Missing required fields
+  - Value out of range
+</Note>
+
+```typescript Example
+try {
+  await client.agents.create({
+    name: 'INVALID_NAME!',  // Invalid characters
+    maxTurns: -1            // Invalid value
+  });
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.error('Validation failed:', error.message);
+    if (error.details) {
+      // Details may contain field-specific errors
+      console.error('Details:', JSON.stringify(error.details, null, 2));
+    }
+  }
+}
+```
+
+## RunFailedError
+
+Thrown when an agent run fails during execution.
+
+```typescript
+import { RunFailedError } from '@superserve/sdk';
+
+class RunFailedError extends SuperserveError {
+  runId: string;            // The run that failed
+  code: string | undefined; // Error code
+}
+```
+
+### Error Codes
+
+| Code | Description |
+|------|-------------|
+| `timeout` | Run exceeded timeout limit |
+| `max_turns_exceeded` | Exceeded maximum turns |
+| `execution_error` | Tool execution failed |
+| `model_error` | AI model returned an error |
+
+```typescript Example
+try {
+  await client.runs.run({ agentId, prompt });
+} catch (error) {
+  if (error instanceof RunFailedError) {
+    console.error(`Run ${error.runId} failed: ${error.message}`);
+
+    switch (error.code) {
+      case 'timeout':
+        console.error('Consider increasing timeoutSeconds');
+        break;
+      case 'max_turns_exceeded':
+        console.error('Consider increasing maxTurns');
+        break;
+      case 'execution_error':
+        console.error('A tool failed to execute');
+        break;
+      default:
+        console.error('Unknown error');
+    }
+  }
+}
+```
+
+## RunCancelledError
+
+Thrown when a run is cancelled.
+
+```typescript
+import { RunCancelledError } from '@superserve/sdk';
+
+class RunCancelledError extends SuperserveError {
+  runId: string; // The run that was cancelled
+}
+```
+
+```typescript Example
+try {
+  for await (const event of stream) {
+    // Process events...
+  }
+} catch (error) {
+  if (error instanceof RunCancelledError) {
+    console.log(`Run ${error.runId} was cancelled`);
+    // Clean up partial results
+  }
+}
+```
+
+## StreamAbortedError
+
+Thrown when a stream is aborted.
+
+```typescript
+import { StreamAbortedError } from '@superserve/sdk';
+
+class StreamAbortedError extends SuperserveError {
+  // No additional properties
+}
+```
+
+<Note>
+  Common causes:
+  - `stream.abort()` was called
+  - Network connection lost
+  - Browser tab closed
+</Note>
+
+```typescript Example
+try {
+  await stream.finalMessage();
+} catch (error) {
+  if (error instanceof StreamAbortedError) {
+    console.error('Stream interrupted:', error.message);
+    // Attempt to resume with resumeStream()
+  }
+}
+```
+
+## Error Handling Patterns
+
+<Tabs>
+  <Tab title="Comprehensive Handler">
+    ```typescript
+    import {
+      SuperserveError,
+      SuperserveAPIError,
+      AuthenticationError,
+      NotFoundError,
+      ConflictError,
+      ValidationError,
+      RunFailedError,
+      RunCancelledError,
+      StreamAbortedError
+    } from '@superserve/sdk';
+
+    async function handleOperation<T>(
+      operation: () => Promise<T>
+    ): Promise<T | null> {
+      try {
+        return await operation();
+      } catch (error) {
+        if (error instanceof AuthenticationError) {
+          console.error('Auth failed - check API key');
+          return null;
+        }
+
+        if (error instanceof NotFoundError) {
+          console.error('Resource not found');
+          return null;
+        }
+
+        if (error instanceof ConflictError) {
+          console.error('Resource conflict');
+          return null;
+        }
+
+        if (error instanceof ValidationError) {
+          console.error('Invalid input:', error.details);
+          return null;
+        }
+
+        if (error instanceof RunFailedError) {
+          console.error(`Run failed (${error.code}): ${error.message}`);
+          return null;
+        }
+
+        if (error instanceof RunCancelledError) {
+          console.error('Run cancelled');
+          return null;
+        }
+
+        if (error instanceof StreamAbortedError) {
+          console.error('Stream interrupted');
+          return null;
+        }
+
+        if (error instanceof SuperserveAPIError) {
+          console.error(`API error ${error.status}: ${error.message}`);
+          return null;
+        }
+
+        if (error instanceof SuperserveError) {
+          console.error('SDK error:', error.message);
+          return null;
+        }
+
+        // Re-throw unexpected errors
+        throw error;
+      }
+    }
+
+    // Usage
+    const result = await handleOperation(() =>
+      client.runs.run({ agentId, prompt })
+    );
+    ```
+  </Tab>
+  <Tab title="Retry with Backoff">
+    ```typescript
+    async function withRetry<T>(
+      operation: () => Promise<T>,
+      maxRetries = 3,
+      baseDelay = 1000
+    ): Promise<T> {
+      let lastError: Error | undefined;
+
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          return await operation();
+        } catch (error) {
+          lastError = error as Error;
+
+          // Don't retry client errors
+          if (error instanceof ValidationError ||
+              error instanceof NotFoundError ||
+              error instanceof ConflictError) {
+            throw error;
+          }
+
+          // Retry on network/server errors
+          if (error instanceof SuperserveAPIError && error.status >= 500) {
+            const delay = baseDelay * Math.pow(2, attempt);
+            console.log(`Retrying in ${delay}ms...`);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+
+          throw error;
+        }
+      }
+
+      throw lastError;
+    }
+    ```
+  </Tab>
+  <Tab title="Error Boundary">
+    ```typescript
+    class AgentRunner {
+      private client: SuperserveClient;
+
+      async runSafely(options: CreateRunOptions): Promise<{
+        success: boolean;
+        output?: string;
+        error?: {
+          type: string;
+          message: string;
+          code?: string;
+        };
+      }> {
+        try {
+          const output = await this.client.runs.run(options);
+          return { success: true, output };
+        } catch (error) {
+          if (error instanceof RunFailedError) {
+            return {
+              success: false,
+              error: {
+                type: 'run_failed',
+                message: error.message,
+                code: error.code
+              }
+            };
+          }
+
+          if (error instanceof NotFoundError) {
+            return {
+              success: false,
+              error: {
+                type: 'not_found',
+                message: 'Agent not found'
+              }
+            };
+          }
+
+          if (error instanceof SuperserveError) {
+            return {
+              success: false,
+              error: {
+                type: 'sdk_error',
+                message: error.message
+              }
+            };
+          }
+
+          throw error;
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## TypeScript Imports
+
+```typescript
+import {
+  SuperserveError,
+  SuperserveAPIError,
+  AuthenticationError,
+  NotFoundError,
+  ConflictError,
+  ValidationError,
+  RunFailedError,
+  RunCancelledError,
+  StreamAbortedError
+} from '@superserve/sdk';
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Catch Specific Errors" icon="bullseye">
+    Handle each error type appropriately instead of catching all errors generically:
+
+    ```typescript
+    try {
+      await client.runs.run({ agentId, prompt });
+    } catch (error) {
+      if (error instanceof AuthenticationError) {
+        // Handle auth error
+      } else if (error instanceof RunFailedError) {
+        // Handle run failure
+      } else {
+        throw error; // Re-throw unknown errors
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Don't Swallow Errors" icon="eye">
+    Always log or report unexpected errors for debugging:
+
+    ```typescript
+    try {
+      await operation();
+    } catch (error) {
+      logger.error('Operation failed', { error });
+      throw error;
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Provide User Feedback" icon="comment">
+    Translate technical errors into user-friendly messages:
+
+    ```typescript
+    function getUserMessage(error: SuperserveError): string {
+      if (error instanceof AuthenticationError) {
+        return 'Please check your API key and try again.';
+      }
+      if (error instanceof RunFailedError && error.code === 'timeout') {
+        return 'The operation took too long. Please try a simpler request.';
+      }
+      return 'An unexpected error occurred. Please try again later.';
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Retry Transient Errors" icon="arrows-rotate">
+    Server errors (5xx) may be temporary and worth retrying:
+
+    ```typescript
+    if (error instanceof SuperserveAPIError && error.status >= 500) {
+      await delay(1000);
+      return retry(operation);
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Don't Retry Client Errors" icon="ban">
+    Validation and authentication errors won't succeed on retry:
+
+    ```typescript
+    if (error instanceof ValidationError ||
+        error instanceof AuthenticationError) {
+      throw error; // Don't retry
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Clean Up on Cancellation" icon="broom">
+    Handle partial results gracefully when runs are cancelled:
+
+    ```typescript
+    try {
+      for await (const event of stream) {
+        processEvent(event);
+      }
+    } catch (error) {
+      if (error instanceof RunCancelledError) {
+        await savePartialResults();
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use Error Codes" icon="code">
+    Check `error.code` for programmatic handling:
+
+    ```typescript
+    if (error instanceof RunFailedError) {
+      switch (error.code) {
+        case 'timeout':
+          increaseTimeout();
+          break;
+        case 'max_turns_exceeded':
+          simplifyPrompt();
+          break;
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>

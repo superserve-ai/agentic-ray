@@ -1,0 +1,486 @@
+---
+title: "Streaming API"
+description: "Real-time streaming of agent responses using Server-Sent Events and the RunStream API"
+icon: "bolt"
+---
+
+The Superserve SDK provides real-time streaming of agent responses using Server-Sent Events (SSE). This guide covers the `RunStream` API and various ways to consume streamed data.
+
+## Getting a Stream
+
+Create a streaming run with `client.runs.stream()`:
+
+```typescript
+const stream = await client.runs.stream({
+  agentId: 'agt_abc123',
+  prompt: 'Explain how async/await works in JavaScript'
+});
+```
+
+<Info>
+  This returns a `RunStream` instance that implements `AsyncIterable<RunEvent>`.
+</Info>
+
+## Consuming Events
+
+<Tabs>
+  <Tab title="Async Iteration">
+    Use `for await...of` to iterate over events (recommended):
+
+    ```typescript
+    for await (const event of stream) {
+      switch (event.type) {
+        case 'run.started':
+          console.log('Started:', event.runId);
+          break;
+        case 'message.delta':
+          process.stdout.write(event.content);
+          break;
+        case 'tool.start':
+          console.log(`\nUsing ${event.tool}...`);
+          break;
+        case 'tool.end':
+          console.log(`Done (${event.durationMs}ms)`);
+          break;
+        case 'run.completed':
+          console.log('\nCompleted!');
+          break;
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="finalMessage()">
+    Get the complete accumulated message:
+
+    ```typescript
+    const stream = await client.runs.stream({ agentId, prompt });
+    const message = await stream.finalMessage();
+
+    console.log('Full response:', message);
+    ```
+
+    This consumes all events and returns the concatenated `message.delta` content.
+  </Tab>
+  <Tab title="allEvents()">
+    Collect all events into an array:
+
+    ```typescript
+    const stream = await client.runs.stream({ agentId, prompt });
+    const events = await stream.allEvents();
+
+    console.log(`Received ${events.length} events`);
+
+    const toolCalls = events.filter(e => e.type === 'tool.start');
+    console.log(`Used ${toolCalls.length} tools`);
+    ```
+  </Tab>
+  <Tab title="pipeTo()">
+    Pipe text output to a writable stream:
+
+    ```typescript
+    const stream = await client.runs.stream({ agentId, prompt });
+
+    // Pipe to stdout
+    await stream.pipeTo(process.stdout);
+
+    // Or any object with write()
+    const chunks: string[] = [];
+    await stream.pipeTo({
+      write(chunk) {
+        chunks.push(chunk);
+      }
+    });
+    ```
+  </Tab>
+  <Tab title="onText()">
+    Call a callback for each text chunk:
+
+    ```typescript
+    const stream = await client.runs.stream({ agentId, prompt });
+
+    let charCount = 0;
+    await stream.onText((text) => {
+      charCount += text.length;
+      process.stdout.write(text);
+    });
+
+    console.log(`\nTotal characters: ${charCount}`);
+    ```
+  </Tab>
+</Tabs>
+
+## RunStream Properties
+
+<CardGroup cols={2}>
+  <Card title="run" icon="play">
+    Access the underlying `Run` object
+  </Card>
+  <Card title="metrics" icon="chart-line">
+    Completion metrics (after stream consumed)
+  </Card>
+  <Card title="failure" icon="xmark">
+    Failure details if run failed
+  </Card>
+  <Card title="signal" icon="flag">
+    AbortSignal for the stream
+  </Card>
+</CardGroup>
+
+### run
+
+Access the underlying `Run` object:
+
+```typescript
+const stream = await client.runs.stream({ agentId, prompt });
+
+console.log('Run ID:', stream.run.id);
+console.log('Agent:', stream.run.agentId);
+console.log('Status:', stream.run.status);
+```
+
+### metrics
+
+Get completion metrics (available after stream is consumed):
+
+```typescript
+const stream = await client.runs.stream({ agentId, prompt });
+await stream.finalMessage();
+
+if (stream.metrics) {
+  console.log('Duration:', stream.metrics.durationMs, 'ms');
+  console.log('Input tokens:', stream.metrics.usage.inputTokens);
+  console.log('Output tokens:', stream.metrics.usage.outputTokens);
+}
+```
+
+### failure
+
+Get failure details if the run failed:
+
+```typescript
+try {
+  await stream.finalMessage();
+} catch (error) {
+  if (stream.failure) {
+    console.error('Error code:', stream.failure.error.code);
+    console.error('Message:', stream.failure.error.message);
+  }
+}
+```
+
+### signal
+
+Get the `AbortSignal` for the stream:
+
+```typescript
+const stream = await client.runs.stream({ agentId, prompt });
+
+// Use with other abort-aware APIs
+await someAsyncOperation({ signal: stream.signal });
+
+// Check if aborted
+if (stream.signal.aborted) {
+  console.log('Stream was aborted');
+}
+```
+
+## Aborting Streams
+
+### Manual Abort
+
+Call `abort()` to cancel the stream:
+
+```typescript
+const stream = await client.runs.stream({ agentId, prompt });
+
+// Start consuming
+const promise = (async () => {
+  for await (const event of stream) {
+    if (shouldStop(event)) {
+      stream.abort();
+      break;
+    }
+  }
+})();
+
+// Or abort from elsewhere
+setTimeout(() => stream.abort(), 5000);
+```
+
+### Abort with Timeout
+
+```typescript
+const stream = await client.runs.stream({ agentId, prompt });
+
+const timeout = setTimeout(() => {
+  stream.abort();
+}, 30000);
+
+try {
+  await stream.finalMessage();
+} finally {
+  clearTimeout(timeout);
+}
+```
+
+### Abort on Error
+
+```typescript
+import { StreamAbortedError } from '@superserve/sdk';
+
+const stream = await client.runs.stream({ agentId, prompt });
+
+try {
+  for await (const event of stream) {
+    // Process event
+  }
+} catch (error) {
+  if (error instanceof StreamAbortedError) {
+    console.log('Stream was aborted');
+  } else {
+    throw error;
+  }
+}
+```
+
+## Error Handling
+
+<Tabs>
+  <Tab title="Run Failed">
+    ```typescript
+    import { RunFailedError } from '@superserve/sdk';
+
+    try {
+      await stream.finalMessage();
+    } catch (error) {
+      if (error instanceof RunFailedError) {
+        console.error(`Run ${error.runId} failed: ${error.message}`);
+        console.error('Error code:', error.code);
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Run Cancelled">
+    ```typescript
+    import { RunCancelledError } from '@superserve/sdk';
+
+    try {
+      for await (const event of stream) {
+        // Process events
+      }
+    } catch (error) {
+      if (error instanceof RunCancelledError) {
+        console.log(`Run ${error.runId} was cancelled`);
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Stream Aborted">
+    ```typescript
+    import { StreamAbortedError } from '@superserve/sdk';
+
+    try {
+      await stream.finalMessage();
+    } catch (error) {
+      if (error instanceof StreamAbortedError) {
+        console.log('Connection lost or stream aborted');
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Single Consumption
+
+<Warning>
+  Streams can only be consumed once. Attempting to iterate a second time will throw an error.
+</Warning>
+
+```typescript
+const stream = await client.runs.stream({ agentId, prompt });
+
+// First consumption works
+const message = await stream.finalMessage();
+
+// Second consumption throws
+try {
+  for await (const event of stream) {
+    // ...
+  }
+} catch (error) {
+  // "Stream has already been consumed"
+}
+```
+
+If you need multiple passes, use `allEvents()` first:
+
+```typescript
+const events = await stream.allEvents();
+
+// Now you can iterate multiple times
+const deltas = events.filter(e => e.type === 'message.delta');
+const tools = events.filter(e => e.type === 'tool.start');
+```
+
+## Resuming Streams
+
+If connection is lost, resume with `resumeStream()`:
+
+```typescript
+// Store the run ID
+let runId: string;
+
+const stream = await client.runs.stream({ agentId, prompt });
+runId = stream.run.id;
+
+try {
+  for await (const event of stream) {
+    // Process...
+  }
+} catch (error) {
+  if (error instanceof StreamAbortedError) {
+    // Resume from where we left off
+    const resumed = await client.runs.resumeStream(runId);
+    for await (const event of resumed) {
+      // Continue processing...
+    }
+  }
+}
+```
+
+## SSE Utilities
+
+The SDK exports low-level SSE parsing utilities:
+
+<Accordion title="parseSSEStream">
+  Parse a raw SSE stream:
+
+  ```typescript
+  import { parseSSEStream } from '@superserve/sdk';
+
+  const response = await fetch(url, {
+    headers: { Accept: 'text/event-stream' }
+  });
+
+  for await (const event of parseSSEStream(response.body!)) {
+    console.log('Event:', event.event);
+    console.log('Data:', event.data);
+  }
+  ```
+</Accordion>
+
+<Accordion title="parseSSEEventData">
+  Parse JSON data from an SSE event:
+
+  ```typescript
+  import { parseSSEEventData, type SSEEvent } from '@superserve/sdk';
+
+  const event: SSEEvent = {
+    event: 'message.delta',
+    data: '{"content": "Hello"}'
+  };
+
+  const parsed = parseSSEEventData<{ content: string }>(event);
+  // { content: 'Hello' }
+  ```
+</Accordion>
+
+<Accordion title="SSEEvent Type">
+  ```typescript
+  interface SSEEvent {
+    event: string;      // Event type
+    data: string;       // Event data (JSON string)
+    id?: string;        // Event ID
+    retry?: number;     // Retry interval
+  }
+  ```
+</Accordion>
+
+## TypeScript Types
+
+```typescript
+import type {
+  RunStream,
+  RunStreamOptions,
+  RunEvent,
+  SSEEvent,
+  SSEParserOptions
+} from '@superserve/sdk';
+
+import {
+  parseSSEStream,
+  parseSSEEventData,
+  RunFailedError,
+  RunCancelledError,
+  StreamAbortedError
+} from '@superserve/sdk';
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Handle Errors" icon="shield">
+    ```typescript
+    const stream = await client.runs.stream({ agentId, prompt });
+
+    try {
+      for await (const event of stream) {
+        handleEvent(event);
+      }
+    } catch (error) {
+      if (error instanceof RunFailedError) {
+        handleFailure(error);
+      } else if (error instanceof RunCancelledError) {
+        handleCancellation();
+      } else {
+        throw error;
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use Timeouts" icon="clock">
+    ```typescript
+    const stream = await client.runs.stream({ agentId, prompt });
+
+    const timeoutId = setTimeout(() => {
+      stream.abort();
+    }, 60000);
+
+    try {
+      await stream.finalMessage();
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Log Tool Usage" icon="wrench">
+    ```typescript
+    for await (const event of stream) {
+      if (event.type === 'tool.start') {
+        console.log(`[${event.tool}] Starting with:`, event.input);
+      } else if (event.type === 'tool.end') {
+        console.log(`[${event.tool}] Completed in ${event.durationMs}ms`);
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Track Progress" icon="chart-line">
+    ```typescript
+    let messageLength = 0;
+    let toolCount = 0;
+
+    for await (const event of stream) {
+      if (event.type === 'message.delta') {
+        messageLength += event.content.length;
+      } else if (event.type === 'tool.start') {
+        toolCount++;
+      }
+    }
+
+    console.log(`Response: ${messageLength} chars, ${toolCount} tool calls`);
+    ```
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,348 @@
+---
+title: "Streaming API"
+description: "API reference for RunStream class and SSE utilities"
+icon: "bolt"
+---
+
+The Streaming API provides the `RunStream` class for consuming real-time events from agent runs, along with low-level SSE parsing utilities.
+
+## RunStream Class
+
+`RunStream` is an async iterable that yields events from a streaming run.
+
+### Constructor
+
+```typescript
+// RunStream is created by client.runs.stream(), not directly
+const stream = await client.runs.stream({ agentId, prompt });
+```
+
+### Properties
+
+<ParamField path="run" type="Run">
+  The underlying Run object with current status and metadata.
+</ParamField>
+
+```typescript
+console.log(stream.run.id);      // 'run_xyz789'
+console.log(stream.run.agentId); // 'agt_abc123'
+console.log(stream.run.status);  // 'running'
+```
+
+<ParamField path="metrics" type="CompletionMetrics | null">
+  Completion metrics (available after stream is consumed).
+</ParamField>
+
+```typescript
+await stream.finalMessage();
+
+if (stream.metrics) {
+  console.log(stream.metrics.durationMs);
+  console.log(stream.metrics.usage.totalTokens);
+}
+```
+
+<ParamField path="failure" type="FailureInfo | null">
+  Failure details if the run failed.
+</ParamField>
+
+```typescript
+try {
+  await stream.finalMessage();
+} catch (error) {
+  if (stream.failure) {
+    console.error(stream.failure.error.code);
+    console.error(stream.failure.error.message);
+  }
+}
+```
+
+<ParamField path="signal" type="AbortSignal">
+  AbortSignal for the stream.
+</ParamField>
+
+```typescript
+if (stream.signal.aborted) {
+  console.log('Stream was aborted');
+}
+```
+
+### Methods
+
+#### [Symbol.asyncIterator]
+
+Iterate over events using `for await...of`:
+
+```typescript
+for await (const event of stream) {
+  switch (event.type) {
+    case 'message.delta':
+      process.stdout.write(event.content);
+      break;
+    case 'run.completed':
+      console.log('Done!');
+      break;
+  }
+}
+```
+
+---
+
+#### finalMessage
+
+Consumes all events and returns the accumulated text output.
+
+```typescript
+finalMessage(): Promise<string>
+```
+
+```typescript
+const message = await stream.finalMessage();
+console.log('Full response:', message);
+```
+
+**Returns:** `Promise<string>`
+
+**Throws:**
+- `RunFailedError` - If the run fails
+- `RunCancelledError` - If the run is cancelled
+- `StreamAbortedError` - If the stream is aborted
+
+---
+
+#### allEvents
+
+Collects all events into an array.
+
+```typescript
+allEvents(): Promise<RunEvent[]>
+```
+
+```typescript
+const events = await stream.allEvents();
+
+const toolCalls = events.filter(e => e.type === 'tool.start');
+console.log(`Used ${toolCalls.length} tools`);
+```
+
+**Returns:** `Promise<RunEvent[]>`
+
+---
+
+#### pipeTo
+
+Pipes text output to a writable stream or object with `write()` method.
+
+```typescript
+pipeTo(writable: { write(chunk: string): void }): Promise<void>
+```
+
+```typescript
+// Pipe to stdout
+await stream.pipeTo(process.stdout);
+
+// Pipe to custom handler
+const chunks: string[] = [];
+await stream.pipeTo({
+  write(chunk) {
+    chunks.push(chunk);
+  }
+});
+```
+
+**Returns:** `Promise<void>`
+
+---
+
+#### onText
+
+Calls a callback for each text chunk.
+
+```typescript
+onText(callback: (text: string) => void): Promise<void>
+```
+
+```typescript
+let charCount = 0;
+await stream.onText((text) => {
+  charCount += text.length;
+  process.stdout.write(text);
+});
+```
+
+**Returns:** `Promise<void>`
+
+---
+
+#### abort
+
+Aborts the stream.
+
+```typescript
+abort(): void
+```
+
+```typescript
+// Abort after timeout
+setTimeout(() => stream.abort(), 30000);
+
+// Abort on condition
+for await (const event of stream) {
+  if (shouldStop(event)) {
+    stream.abort();
+    break;
+  }
+}
+```
+
+---
+
+### Type Definitions
+
+```typescript
+class RunStream implements AsyncIterable<RunEvent> {
+  /** The underlying Run object */
+  readonly run: Run;
+
+  /** Completion metrics (after consumption) */
+  readonly metrics: CompletionMetrics | null;
+
+  /** Failure info if failed */
+  readonly failure: FailureInfo | null;
+
+  /** AbortSignal for the stream */
+  readonly signal: AbortSignal;
+
+  /** Iterate over events */
+  [Symbol.asyncIterator](): AsyncIterator<RunEvent>;
+
+  /** Get final accumulated message */
+  finalMessage(): Promise<string>;
+
+  /** Get all events as array */
+  allEvents(): Promise<RunEvent[]>;
+
+  /** Pipe text to writable */
+  pipeTo(writable: { write(chunk: string): void }): Promise<void>;
+
+  /** Call callback for each text chunk */
+  onText(callback: (text: string) => void): Promise<void>;
+
+  /** Abort the stream */
+  abort(): void;
+}
+
+interface CompletionMetrics {
+  usage: UsageMetrics;
+  durationMs: number;
+}
+
+interface FailureInfo {
+  error: RunError;
+}
+```
+
+---
+
+## SSE Utilities
+
+Low-level utilities for parsing Server-Sent Events.
+
+### parseSSEStream
+
+Parses a raw SSE stream into events.
+
+```typescript
+function parseSSEStream(
+  stream: ReadableStream<Uint8Array>,
+  options?: SSEParserOptions
+): AsyncIterable<SSEEvent>
+```
+
+```typescript
+import { parseSSEStream } from '@superserve/sdk';
+
+const response = await fetch(url, {
+  headers: { Accept: 'text/event-stream' }
+});
+
+for await (const event of parseSSEStream(response.body!)) {
+  console.log('Event:', event.event);
+  console.log('Data:', event.data);
+}
+```
+
+---
+
+### parseSSEEventData
+
+Parses JSON data from an SSE event.
+
+```typescript
+function parseSSEEventData<T>(event: SSEEvent): T
+```
+
+```typescript
+import { parseSSEEventData, type SSEEvent } from '@superserve/sdk';
+
+const event: SSEEvent = {
+  event: 'message.delta',
+  data: '{"content": "Hello"}'
+};
+
+const parsed = parseSSEEventData<{ content: string }>(event);
+console.log(parsed.content); // 'Hello'
+```
+
+---
+
+### Types
+
+```typescript
+interface SSEEvent {
+  /** Event type */
+  event: string;
+
+  /** Event data (JSON string) */
+  data: string;
+
+  /** Event ID (optional) */
+  id?: string;
+
+  /** Retry interval (optional) */
+  retry?: number;
+}
+
+interface SSEParserOptions {
+  /** Signal to abort parsing */
+  signal?: AbortSignal;
+}
+```
+
+---
+
+## Single Consumption Warning
+
+<Warning>
+  Streams can only be consumed once. Attempting to iterate a second time will throw an error.
+</Warning>
+
+```typescript
+// First consumption works
+const message = await stream.finalMessage();
+
+// Second consumption throws
+for await (const event of stream) {
+  // Error: "Stream has already been consumed"
+}
+```
+
+If you need multiple passes over events, use `allEvents()`:
+
+```typescript
+const events = await stream.allEvents();
+
+// Now you can iterate multiple times
+const deltas = events.filter(e => e.type === 'message.delta');
+const tools = events.filter(e => e.type === 'tool.start');
+```

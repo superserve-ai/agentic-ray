@@ -1,0 +1,359 @@
+---
+title: 'Metrics Collection'
+description: 'Track agent performance, token usage, and tool execution'
+icon: 'chart-line'
+---
+
+The SDK provides built-in metrics collection for tracking agent performance, token usage, and tool execution.
+
+## Overview
+
+Metrics can be collected in two ways:
+
+<CardGroup cols={2}>
+  <Card title="Automatic" icon="wand-magic-sparkles">
+    Using `stream_with_metrics()` for streaming runs
+  </Card>
+  <Card title="Manual" icon="hand">
+    Using `MetricsCollector` directly
+  </Card>
+</CardGroup>
+
+## RunMetrics
+
+The `RunMetrics` dataclass contains aggregated metrics for a run:
+
+```python
+from superserve_sdk import RunMetrics
+
+metrics: RunMetrics
+
+# Token usage
+print(f"Input tokens: {metrics.input_tokens}")
+print(f"Output tokens: {metrics.output_tokens}")
+print(f"Total tokens: {metrics.total_tokens}")
+
+# Timing
+print(f"Duration: {metrics.duration_ms}ms")
+print(f"Turns: {metrics.turns}")
+
+# Tools
+print(f"Tools used: {metrics.tools_used}")
+print(f"Tool calls: {metrics.tool_call_count}")
+
+# Content
+print(f"Content chunks: {metrics.content_chunks}")
+print(f"Content length: {metrics.total_content_length}")
+
+# Status
+print(f"Success: {metrics.success}")
+if not metrics.success:
+    print(f"Error: {metrics.error_message}")
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `run_id` | `str` | Run identifier |
+| `input_tokens` | `int` | Input tokens used |
+| `output_tokens` | `int` | Output tokens generated |
+| `total_tokens` | `int` | Total tokens |
+| `turns` | `int` | Number of conversation turns |
+| `duration_ms` | `int` | API-reported duration |
+| `tools_used` | `list[str]` | Unique tools used |
+| `tool_calls` | `list[ToolMetrics]` | Detailed tool call metrics |
+| `content_chunks` | `int` | Number of message delta events |
+| `total_content_length` | `int` | Total characters received |
+| `started_at` | `float` | Unix timestamp when started |
+| `ended_at` | `float` | Unix timestamp when ended |
+| `success` | `bool` | Whether run completed successfully |
+| `error_message` | `str \| None` | Error message if failed |
+
+### Computed Properties
+
+```python
+# Wall clock duration (client-side timing)
+wall_time = metrics.wall_clock_duration_ms
+
+# Tool call count
+count = metrics.tool_call_count
+
+# Average tool duration
+avg_duration = metrics.average_tool_duration_ms
+
+# Get calls for a specific tool
+bash_calls = metrics.get_tool_calls_by_name("Bash")
+```
+
+## ToolMetrics
+
+Each tool call is tracked with `ToolMetrics`:
+
+```python
+from superserve_sdk import ToolMetrics
+
+for tool_call in metrics.tool_calls:
+    print(f"Tool: {tool_call.name}")
+    print(f"Call ID: {tool_call.tool_call_id}")
+    print(f"Input: {tool_call.input}")
+    print(f"Output: {tool_call.output}")
+    print(f"Duration: {tool_call.duration_ms}ms")
+    print(f"Success: {tool_call.success}")
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `str` | Tool name |
+| `tool_call_id` | `str` | Unique call identifier |
+| `input` | `dict[str, Any]` | Input parameters |
+| `output` | `str` | Tool output |
+| `duration_ms` | `int` | Execution time |
+| `success` | `bool` | Whether tool succeeded |
+| `started_at` | `float` | Unix timestamp |
+| `ended_at` | `float` | Unix timestamp |
+
+## Streaming with Metrics
+
+The easiest way to collect metrics is with `stream_with_metrics()`:
+
+<CodeGroup>
+```python Async
+from superserve_sdk import Superserve, MessageDeltaEvent
+
+async with Superserve() as client:
+    events, metrics_handle = await client.stream_with_metrics(
+        "my-agent",
+        "Analyze this code",
+    )
+
+    # Process events
+    async for event in events:
+        if isinstance(event, MessageDeltaEvent):
+            print(event.content, end="", flush=True)
+
+    # Get metrics after streaming
+    metrics = metrics_handle.metrics
+    print(f"\nTotal tokens: {metrics.total_tokens}")
+```
+
+```python Sync
+from superserve_sdk import SuperserveSync, MessageDeltaEvent
+
+with SuperserveSync() as client:
+    events, metrics_handle = client.stream_with_metrics(
+        "my-agent",
+        "Hello",
+    )
+
+    for event in events:
+        if isinstance(event, MessageDeltaEvent):
+            print(event.content, end="")
+
+    metrics = metrics_handle.metrics
+    print(f"\nTokens: {metrics.total_tokens}")
+```
+</CodeGroup>
+
+<Note>
+  The metrics are populated as events are processed, so you can access partial metrics during streaming if needed.
+</Note>
+
+## MetricsCollector
+
+For more control, use `MetricsCollector` directly:
+
+```python
+from superserve_sdk import MetricsCollector, Superserve
+
+async with Superserve() as client:
+    collector = MetricsCollector(run_id="run_123")
+
+    async for event in client.stream("my-agent", "Hello"):
+        # Process event for metrics
+        collector.process_event(event)
+
+        # Handle event normally
+        if isinstance(event, MessageDeltaEvent):
+            print(event.content, end="", flush=True)
+
+    # Access collected metrics
+    metrics = collector.metrics
+    print(f"Total tokens: {metrics.total_tokens}")
+```
+
+### Methods
+
+```python
+# Create collector
+collector = MetricsCollector(run_id="run_123")
+
+# Process an event
+collector.process_event(event)
+
+# Access current metrics
+metrics = collector.metrics
+
+# Reset to initial state
+collector.reset()
+```
+
+## Analysis Examples
+
+<Tabs>
+  <Tab title="Token Cost Estimation">
+    ```python
+    # Assuming $3/1M input tokens, $15/1M output tokens (Claude Sonnet)
+    def estimate_cost(metrics: RunMetrics) -> float:
+        input_cost = (metrics.input_tokens / 1_000_000) * 3.0
+        output_cost = (metrics.output_tokens / 1_000_000) * 15.0
+        return input_cost + output_cost
+
+    metrics = metrics_handle.metrics
+    cost = estimate_cost(metrics)
+    print(f"Estimated cost: ${cost:.4f}")
+    ```
+  </Tab>
+
+  <Tab title="Tool Performance">
+    ```python
+    def analyze_tools(metrics: RunMetrics):
+        print(f"Total tool calls: {metrics.tool_call_count}")
+        print(f"Average duration: {metrics.average_tool_duration_ms:.1f}ms")
+
+        # By tool type
+        for tool in set(metrics.tools_used):
+            calls = metrics.get_tool_calls_by_name(tool)
+            total_time = sum(c.duration_ms for c in calls)
+            success_rate = sum(1 for c in calls if c.success) / len(calls)
+            print(f"  {tool}: {len(calls)} calls, {total_time}ms total, {success_rate:.0%} success")
+
+    analyze_tools(metrics)
+    ```
+  </Tab>
+
+  <Tab title="Performance Monitoring">
+    ```python
+    import time
+
+    async def monitored_run(client, agent, prompt):
+        start = time.time()
+
+        events, metrics_handle = await client.stream_with_metrics(agent, prompt)
+
+        first_token_time = None
+        async for event in events:
+            if isinstance(event, MessageDeltaEvent) and first_token_time is None:
+                first_token_time = time.time() - start
+
+        metrics = metrics_handle.metrics
+        total_time = time.time() - start
+
+        return {
+            "ttft": first_token_time,  # Time to first token
+            "total_time": total_time,
+            "tokens": metrics.total_tokens,
+            "tokens_per_second": metrics.total_tokens / total_time if total_time > 0 else 0,
+            "tool_calls": metrics.tool_call_count,
+        }
+    ```
+  </Tab>
+</Tabs>
+
+## Aggregating Across Runs
+
+```python
+from dataclasses import dataclass, field
+
+@dataclass
+class AggregateMetrics:
+    total_runs: int = 0
+    total_tokens: int = 0
+    total_duration_ms: int = 0
+    successful_runs: int = 0
+    failed_runs: int = 0
+    tool_call_counts: dict[str, int] = field(default_factory=dict)
+
+    def add(self, metrics: RunMetrics):
+        self.total_runs += 1
+        self.total_tokens += metrics.total_tokens
+        self.total_duration_ms += metrics.duration_ms
+
+        if metrics.success:
+            self.successful_runs += 1
+        else:
+            self.failed_runs += 1
+
+        for tool in metrics.tools_used:
+            self.tool_call_counts[tool] = self.tool_call_counts.get(tool, 0) + 1
+
+    @property
+    def success_rate(self) -> float:
+        return self.successful_runs / self.total_runs if self.total_runs > 0 else 0
+
+    @property
+    def avg_tokens(self) -> float:
+        return self.total_tokens / self.total_runs if self.total_runs > 0 else 0
+
+# Usage
+aggregate = AggregateMetrics()
+
+for prompt in prompts:
+    events, handle = await client.stream_with_metrics("agent", prompt)
+    async for _ in events:
+        pass
+    aggregate.add(handle.metrics)
+
+print(f"Runs: {aggregate.total_runs}")
+print(f"Success rate: {aggregate.success_rate:.0%}")
+print(f"Avg tokens: {aggregate.avg_tokens:.0f}")
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Check Success" icon="check">
+    ```python
+    metrics = handle.metrics
+    if not metrics.success:
+        logger.error(f"Run failed: {metrics.error_message}")
+        # Handle failure
+    ```
+  </Accordion>
+
+  <Accordion title="Log Metrics for Analysis" icon="file-lines">
+    ```python
+    import logging
+    import json
+
+    logger = logging.getLogger("superserve")
+
+    def log_metrics(metrics: RunMetrics):
+        logger.info(json.dumps({
+            "run_id": metrics.run_id,
+            "success": metrics.success,
+            "tokens": metrics.total_tokens,
+            "duration_ms": metrics.duration_ms,
+            "tools": metrics.tools_used,
+            "tool_calls": metrics.tool_call_count,
+        }))
+    ```
+  </Accordion>
+
+  <Accordion title="Set Alerts on Thresholds" icon="bell">
+    ```python
+    def check_thresholds(metrics: RunMetrics):
+        if metrics.total_tokens > 10000:
+            alert(f"High token usage: {metrics.total_tokens}")
+
+        if metrics.duration_ms > 30000:
+            alert(f"Slow run: {metrics.duration_ms}ms")
+
+        for tool in metrics.tool_calls:
+            if not tool.success:
+                alert(f"Tool failure: {tool.name}")
+    ```
+  </Accordion>
+</AccordionGroup>

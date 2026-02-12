@@ -1,0 +1,246 @@
+---
+title: "Authentication"
+description: "Configure API keys and authentication options for the Superserve SDK"
+icon: "key"
+---
+
+The Superserve SDK uses API keys for authentication. This guide covers how to configure your API key and other authentication options.
+
+## Getting Your API Key
+
+<Steps>
+  <Step title="Log in to Dashboard">
+    Go to your [Superserve Dashboard](https://dashboard.superserve.ai) and log in with your credentials.
+  </Step>
+  <Step title="Navigate to API Keys">
+    Click on **Settings** in the sidebar, then select **API Keys**.
+  </Step>
+  <Step title="Create a New Key">
+    Click the **Create API Key** button and give your key a descriptive name.
+  </Step>
+  <Step title="Copy Your Key">
+    Copy the generated key immediately - it will only be shown once!
+  </Step>
+</Steps>
+
+<Warning>
+  API keys are sensitive credentials. Never share them publicly or commit them to version control.
+</Warning>
+
+## Configuration Methods
+
+<Tabs>
+  <Tab title="Environment Variable (Recommended)">
+    Set the `SUPERSERVE_API_KEY` environment variable:
+
+    ```bash .env
+    SUPERSERVE_API_KEY=your-api-key-here
+    ```
+
+    ```bash Terminal
+    export SUPERSERVE_API_KEY=your-api-key-here
+    ```
+
+    Then create the client without passing the key:
+
+    ```typescript
+    import { SuperserveClient } from '@superserve/sdk';
+
+    // API key is automatically read from SUPERSERVE_API_KEY
+    const client = new SuperserveClient();
+    ```
+  </Tab>
+  <Tab title="Direct Configuration">
+    Pass the API key directly to the client constructor:
+
+    ```typescript
+    import { SuperserveClient } from '@superserve/sdk';
+
+    const client = new SuperserveClient({
+      apiKey: 'your-api-key-here'
+    });
+    ```
+  </Tab>
+  <Tab title="createClient Function">
+    Use the convenience function for creating clients:
+
+    ```typescript
+    import { createClient } from '@superserve/sdk';
+
+    const client = createClient({
+      apiKey: 'your-api-key-here'
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Environment Variables
+
+The SDK supports these environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SUPERSERVE_API_KEY` | API key for authentication | None (required) |
+| `SUPERSERVE_BASE_URL` | Custom API base URL | `https://api.superserve.ai` |
+
+## Custom Base URL
+
+For custom deployments or testing, you can configure a different API base URL:
+
+<CodeGroup>
+```typescript SDK Configuration
+const client = new SuperserveClient({
+  apiKey: 'your-api-key',
+  baseUrl: 'https://custom-api.example.com'
+});
+```
+
+```bash Environment Variable
+export SUPERSERVE_BASE_URL=https://custom-api.example.com
+```
+</CodeGroup>
+
+## Additional Headers
+
+You can include custom headers in all API requests:
+
+```typescript
+const client = new SuperserveClient({
+  apiKey: 'your-api-key',
+  headers: {
+    'X-Request-ID': 'my-request-id',
+    'X-Custom-Header': 'value'
+  }
+});
+```
+
+## Request Timeout
+
+Configure the timeout for non-streaming requests (default: 30 seconds):
+
+```typescript
+const client = new SuperserveClient({
+  apiKey: 'your-api-key',
+  timeout: 60000 // 60 seconds
+});
+```
+
+<Note>
+  Streaming requests use the agent's configured `timeoutSeconds` instead of this client timeout.
+</Note>
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Never Commit API Keys" icon="ban">
+    Use environment variables or secret management systems
+  </Card>
+  <Card title="Rotate Keys Regularly" icon="arrows-rotate">
+    Create new keys and delete old ones periodically
+  </Card>
+  <Card title="Use Separate Keys" icon="code-branch">
+    Use different keys for development and production
+  </Card>
+  <Card title="Limit Key Scope" icon="lock">
+    Use keys with minimal required permissions
+  </Card>
+  <Card title="Monitor Usage" icon="chart-line">
+    Check your dashboard for unexpected API activity
+  </Card>
+  <Card title="Secure Storage" icon="vault">
+    Use secret management tools like Vault or AWS Secrets Manager
+  </Card>
+</CardGroup>
+
+## Client Options Reference
+
+```typescript
+interface ClientOptions {
+  // API key for authentication
+  // Default: process.env.SUPERSERVE_API_KEY
+  apiKey?: string;
+
+  // Base URL for the API
+  // Default: process.env.SUPERSERVE_BASE_URL or "https://api.superserve.ai"
+  baseUrl?: string;
+
+  // Additional headers for all requests
+  headers?: Record<string, string>;
+
+  // Request timeout in milliseconds (non-streaming only)
+  // Default: 30000
+  timeout?: number;
+}
+```
+
+## Error Handling
+
+The SDK throws `AuthenticationError` for authentication failures:
+
+```typescript
+import { AuthenticationError } from '@superserve/sdk';
+
+try {
+  const agents = await client.agents.list();
+} catch (error) {
+  if (error instanceof AuthenticationError) {
+    console.error('Authentication failed:', error.message);
+    // Handle: check API key, refresh token, etc.
+  }
+}
+```
+
+### Common Authentication Errors
+
+| Status | Message | Solution |
+|--------|---------|----------|
+| 401 | Invalid API key | Check that your API key is correct |
+| 401 | API key expired | Generate a new API key |
+| 403 | Access denied | Check key permissions |
+
+## Browser Usage
+
+<Warning>
+  When using the SDK in browsers, **never expose API keys in client-side code**. Always use a backend proxy.
+</Warning>
+
+<Accordion title="Backend Proxy Pattern">
+  Use a backend proxy to handle API requests securely:
+
+  ```typescript
+  // Backend (Node.js with Express)
+  app.post('/api/proxy/runs', async (req, res) => {
+    const client = new SuperserveClient({
+      apiKey: process.env.SUPERSERVE_API_KEY
+    });
+
+    const result = await client.runs.run({
+      agentId: req.body.agentId,
+      prompt: req.body.prompt
+    });
+
+    res.json({ output: result });
+  });
+  ```
+
+  ```typescript
+  // Frontend (Browser)
+  async function runAgent(agentId: string, prompt: string) {
+    const response = await fetch('/api/proxy/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId, prompt })
+    });
+
+    const data = await response.json();
+    return data.output;
+  }
+  ```
+</Accordion>
+
+Best practices for browser usage:
+
+1. **Use a backend proxy** to handle API requests
+2. **Consider short-lived session tokens** for additional security
+3. **Implement rate limiting** on your proxy endpoints
+4. **Validate and sanitize** user inputs before forwarding to the API

@@ -1,0 +1,204 @@
+---
+title: "SuperserveClient"
+description: "Main client class for interacting with the Superserve API"
+icon: "server"
+---
+
+The `SuperserveClient` class is the main entry point for the Superserve SDK. It provides access to all API resources.
+
+## Constructor
+
+```typescript
+new SuperserveClient(options?: ClientOptions)
+```
+
+### Parameters
+
+<ParamField path="options" type="ClientOptions" optional>
+  Configuration options for the client
+</ParamField>
+
+### ClientOptions
+
+```typescript
+interface ClientOptions {
+  /**
+   * API key for authentication.
+   * @default process.env.SUPERSERVE_API_KEY
+   */
+  apiKey?: string;
+
+  /**
+   * Base URL for the API.
+   * @default process.env.SUPERSERVE_BASE_URL || "https://api.superserve.ai"
+   */
+  baseUrl?: string;
+
+  /**
+   * Additional headers to include in all requests.
+   */
+  headers?: Record<string, string>;
+
+  /**
+   * Request timeout in milliseconds (non-streaming requests only).
+   * @default 30000
+   */
+  timeout?: number;
+}
+```
+
+### Examples
+
+<Tabs>
+  <Tab title="Environment Variable">
+    ```typescript
+    // Uses SUPERSERVE_API_KEY environment variable
+    const client = new SuperserveClient();
+    ```
+  </Tab>
+  <Tab title="Direct Configuration">
+    ```typescript
+    const client = new SuperserveClient({
+      apiKey: 'your-api-key-here'
+    });
+    ```
+  </Tab>
+  <Tab title="Full Configuration">
+    ```typescript
+    const client = new SuperserveClient({
+      apiKey: 'your-api-key',
+      baseUrl: 'https://custom-api.example.com',
+      headers: {
+        'X-Custom-Header': 'value'
+      },
+      timeout: 60000
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Properties
+
+### agents
+
+<ParamField path="agents" type="AgentsAPI">
+  Access to the Agents API for managing agents
+</ParamField>
+
+```typescript
+const agent = await client.agents.create({ name: 'my-agent' });
+```
+
+### runs
+
+<ParamField path="runs" type="RunsAPI">
+  Access to the Runs API for executing and managing runs
+</ParamField>
+
+```typescript
+const output = await client.runs.run({ agentId: 'agt_123', prompt: 'Hello' });
+```
+
+## createClient Function
+
+A convenience function for creating clients:
+
+```typescript
+import { createClient } from '@superserve/sdk';
+
+const client = createClient({
+  apiKey: 'your-api-key'
+});
+```
+
+This is equivalent to:
+
+```typescript
+const client = new SuperserveClient({
+  apiKey: 'your-api-key'
+});
+```
+
+## Type Definition
+
+```typescript
+class SuperserveClient {
+  /**
+   * Creates a new Superserve client.
+   * @param options - Client configuration options
+   * @throws {SuperserveError} If no API key is provided
+   */
+  constructor(options?: ClientOptions);
+
+  /**
+   * Agents API for creating and managing agents.
+   */
+  readonly agents: AgentsAPI;
+
+  /**
+   * Runs API for executing and managing agent runs.
+   */
+  readonly runs: RunsAPI;
+}
+```
+
+## Error Handling
+
+The client throws `SuperserveError` if no API key is provided:
+
+```typescript
+try {
+  // This will throw if SUPERSERVE_API_KEY is not set
+  const client = new SuperserveClient();
+} catch (error) {
+  if (error instanceof SuperserveError) {
+    console.error('No API key provided');
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Reuse Client Instances" icon="recycle">
+    Create a single client instance and reuse it across your application:
+
+    ```typescript
+    // lib/superserve.ts
+    import { SuperserveClient } from '@superserve/sdk';
+
+    export const client = new SuperserveClient();
+    ```
+
+    ```typescript
+    // Usage
+    import { client } from './lib/superserve';
+
+    await client.agents.list();
+    ```
+  </Accordion>
+
+  <Accordion title="Use Environment Variables" icon="key">
+    Store API keys in environment variables, not in code:
+
+    ```bash
+    export SUPERSERVE_API_KEY=your-api-key
+    ```
+
+    ```typescript
+    // API key automatically read from environment
+    const client = new SuperserveClient();
+    ```
+  </Accordion>
+
+  <Accordion title="Configure Appropriate Timeouts" icon="clock">
+    Set timeouts based on your use case:
+
+    ```typescript
+    // Long-running operations
+    const client = new SuperserveClient({
+      timeout: 120000 // 2 minutes
+    });
+    ```
+  </Accordion>
+</AccordionGroup>

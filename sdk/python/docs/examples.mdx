@@ -1,0 +1,587 @@
+---
+title: 'Code Examples'
+description: 'Complete examples demonstrating common use cases'
+icon: 'code'
+---
+
+Complete examples demonstrating common use cases for the Superserve Python SDK.
+
+## Basic Examples
+
+<Tabs>
+  <Tab title="Hello World">
+    ```python
+    import asyncio
+    from superserve_sdk import Superserve
+
+    async def main():
+        async with Superserve() as client:
+            # Create a simple agent
+            agent = await client.create_agent(
+                name="hello-agent",
+                system_prompt="You are a friendly assistant.",
+            )
+
+            # Run the agent
+            run = await client.run(agent.id, "Say hello!")
+            print(run.output)
+
+            # Clean up
+            await client.delete_agent(agent.id)
+
+    asyncio.run(main())
+    ```
+  </Tab>
+
+  <Tab title="Synchronous">
+    ```python
+    from superserve_sdk import SuperserveSync
+
+    with SuperserveSync() as client:
+        agent = client.create_agent(name="sync-agent")
+        run = client.run(agent.id, "What is 2 + 2?")
+        print(f"Answer: {run.output}")
+        client.delete_agent(agent.id)
+    ```
+  </Tab>
+</Tabs>
+
+## Streaming Examples
+
+### Basic Streaming
+
+```python
+import asyncio
+from superserve_sdk import Superserve, MessageDeltaEvent
+
+async def main():
+    async with Superserve() as client:
+        print("Agent: ", end="", flush=True)
+        async for event in client.stream("my-agent", "Tell me a joke"):
+            if isinstance(event, MessageDeltaEvent):
+                print(event.content, end="", flush=True)
+        print()
+
+asyncio.run(main())
+```
+
+### Rich Streaming with Tool Visibility
+
+```python
+import asyncio
+from superserve_sdk import (
+    Superserve,
+    MessageDeltaEvent,
+    ToolStartEvent,
+    ToolEndEvent,
+    RunCompletedEvent,
+    RunFailedEvent,
+)
+
+async def main():
+    async with Superserve() as client:
+        async for event in client.stream("code-agent", "Find all Python files"):
+            match event:
+                case MessageDeltaEvent():
+                    print(event.content, end="", flush=True)
+
+                case ToolStartEvent():
+                    print(f"\n  [{event.tool}] ", end="")
+                    if event.tool == "Bash":
+                        print(f"$ {event.input.get('command', '')}")
+                    elif event.tool == "Read":
+                        print(f"Reading {event.input.get('file_path', '')}")
+                    elif event.tool == "Glob":
+                        print(f"Finding {event.input.get('pattern', '')}")
+
+                case ToolEndEvent():
+                    status = "done" if event.success else "FAILED"
+                    print(f"  [{status} in {event.duration_ms}ms]")
+
+                case RunCompletedEvent():
+                    print(f"\n\nCompleted in {event.duration_ms}ms")
+                    if event.usage:
+                        print(f"Tokens: {event.usage.total_tokens}")
+
+                case RunFailedEvent():
+                    print(f"\n\nFailed: {event.error_message}")
+
+asyncio.run(main())
+```
+
+## Chat Interface
+
+### Interactive Chat
+
+```python
+import asyncio
+import uuid
+from superserve_sdk import Superserve, MessageDeltaEvent
+
+async def chat():
+    session_id = str(uuid.uuid4())
+
+    async with Superserve() as client:
+        print("Chat with the agent (type 'quit' to exit)")
+        print("-" * 40)
+
+        while True:
+            user_input = input("\nYou: ").strip()
+            if user_input.lower() == "quit":
+                break
+
+            print("\nAgent: ", end="", flush=True)
+
+            async for event in client.stream(
+                "chat-agent",
+                user_input,
+                session_id=session_id,
+            ):
+                if isinstance(event, MessageDeltaEvent):
+                    print(event.content, end="", flush=True)
+
+            print()
+
+asyncio.run(chat())
+```
+
+### Web Chat (FastAPI)
+
+<Accordion title="Complete FastAPI WebSocket Example">
+```python
+from fastapi import FastAPI, WebSocket
+from fastapi.responses import HTMLResponse
+from superserve_sdk import Superserve, MessageDeltaEvent
+
+app = FastAPI()
+
+html = """
+<!DOCTYPE html>
+<html>
+<body>
+    <h1>Superserve Chat</h1>
+    <div id="chat" style="height: 400px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px;"></div>
+    <input type="text" id="input" style="width: 80%;">
+    <button onclick="send()">Send</button>
+    <script>
+        const ws = new WebSocket("ws://localhost:8000/ws");
+        const chat = document.getElementById("chat");
+        const input = document.getElementById("input");
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === "delta") {
+                const last = chat.lastElementChild;
+                if (last && last.className === "assistant") {
+                    last.textContent += data.content;
+                } else {
+                    chat.innerHTML += `<p class="assistant"><b>Agent:</b> ${data.content}</p>`;
+                }
+            }
+            chat.scrollTop = chat.scrollHeight;
+        };
+
+        function send() {
+            const text = input.value;
+            chat.innerHTML += `<p><b>You:</b> ${text}</p>`;
+            ws.send(JSON.stringify({prompt: text}));
+            input.value = "";
+        }
+
+        input.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") send();
+        });
+    </script>
+</body>
+</html>
+"""
+
+@app.get("/")
+async def get():
+    return HTMLResponse(html)
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    session_id = "web-" + str(id(websocket))
+
+    async with Superserve() as client:
+        while True:
+            data = await websocket.receive_json()
+            prompt = data["prompt"]
+
+            async for event in client.stream(
+                "chat-agent",
+                prompt,
+                session_id=session_id,
+            ):
+                if isinstance(event, MessageDeltaEvent):
+                    await websocket.send_json({
+                        "type": "delta",
+                        "content": event.content,
+                    })
+```
+</Accordion>
+
+## Code Assistant
+
+<CardGroup cols={2}>
+  <Card title="Code Review" icon="magnifying-glass-code" href="#code-review-agent">
+    Automated code review with AI
+  </Card>
+  <Card title="Documentation" icon="file-lines" href="#documentation-generator">
+    Generate docs from source code
+  </Card>
+</CardGroup>
+
+### Code Review Agent
+
+```python
+import asyncio
+from superserve_sdk import Superserve, MessageDeltaEvent
+
+async def review_code(file_path: str):
+    async with Superserve() as client:
+        # Create a code review agent
+        agent = await client.create_agent(
+            name="code-reviewer",
+            model="claude-sonnet-4-20250514",
+            system_prompt="""You are an expert code reviewer. When reviewing code:
+1. Check for bugs and potential issues
+2. Suggest improvements for readability
+3. Identify security concerns
+4. Note any performance optimizations
+5. Provide specific, actionable feedback
+
+Be constructive and explain your reasoning.""",
+            tools=["Read", "Glob", "Grep"],
+            max_turns=20,
+        )
+
+        try:
+            prompt = f"Please review the code in {file_path} and provide detailed feedback."
+
+            print("Code Review")
+            print("=" * 50)
+
+            async for event in client.stream(agent.id, prompt):
+                if isinstance(event, MessageDeltaEvent):
+                    print(event.content, end="", flush=True)
+
+            print()
+
+        finally:
+            await client.delete_agent(agent.id)
+
+asyncio.run(review_code("./src/main.py"))
+```
+
+### Documentation Generator
+
+```python
+import asyncio
+from superserve_sdk import Superserve, MessageDeltaEvent, RunCompletedEvent
+
+async def generate_docs(source_dir: str, output_file: str):
+    async with Superserve() as client:
+        agent = await client.create_agent(
+            name="docs-generator",
+            system_prompt="""You are a technical documentation writer.
+Generate clear, comprehensive documentation including:
+- Overview and purpose
+- Installation instructions
+- API reference
+- Usage examples
+- Configuration options
+
+Use Markdown formatting.""",
+            tools=["Read", "Glob", "Grep", "Write"],
+            max_turns=30,
+            timeout_seconds=600,
+        )
+
+        try:
+            prompt = f"""Analyze the code in {source_dir} and generate documentation.
+Write the documentation to {output_file}."""
+
+            output = ""
+            async for event in client.stream(agent.id, prompt):
+                if isinstance(event, MessageDeltaEvent):
+                    output += event.content
+                    print(event.content, end="", flush=True)
+                elif isinstance(event, RunCompletedEvent):
+                    print(f"\n\nDocs written to {output_file}")
+
+        finally:
+            await client.delete_agent(agent.id)
+
+asyncio.run(generate_docs("./src", "./docs/API.md"))
+```
+
+## Batch Processing
+
+<Tabs>
+  <Tab title="Sequential">
+    ```python
+    import asyncio
+    from pathlib import Path
+    from superserve_sdk import Superserve
+
+    async def analyze_files(pattern: str):
+        async with Superserve() as client:
+            files = list(Path(".").glob(pattern))
+            print(f"Found {len(files)} files to analyze")
+
+            results = []
+            for file in files:
+                print(f"\nAnalyzing {file}...")
+
+                run = await client.run(
+                    "analyzer-agent",
+                    f"Analyze the file at {file} and summarize its purpose.",
+                )
+
+                results.append({
+                    "file": str(file),
+                    "summary": run.output,
+                    "tokens": run.usage.total_tokens if run.usage else 0,
+                })
+
+            return results
+
+    results = asyncio.run(analyze_files("**/*.py"))
+    for r in results:
+        print(f"\n{r['file']}:")
+        print(f"  {r['summary'][:100]}...")
+    ```
+  </Tab>
+
+  <Tab title="Concurrent">
+    ```python
+    import asyncio
+    from superserve_sdk import Superserve
+
+    async def process_batch(prompts: list[str], max_concurrent: int = 5):
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def process_one(client: Superserve, prompt: str) -> str:
+            async with semaphore:
+                run = await client.run("batch-agent", prompt)
+                return run.output or ""
+
+        async with Superserve() as client:
+            tasks = [process_one(client, p) for p in prompts]
+            return await asyncio.gather(*tasks)
+
+    prompts = [
+        "Summarize Python",
+        "Summarize JavaScript",
+        "Summarize Rust",
+        "Summarize Go",
+        "Summarize TypeScript",
+    ]
+
+    results = asyncio.run(process_batch(prompts))
+    for prompt, result in zip(prompts, results):
+        print(f"{prompt}: {result[:50]}...")
+    ```
+  </Tab>
+</Tabs>
+
+## Monitoring and Metrics
+
+### Run Monitoring
+
+```python
+import asyncio
+from superserve_sdk import Superserve, MessageDeltaEvent
+
+async def monitored_run(agent: str, prompt: str):
+    async with Superserve() as client:
+        events, metrics_handle = await client.stream_with_metrics(
+            agent, prompt
+        )
+
+        chunks = 0
+        async for event in events:
+            if isinstance(event, MessageDeltaEvent):
+                chunks += 1
+                print(event.content, end="", flush=True)
+
+        metrics = metrics_handle.metrics
+        print("\n\n--- Metrics ---")
+        print(f"Status: {'Success' if metrics.success else 'Failed'}")
+        print(f"Duration: {metrics.duration_ms}ms")
+        print(f"Tokens: {metrics.total_tokens}")
+        print(f"  Input: {metrics.input_tokens}")
+        print(f"  Output: {metrics.output_tokens}")
+        print(f"Turns: {metrics.turns}")
+        print(f"Content chunks: {chunks}")
+        print(f"Tool calls: {metrics.tool_call_count}")
+        for tool in metrics.tool_calls:
+            print(f"  - {tool.name}: {tool.duration_ms}ms")
+
+asyncio.run(monitored_run("my-agent", "Analyze the codebase"))
+```
+
+### Cost Tracking
+
+```python
+import asyncio
+from dataclasses import dataclass
+from superserve_sdk import Superserve, RunMetrics
+
+@dataclass
+class CostTracker:
+    # Claude Sonnet pricing (example)
+    input_cost_per_mtok: float = 3.0
+    output_cost_per_mtok: float = 15.0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+
+    def add(self, metrics: RunMetrics):
+        self.total_input_tokens += metrics.input_tokens
+        self.total_output_tokens += metrics.output_tokens
+
+    @property
+    def total_cost(self) -> float:
+        input_cost = (self.total_input_tokens / 1_000_000) * self.input_cost_per_mtok
+        output_cost = (self.total_output_tokens / 1_000_000) * self.output_cost_per_mtok
+        return input_cost + output_cost
+
+async def main():
+    tracker = CostTracker()
+
+    async with Superserve() as client:
+        for prompt in ["Hello", "Tell me a story", "Write a poem"]:
+            events, handle = await client.stream_with_metrics("agent", prompt)
+            async for _ in events:
+                pass
+            tracker.add(handle.metrics)
+
+    print(f"Total tokens: {tracker.total_input_tokens + tracker.total_output_tokens}")
+    print(f"Estimated cost: ${tracker.total_cost:.4f}")
+
+asyncio.run(main())
+```
+
+## Error Handling
+
+### Robust Client
+
+<Accordion title="Complete Robust Client Example">
+```python
+import asyncio
+from superserve_sdk import (
+    Superserve,
+    SuperserveError,
+    RateLimitError,
+    ConnectionError,
+    TimeoutError,
+    NotFoundError,
+)
+
+class RobustClient:
+    def __init__(self, max_retries: int = 3):
+        self.max_retries = max_retries
+        self._client: Superserve | None = None
+
+    async def __aenter__(self):
+        self._client = Superserve()
+        await self._client.__aenter__()
+        return self
+
+    async def __aexit__(self, *args):
+        if self._client:
+            await self._client.__aexit__(*args)
+
+    async def run_with_retry(self, agent: str, prompt: str):
+        last_error = None
+
+        for attempt in range(self.max_retries):
+            try:
+                return await self._client.run(agent, prompt)
+
+            except RateLimitError as e:
+                last_error = e
+                wait = e.retry_after or (2 ** attempt * 5)
+                print(f"Rate limited, waiting {wait}s...")
+                await asyncio.sleep(wait)
+
+            except (ConnectionError, TimeoutError) as e:
+                last_error = e
+                wait = 2 ** attempt
+                print(f"Connection error, retrying in {wait}s...")
+                await asyncio.sleep(wait)
+
+            except NotFoundError:
+                raise  # Don't retry
+
+            except SuperserveError as e:
+                print(f"Unexpected error: {e.message}")
+                raise
+
+        raise last_error
+
+async def main():
+    async with RobustClient() as client:
+        run = await client.run_with_retry("my-agent", "Hello")
+        print(run.output)
+
+asyncio.run(main())
+```
+</Accordion>
+
+## CLI Tool
+
+### Simple CLI
+
+```python
+#!/usr/bin/env python3
+import argparse
+import asyncio
+from superserve_sdk import Superserve, MessageDeltaEvent
+
+async def main():
+    parser = argparse.ArgumentParser(description="Superserve CLI")
+    parser.add_argument("agent", help="Agent name or ID")
+    parser.add_argument("prompt", help="Prompt to send")
+    parser.add_argument("--session", help="Session ID for multi-turn")
+    parser.add_argument("--no-stream", action="store_true", help="Disable streaming")
+    args = parser.parse_args()
+
+    async with Superserve() as client:
+        if args.no_stream:
+            run = await client.run(
+                args.agent,
+                args.prompt,
+                session_id=args.session,
+            )
+            print(run.output)
+        else:
+            async for event in client.stream(
+                args.agent,
+                args.prompt,
+                session_id=args.session,
+            ):
+                if isinstance(event, MessageDeltaEvent):
+                    print(event.content, end="", flush=True)
+            print()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Usage
+
+```bash
+# Basic usage
+python cli.py my-agent "Hello, world!"
+
+# With session for multi-turn
+python cli.py my-agent "My name is Alice" --session user123
+python cli.py my-agent "What is my name?" --session user123
+
+# Without streaming
+python cli.py my-agent "Quick question" --no-stream
+```

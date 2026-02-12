@@ -1,0 +1,51 @@
+---
+title: 'SuperserveError'
+description: 'Base exception for all SDK errors'
+icon: 'bug'
+---
+
+Base exception class for all Superserve SDK errors.
+
+## Definition
+
+```python
+class SuperserveError(Exception):
+    message: str
+
+    def __init__(self, message: str): ...
+```
+
+## Properties
+
+<ParamField path="message" type="str" required>
+  Human-readable error message.
+</ParamField>
+
+## Usage
+
+Use as a catch-all for any SDK error:
+
+```python
+from superserve_sdk import Superserve, SuperserveError
+
+async with Superserve() as client:
+    try:
+        await client.run("agent", "Hello")
+    except SuperserveError as e:
+        print(f"SDK error: {e.message}")
+```
+
+## Exception Hierarchy
+
+```
+SuperserveError (base)
+    APIError (HTTP errors)
+        AuthenticationError (401)
+        NotFoundError (404)
+        ConflictError (409)
+        ValidationError (422)
+        RateLimitError (429)
+    StreamError (SSE streaming errors)
+    ConnectionError (network errors)
+    TimeoutError (request timeout)
+```

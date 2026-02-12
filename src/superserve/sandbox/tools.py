@@ -271,7 +271,7 @@ def upload_file(
         )
     except ValueError as err:
         raise ValueError(
-            f"Session {session_id} not found. " "Execute code first to create session."
+            f"Session {session_id} not found. Execute code first to create session."
         ) from err
 
     logger.info(f"Uploading file to {path} in session {session_id}")

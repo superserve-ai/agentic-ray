@@ -1,0 +1,83 @@
+---
+title: 'cancel_run'
+description: 'Cancel a running or pending run'
+icon: 'ban'
+---
+
+Cancels a running or pending run.
+
+## Signature
+
+```python
+async def cancel_run(run_id: str) -> Run
+```
+
+## Parameters
+
+<ParamField path="run_id" type="str" required>
+  Run ID to cancel.
+</ParamField>
+
+## Returns
+
+<ResponseField name="Run" type="Run">
+  The cancelled run with status `cancelled`.
+</ResponseField>
+
+## Errors
+
+| Error | Cause |
+|-------|-------|
+| `NotFoundError` | Run not found |
+| `ConflictError` | Run already completed/failed/cancelled |
+| `AuthenticationError` | Invalid API key |
+
+<Warning>
+  Cancellation is best-effort. A run that has already completed cannot be cancelled.
+</Warning>
+
+## Examples
+
+<CodeGroup>
+```python Async
+from superserve_sdk import Superserve, ConflictError
+
+async with Superserve() as client:
+    # Start without waiting
+    run = await client.run("agent", "Long task...", wait=False)
+
+    # Cancel it
+    try:
+        run = await client.cancel_run(run.id)
+        print(f"Cancelled: {run.status}")
+    except ConflictError:
+        print("Run already finished")
+```
+
+```python Sync
+from superserve_sdk import SuperserveSync
+
+with SuperserveSync() as client:
+    run = client.run("agent", "Task", wait=False)
+    client.cancel_run(run.id)
+```
+</CodeGroup>
+
+## Cleanup Pattern
+
+```python
+# Cancel all stale running runs
+from datetime import datetime, timedelta
+
+async with Superserve() as client:
+    runs = await client.list_runs(status="running")
+    threshold = datetime.now() - timedelta(hours=1)
+
+    for run in runs:
+        if run.created_at < threshold:
+            try:
+                await client.cancel_run(run.id)
+                print(f"Cancelled stale run: {run.id}")
+            except ConflictError:
+                pass
+```

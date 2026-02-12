@@ -1,0 +1,148 @@
+---
+title: "API Reference Overview"
+description: "Complete API reference for the Superserve TypeScript SDK"
+icon: "book"
+---
+
+This section provides complete API documentation for all public classes, methods, and types in the Superserve TypeScript SDK.
+
+## Quick Links
+
+<CardGroup cols={2}>
+  <Card title="SuperserveClient" icon="server" href="/api-reference/client">
+    Main client class for interacting with the Superserve API
+  </Card>
+  <Card title="Agents API" icon="robot" href="/api-reference/agents">
+    Create, read, update, and delete agents
+  </Card>
+  <Card title="Runs API" icon="play" href="/api-reference/runs">
+    Execute runs and manage run lifecycle
+  </Card>
+  <Card title="Streaming" icon="bolt" href="/api-reference/streaming">
+    RunStream class and SSE utilities
+  </Card>
+  <Card title="Types" icon="code" href="/api-reference/types">
+    TypeScript type definitions
+  </Card>
+  <Card title="Errors" icon="shield-check" href="/api-reference/errors">
+    Error classes and error handling
+  </Card>
+</CardGroup>
+
+## Package Exports
+
+The SDK exports the following from `@superserve/sdk`:
+
+### Classes
+
+```typescript
+import {
+  SuperserveClient,
+  RunStream
+} from '@superserve/sdk';
+```
+
+### Error Classes
+
+```typescript
+import {
+  SuperserveError,
+  SuperserveAPIError,
+  AuthenticationError,
+  NotFoundError,
+  ConflictError,
+  ValidationError,
+  RunFailedError,
+  RunCancelledError,
+  StreamAbortedError
+} from '@superserve/sdk';
+```
+
+### Functions
+
+```typescript
+import {
+  createClient,
+  parseSSEStream,
+  parseSSEEventData
+} from '@superserve/sdk';
+```
+
+### Types
+
+```typescript
+import type {
+  // Client
+  ClientOptions,
+
+  // Agents
+  Agent,
+  AgentConfig,
+  AgentModel,
+  AgentTool,
+  AgentStatus,
+  ListAgentsOptions,
+  UpdateAgentOptions,
+
+  // Runs
+  Run,
+  RunStatus,
+  CreateRunOptions,
+  ListRunsOptions,
+  UsageMetrics,
+
+  // Events
+  RunEvent,
+  RunEventType,
+  RunStartedEvent,
+  MessageDeltaEvent,
+  ToolStartEvent,
+  ToolEndEvent,
+  RunCompletedEvent,
+  RunFailedEvent,
+  RunCancelledEvent,
+  RunError,
+
+  // Streaming
+  RunStreamOptions,
+  SSEEvent,
+  SSEParserOptions
+} from '@superserve/sdk';
+```
+
+## Module Structure
+
+```
+@superserve/sdk
+├── SuperserveClient          # Main client class
+│   ├── agents                # AgentsAPI instance
+│   └── runs                  # RunsAPI instance
+├── RunStream                 # Streaming response handler
+├── Errors                    # Error class hierarchy
+├── Types                     # TypeScript type definitions
+└── Utilities                 # SSE parsing utilities
+```
+
+## Version
+
+The current SDK version can be checked via:
+
+```typescript
+import { version } from '@superserve/sdk';
+console.log(version); // e.g., "1.0.0"
+```
+
+## Environment Support
+
+<CardGroup cols={2}>
+  <Card title="Node.js" icon="node-js">
+    Node.js 18.0.0 or higher (for native fetch support)
+  </Card>
+  <Card title="Browsers" icon="browser">
+    Modern browsers with fetch and ReadableStream support
+  </Card>
+</CardGroup>
+
+<Note>
+  The SDK uses native `fetch` and does not include polyfills. For older environments, you may need to provide your own polyfills.
+</Note>

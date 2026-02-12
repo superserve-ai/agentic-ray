@@ -1,0 +1,177 @@
+---
+title: 'Superserve Python SDK'
+description: 'The official Python SDK for deploying and running AI agents in the cloud'
+icon: 'book'
+---
+
+The official Python SDK for [Superserve](https://superserve.ai) hosted agents.
+
+## Overview
+
+Superserve allows you to deploy and run AI agents in the cloud. This SDK provides a simple, type-safe interface for interacting with the Superserve platform.
+
+<CardGroup cols={2}>
+  <Card title="Agent Management" icon="robot" href="/agents">
+    Create, configure, and manage hosted agents
+  </Card>
+  <Card title="Running Agents" icon="play" href="/runs">
+    Execute prompts and receive responses
+  </Card>
+  <Card title="Streaming" icon="bolt" href="/events">
+    Real-time event streaming for agent execution
+  </Card>
+  <Card title="Metrics" icon="chart-line" href="/metrics">
+    Track token usage, tool calls, and performance
+  </Card>
+</CardGroup>
+
+## Features
+
+<CardGroup cols={2}>
+  <Card title="Async-First Design" icon="gauge-high">
+    Built on `httpx` for high-performance async HTTP
+  </Card>
+  <Card title="Type Safety" icon="shield-check">
+    Full type hints and Pydantic models
+  </Card>
+  <Card title="Streaming Support" icon="signal-stream">
+    Server-Sent Events (SSE) for real-time updates
+  </Card>
+  <Card title="Sync Wrapper" icon="arrows-rotate">
+    Synchronous API for simpler use cases
+  </Card>
+</CardGroup>
+
+## Installation
+
+<Steps>
+  <Step title="Install the SDK">
+    Install using pip or uv:
+
+    <CodeGroup>
+    ```bash pip
+    pip install superserve-sdk
+    ```
+
+    ```bash uv
+    uv add superserve-sdk
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Set up authentication">
+    Set your API key as an environment variable:
+
+    ```bash
+    export SUPERSERVE_API_KEY=your-api-key
+    ```
+
+    Or save it to a credentials file:
+
+    ```bash
+    mkdir -p ~/.superserve
+    echo '{"api_key": "your-api-key"}' > ~/.superserve/credentials.json
+    ```
+  </Step>
+
+  <Step title="Create and run an agent">
+    Start using the SDK in your Python code:
+
+    <CodeGroup>
+    ```python Async
+    import asyncio
+    from superserve_sdk import Superserve
+
+    async def main():
+        async with Superserve() as client:
+            # Create an agent
+            agent = await client.create_agent(
+                name="my-assistant",
+                model="claude-sonnet-4-20250514",
+                system_prompt="You are a helpful assistant.",
+            )
+            print(f"Created agent: {agent.id}")
+
+            # Run the agent
+            run = await client.run(agent.id, "What is 2 + 2?")
+            print(f"Output: {run.output}")
+
+            # Clean up
+            await client.delete_agent(agent.id)
+
+    asyncio.run(main())
+    ```
+
+    ```python Sync
+    from superserve_sdk import SuperserveSync
+
+    with SuperserveSync() as client:
+        agent = client.create_agent(name="sync-agent")
+        run = client.run(agent.id, "Hello, world!")
+        print(run.output)
+        client.delete_agent(agent.id)
+    ```
+    </CodeGroup>
+  </Step>
+</Steps>
+
+## Streaming Responses
+
+Get real-time responses from your agents using streaming:
+
+```python
+import asyncio
+from superserve_sdk import Superserve, MessageDeltaEvent
+
+async def main():
+    async with Superserve() as client:
+        async for event in client.stream("my-agent", "Tell me a joke"):
+            if isinstance(event, MessageDeltaEvent):
+                print(event.content, end="", flush=True)
+        print()
+
+asyncio.run(main())
+```
+
+<Note>
+  Streaming provides a better user experience for longer responses, as users can see output as it's generated rather than waiting for the complete response.
+</Note>
+
+## Documentation
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/authentication">
+    API key setup and credentials management
+  </Card>
+  <Card title="Agents" icon="robot" href="/agents">
+    Agent creation and configuration
+  </Card>
+  <Card title="Runs" icon="play" href="/runs">
+    Running agents and managing runs
+  </Card>
+  <Card title="Events" icon="bolt" href="/events">
+    SSE event types for streaming
+  </Card>
+  <Card title="Metrics" icon="chart-line" href="/metrics">
+    Token usage and performance tracking
+  </Card>
+  <Card title="Errors" icon="circle-exclamation" href="/errors">
+    Exception types and error handling
+  </Card>
+  <Card title="Examples" icon="code" href="/examples">
+    Complete code examples
+  </Card>
+</CardGroup>
+
+## Requirements
+
+<Info>
+  The SDK requires:
+  - Python 3.10+
+  - httpx >= 0.25.0
+  - pydantic >= 2.0.0
+</Info>
+
+## License
+
+MIT License - see [LICENSE](https://github.com/superserve-ai/superserve-sdk-python/blob/main/LICENSE) for details.

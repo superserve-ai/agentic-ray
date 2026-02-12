@@ -1,0 +1,431 @@
+---
+title: "TypeScript Types"
+description: "Complete reference of all TypeScript type definitions"
+icon: "code"
+---
+
+This page documents all TypeScript types exported by the Superserve SDK.
+
+## Client Types
+
+### ClientOptions
+
+Configuration options for `SuperserveClient`.
+
+```typescript
+interface ClientOptions {
+  /**
+   * API key for authentication.
+   * @default process.env.SUPERSERVE_API_KEY
+   */
+  apiKey?: string;
+
+  /**
+   * Base URL for the API.
+   * @default process.env.SUPERSERVE_BASE_URL || "https://api.superserve.ai"
+   */
+  baseUrl?: string;
+
+  /**
+   * Additional headers to include in all requests.
+   */
+  headers?: Record<string, string>;
+
+  /**
+   * Request timeout in milliseconds (non-streaming requests only).
+   * @default 30000
+   */
+  timeout?: number;
+}
+```
+
+---
+
+## Agent Types
+
+### Agent
+
+Complete agent object.
+
+```typescript
+interface Agent {
+  id: string;
+  name: string;
+  model: AgentModel;
+  systemPrompt: string;
+  tools: AgentTool[];
+  maxTurns: number;
+  timeoutSeconds: number;
+  status: AgentStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+### AgentConfig
+
+Configuration for creating an agent.
+
+```typescript
+interface AgentConfig {
+  name: string;
+  model?: AgentModel;
+  systemPrompt?: string;
+  tools?: AgentTool[];
+  maxTurns?: number;
+  timeoutSeconds?: number;
+}
+```
+
+### AgentModel
+
+Available AI models.
+
+```typescript
+type AgentModel =
+  | 'claude-sonnet-4-20250514'
+  | 'claude-opus-4-20250514'
+  | 'claude-haiku-3-5-20241022';
+```
+
+### AgentTool
+
+Available tools.
+
+```typescript
+type AgentTool =
+  | 'Bash'
+  | 'Read'
+  | 'Write'
+  | 'Glob'
+  | 'Grep'
+  | 'WebSearch'
+  | 'WebFetch';
+```
+
+### AgentStatus
+
+Agent status values.
+
+```typescript
+type AgentStatus = 'active' | 'deleted';
+```
+
+### ListAgentsOptions
+
+Options for listing agents.
+
+```typescript
+interface ListAgentsOptions {
+  limit?: number;
+  offset?: number;
+}
+```
+
+### UpdateAgentOptions
+
+Options for updating an agent.
+
+```typescript
+interface UpdateAgentOptions {
+  model?: AgentModel;
+  systemPrompt?: string;
+  tools?: AgentTool[];
+  maxTurns?: number;
+  timeoutSeconds?: number;
+}
+```
+
+---
+
+## Run Types
+
+### Run
+
+Complete run object.
+
+```typescript
+interface Run {
+  id: string;
+  agentId: string;
+  status: RunStatus;
+  prompt: string;
+  output: string | null;
+  errorMessage: string | null;
+  sessionId: string | null;
+  usage: UsageMetrics | null;
+  turns: number;
+  durationMs: number;
+  toolsUsed: string[];
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+```
+
+### RunStatus
+
+Run status values.
+
+```typescript
+type RunStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+```
+
+### CreateRunOptions
+
+Options for creating a run.
+
+```typescript
+interface CreateRunOptions {
+  agentId: string;
+  prompt: string;
+  sessionId?: string;
+}
+```
+
+### ListRunsOptions
+
+Options for listing runs.
+
+```typescript
+interface ListRunsOptions {
+  agentId?: string;
+  status?: RunStatus;
+  limit?: number;
+  offset?: number;
+}
+```
+
+### UsageMetrics
+
+Token usage metrics.
+
+```typescript
+interface UsageMetrics {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+```
+
+---
+
+## Event Types
+
+### RunEvent
+
+Union type of all event types.
+
+```typescript
+type RunEvent =
+  | RunStartedEvent
+  | MessageDeltaEvent
+  | ToolStartEvent
+  | ToolEndEvent
+  | RunCompletedEvent
+  | RunFailedEvent
+  | RunCancelledEvent;
+```
+
+### RunEventType
+
+Event type strings.
+
+```typescript
+type RunEventType =
+  | 'run.started'
+  | 'message.delta'
+  | 'tool.start'
+  | 'tool.end'
+  | 'run.completed'
+  | 'run.failed'
+  | 'run.cancelled';
+```
+
+### RunStartedEvent
+
+Emitted when a run starts.
+
+```typescript
+interface RunStartedEvent {
+  type: 'run.started';
+  runId: string;
+}
+```
+
+### MessageDeltaEvent
+
+Emitted for each text chunk.
+
+```typescript
+interface MessageDeltaEvent {
+  type: 'message.delta';
+  content: string;
+}
+```
+
+### ToolStartEvent
+
+Emitted when a tool starts executing.
+
+```typescript
+interface ToolStartEvent {
+  type: 'tool.start';
+  tool: string;
+  input: Record<string, unknown>;
+}
+```
+
+### ToolEndEvent
+
+Emitted when a tool completes.
+
+```typescript
+interface ToolEndEvent {
+  type: 'tool.end';
+  tool: string;
+  output: string;
+  durationMs: number;
+}
+```
+
+### RunCompletedEvent
+
+Emitted when a run completes successfully.
+
+```typescript
+interface RunCompletedEvent {
+  type: 'run.completed';
+  runId: string;
+  usage: UsageMetrics;
+  durationMs: number;
+}
+```
+
+### RunFailedEvent
+
+Emitted when a run fails.
+
+```typescript
+interface RunFailedEvent {
+  type: 'run.failed';
+  runId: string;
+  error: RunError;
+}
+```
+
+### RunCancelledEvent
+
+Emitted when a run is cancelled.
+
+```typescript
+interface RunCancelledEvent {
+  type: 'run.cancelled';
+  runId: string;
+}
+```
+
+### RunError
+
+Error information in failure events.
+
+```typescript
+interface RunError {
+  code?: string;
+  message: string;
+}
+```
+
+---
+
+## Streaming Types
+
+### RunStreamOptions
+
+Options for streaming runs.
+
+```typescript
+interface RunStreamOptions {
+  agentId: string;
+  prompt: string;
+  sessionId?: string;
+}
+```
+
+### SSEEvent
+
+Raw Server-Sent Event.
+
+```typescript
+interface SSEEvent {
+  event: string;
+  data: string;
+  id?: string;
+  retry?: number;
+}
+```
+
+### SSEParserOptions
+
+Options for SSE parser.
+
+```typescript
+interface SSEParserOptions {
+  signal?: AbortSignal;
+}
+```
+
+---
+
+## Importing Types
+
+All types can be imported from the main package:
+
+```typescript
+import type {
+  // Client
+  ClientOptions,
+
+  // Agents
+  Agent,
+  AgentConfig,
+  AgentModel,
+  AgentTool,
+  AgentStatus,
+  ListAgentsOptions,
+  UpdateAgentOptions,
+
+  // Runs
+  Run,
+  RunStatus,
+  CreateRunOptions,
+  ListRunsOptions,
+  UsageMetrics,
+
+  // Events
+  RunEvent,
+  RunEventType,
+  RunStartedEvent,
+  MessageDeltaEvent,
+  ToolStartEvent,
+  ToolEndEvent,
+  RunCompletedEvent,
+  RunFailedEvent,
+  RunCancelledEvent,
+  RunError,
+
+  // Streaming
+  RunStreamOptions,
+  SSEEvent,
+  SSEParserOptions
+} from '@superserve/sdk';
+```
+
+<Note>
+  Use `import type` for type-only imports to ensure types are stripped during compilation.
+</Note>

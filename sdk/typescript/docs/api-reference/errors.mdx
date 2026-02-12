@@ -1,0 +1,391 @@
+---
+title: "Error Classes"
+description: "API reference for all error classes in the SDK"
+icon: "shield-check"
+---
+
+The Superserve SDK provides a comprehensive hierarchy of error classes for different failure scenarios.
+
+## Error Hierarchy
+
+```
+SuperserveError (base)
+├── SuperserveAPIError (HTTP errors)
+│   ├── AuthenticationError (401/403)
+│   ├── NotFoundError (404)
+│   ├── ConflictError (409)
+│   └── ValidationError (422)
+├── RunFailedError (execution failure)
+├── RunCancelledError (user cancellation)
+└── StreamAbortedError (stream interruption)
+```
+
+---
+
+## SuperserveError
+
+Base class for all SDK errors.
+
+```typescript
+class SuperserveError extends Error {
+  /** Error name */
+  name: 'SuperserveError';
+
+  /** Error message */
+  message: string;
+
+  /** Stack trace */
+  stack?: string;
+}
+```
+
+### Usage
+
+```typescript
+import { SuperserveError } from '@superserve/sdk';
+
+try {
+  await client.runs.run({ agentId, prompt });
+} catch (error) {
+  if (error instanceof SuperserveError) {
+    console.error('SDK error:', error.message);
+  }
+}
+```
+
+---
+
+## SuperserveAPIError
+
+Base class for HTTP API errors.
+
+```typescript
+class SuperserveAPIError extends SuperserveError {
+  /** HTTP status code */
+  status: number;
+
+  /** Error code from API */
+  code: string | undefined;
+
+  /** Additional error details */
+  details: Record<string, unknown> | undefined;
+}
+```
+
+### Properties
+
+<ParamField path="status" type="number">
+  HTTP status code (e.g., 400, 401, 404, 500)
+</ParamField>
+
+<ParamField path="code" type="string | undefined">
+  Machine-readable error code from the API
+</ParamField>
+
+<ParamField path="details" type="Record<string, unknown> | undefined">
+  Additional structured error information
+</ParamField>
+
+### Usage
+
+```typescript
+import { SuperserveAPIError } from '@superserve/sdk';
+
+try {
+  await client.agents.get('invalid');
+} catch (error) {
+  if (error instanceof SuperserveAPIError) {
+    console.error(`API error (${error.status}): ${error.message}`);
+    console.error('Code:', error.code);
+    console.error('Details:', error.details);
+  }
+}
+```
+
+---
+
+## AuthenticationError
+
+Thrown when authentication fails (HTTP 401 or 403).
+
+```typescript
+class AuthenticationError extends SuperserveAPIError {
+  status: 401;
+  code: 'authentication_error';
+}
+```
+
+### Common Causes
+
+- Invalid API key
+- Expired API key
+- Insufficient permissions
+
+### Usage
+
+```typescript
+import { AuthenticationError } from '@superserve/sdk';
+
+try {
+  await client.agents.list();
+} catch (error) {
+  if (error instanceof AuthenticationError) {
+    console.error('Invalid API key');
+    // Prompt user to update credentials
+  }
+}
+```
+
+---
+
+## NotFoundError
+
+Thrown when a resource is not found (HTTP 404).
+
+```typescript
+class NotFoundError extends SuperserveAPIError {
+  status: 404;
+  code: 'not_found';
+}
+```
+
+### Common Causes
+
+- Invalid agent ID
+- Invalid run ID
+- Deleted resource
+
+### Usage
+
+```typescript
+import { NotFoundError } from '@superserve/sdk';
+
+try {
+  await client.agents.get('agt_nonexistent');
+} catch (error) {
+  if (error instanceof NotFoundError) {
+    console.error('Agent not found');
+  }
+}
+```
+
+---
+
+## ConflictError
+
+Thrown when there is a resource conflict (HTTP 409).
+
+```typescript
+class ConflictError extends SuperserveAPIError {
+  status: 409;
+  code: 'conflict';
+}
+```
+
+### Common Causes
+
+- Agent name already exists
+- Trying to cancel a completed run
+- Concurrent modification
+
+### Usage
+
+```typescript
+import { ConflictError } from '@superserve/sdk';
+
+try {
+  await client.agents.create({ name: 'existing-agent' });
+} catch (error) {
+  if (error instanceof ConflictError) {
+    console.error('Agent name already exists');
+  }
+}
+```
+
+---
+
+## ValidationError
+
+Thrown when request validation fails (HTTP 422).
+
+```typescript
+class ValidationError extends SuperserveAPIError {
+  status: 422;
+  code: 'validation_error';
+  details: Record<string, unknown> | undefined;
+}
+```
+
+### Common Causes
+
+- Invalid agent name format
+- Invalid model name
+- Missing required fields
+- Value out of range
+
+### Usage
+
+```typescript
+import { ValidationError } from '@superserve/sdk';
+
+try {
+  await client.agents.create({ name: 'INVALID!' });
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.error('Validation failed:', error.message);
+    if (error.details) {
+      console.error('Details:', error.details);
+    }
+  }
+}
+```
+
+---
+
+## RunFailedError
+
+Thrown when an agent run fails during execution.
+
+```typescript
+class RunFailedError extends SuperserveError {
+  /** The run ID that failed */
+  runId: string;
+
+  /** Error code */
+  code: string | undefined;
+}
+```
+
+### Error Codes
+
+| Code | Description |
+|------|-------------|
+| `timeout` | Run exceeded timeout limit |
+| `max_turns_exceeded` | Exceeded maximum turns |
+| `execution_error` | Tool execution failed |
+| `model_error` | AI model returned an error |
+
+### Usage
+
+```typescript
+import { RunFailedError } from '@superserve/sdk';
+
+try {
+  await client.runs.run({ agentId, prompt });
+} catch (error) {
+  if (error instanceof RunFailedError) {
+    console.error(`Run ${error.runId} failed`);
+    console.error('Error code:', error.code);
+    console.error('Message:', error.message);
+  }
+}
+```
+
+---
+
+## RunCancelledError
+
+Thrown when a run is cancelled.
+
+```typescript
+class RunCancelledError extends SuperserveError {
+  /** The run ID that was cancelled */
+  runId: string;
+}
+```
+
+### Usage
+
+```typescript
+import { RunCancelledError } from '@superserve/sdk';
+
+try {
+  for await (const event of stream) {
+    // Process...
+  }
+} catch (error) {
+  if (error instanceof RunCancelledError) {
+    console.log(`Run ${error.runId} was cancelled`);
+  }
+}
+```
+
+---
+
+## StreamAbortedError
+
+Thrown when a stream is aborted.
+
+```typescript
+class StreamAbortedError extends SuperserveError {
+  // No additional properties
+}
+```
+
+### Common Causes
+
+- `stream.abort()` was called
+- Network connection lost
+- Browser tab closed
+
+### Usage
+
+```typescript
+import { StreamAbortedError } from '@superserve/sdk';
+
+try {
+  await stream.finalMessage();
+} catch (error) {
+  if (error instanceof StreamAbortedError) {
+    console.error('Stream interrupted');
+    // Consider resuming with resumeStream()
+  }
+}
+```
+
+---
+
+## Importing Errors
+
+All error classes can be imported from the main package:
+
+```typescript
+import {
+  SuperserveError,
+  SuperserveAPIError,
+  AuthenticationError,
+  NotFoundError,
+  ConflictError,
+  ValidationError,
+  RunFailedError,
+  RunCancelledError,
+  StreamAbortedError
+} from '@superserve/sdk';
+```
+
+---
+
+## Type Guards
+
+Create type guards for cleaner error handling:
+
+```typescript
+function isRetryable(error: unknown): boolean {
+  if (error instanceof SuperserveAPIError) {
+    return error.status >= 500;
+  }
+  if (error instanceof StreamAbortedError) {
+    return true;
+  }
+  return false;
+}
+
+function isClientError(error: unknown): boolean {
+  return (
+    error instanceof ValidationError ||
+    error instanceof NotFoundError ||
+    error instanceof ConflictError ||
+    error instanceof AuthenticationError
+  );
+}
+```

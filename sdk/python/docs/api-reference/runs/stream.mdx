@@ -1,0 +1,100 @@
+---
+title: 'stream'
+description: 'Stream events from an agent execution'
+icon: 'signal-stream'
+---
+
+Streams events from an agent execution in real-time.
+
+## Signature
+
+```python
+async def stream(
+    agent_id: str,
+    prompt: str,
+    session_id: str | None = None,
+) -> AsyncIterator[RunEvent]
+```
+
+## Parameters
+
+<ParamField path="agent_id" type="str" required>
+  Agent ID or name.
+</ParamField>
+
+<ParamField path="prompt" type="str" required>
+  User prompt to send to the agent.
+</ParamField>
+
+<ParamField path="session_id" type="str | None" default="None">
+  Session ID for multi-turn conversations.
+</ParamField>
+
+## Returns
+
+<ResponseField name="AsyncIterator[RunEvent]" type="AsyncIterator[RunEvent]">
+  Async iterator of run events.
+</ResponseField>
+
+## Event Types
+
+- `RunStartedEvent` - Run begins
+- `MessageDeltaEvent` - Text chunk
+- `ToolStartEvent` - Tool execution starts
+- `ToolEndEvent` - Tool execution ends
+- `RunCompletedEvent` - Run completes successfully
+- `RunFailedEvent` - Run fails
+- `RunCancelledEvent` - Run is cancelled
+
+## Errors
+
+| Error | Cause |
+|-------|-------|
+| `NotFoundError` | Agent not found |
+| `StreamError` | Streaming failure |
+| `AuthenticationError` | Invalid API key |
+
+## Examples
+
+### Basic Streaming
+
+```python
+from superserve_sdk import Superserve, MessageDeltaEvent
+
+async with Superserve() as client:
+    async for event in client.stream("my-agent", "Tell me a story"):
+        if isinstance(event, MessageDeltaEvent):
+            print(event.content, end="", flush=True)
+    print()
+```
+
+### Complete Event Handling
+
+```python
+from superserve_sdk import (
+    Superserve,
+    MessageDeltaEvent,
+    ToolStartEvent,
+    ToolEndEvent,
+    RunCompletedEvent,
+    RunFailedEvent,
+)
+
+async with Superserve() as client:
+    async for event in client.stream("code-agent", "List files"):
+        match event:
+            case MessageDeltaEvent():
+                print(event.content, end="", flush=True)
+            case ToolStartEvent():
+                print(f"\n[{event.tool}]", end="")
+            case ToolEndEvent():
+                print(f" done ({event.duration_ms}ms)")
+            case RunCompletedEvent():
+                print(f"\n\nTokens: {event.usage.total_tokens}")
+            case RunFailedEvent():
+                print(f"\nFailed: {event.error_message}")
+```
+
+<Note>
+  For sync clients, `stream()` collects all events before yielding. Use the async client for true real-time streaming.
+</Note>

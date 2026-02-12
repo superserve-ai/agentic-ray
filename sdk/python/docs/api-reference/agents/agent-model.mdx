@@ -1,0 +1,124 @@
+---
+title: 'Agent Model'
+description: 'The Agent data model and its properties'
+icon: 'robot'
+---
+
+The `Agent` class represents a configured AI agent in Superserve.
+
+## Definition
+
+```python
+from pydantic import BaseModel
+from datetime import datetime
+
+class Agent(BaseModel):
+    id: str
+    name: str
+    model: str
+    system_prompt: str
+    tools: list[str]
+    max_turns: int
+    timeout_seconds: int
+    status: str
+    created_at: datetime
+    updated_at: datetime
+```
+
+## Properties
+
+<ParamField path="id" type="str" required>
+  Unique identifier for the agent. Format: `agt_` followed by a random string.
+
+  Example: `agt_abc123def456`
+</ParamField>
+
+<ParamField path="name" type="str" required>
+  Human-readable name for the agent. Must be:
+  - 1-63 characters long
+  - Start with a letter
+  - Contain only lowercase letters, numbers, and hyphens
+  - Not end with a hyphen
+
+  Example: `code-reviewer-v2`
+</ParamField>
+
+<ParamField path="model" type="str" required>
+  The AI model used by the agent.
+
+  Example: `claude-sonnet-4-20250514`
+</ParamField>
+
+<ParamField path="system_prompt" type="str" required>
+  System instructions that define the agent's behavior and personality.
+</ParamField>
+
+<ParamField path="tools" type="list[str]" required>
+  List of tools available to the agent. Options:
+  - `Bash` - Execute shell commands
+  - `Read` - Read file contents
+  - `Write` - Write to files
+  - `Edit` - Edit file contents
+  - `Glob` - Find files by pattern
+  - `Grep` - Search file contents
+</ParamField>
+
+<ParamField path="max_turns" type="int" required>
+  Maximum number of conversation turns allowed. Range: 1-100.
+</ParamField>
+
+<ParamField path="timeout_seconds" type="int" required>
+  Execution timeout in seconds. Range: 10-3600.
+</ParamField>
+
+<ParamField path="status" type="str" required>
+  Current status of the agent:
+  - `active` - Agent is available for runs
+  - `deleted` - Agent has been deleted
+</ParamField>
+
+<ParamField path="created_at" type="datetime" required>
+  Timestamp when the agent was created.
+</ParamField>
+
+<ParamField path="updated_at" type="datetime" required>
+  Timestamp when the agent was last modified.
+</ParamField>
+
+## Example
+
+```python
+from superserve_sdk import Superserve
+
+async with Superserve() as client:
+    agent = await client.create_agent(
+        name="my-agent",
+        model="claude-sonnet-4-20250514",
+        system_prompt="You are a helpful assistant.",
+        tools=["Bash", "Read", "Write"],
+        max_turns=20,
+        timeout_seconds=300,
+    )
+
+    print(f"ID: {agent.id}")
+    print(f"Name: {agent.name}")
+    print(f"Model: {agent.model}")
+    print(f"Tools: {agent.tools}")
+    print(f"Status: {agent.status}")
+    print(f"Created: {agent.created_at}")
+```
+
+## Serialization
+
+The Agent model can be serialized to dict or JSON:
+
+```python
+# To dict
+agent_dict = agent.model_dump()
+
+# To JSON string
+agent_json = agent.model_dump_json()
+
+# From dict
+agent = Agent.model_validate(agent_dict)
+```

@@ -1,0 +1,72 @@
+---
+title: 'get_run'
+description: 'Get a run by ID'
+icon: 'magnifying-glass'
+---
+
+Retrieves a run by its ID.
+
+## Signature
+
+```python
+async def get_run(run_id: str) -> Run
+```
+
+## Parameters
+
+<ParamField path="run_id" type="str" required>
+  Run ID. The `run_` prefix is optional.
+</ParamField>
+
+## Returns
+
+<ResponseField name="Run" type="Run">
+  The run.
+</ResponseField>
+
+## Errors
+
+| Error | Cause |
+|-------|-------|
+| `NotFoundError` | Run not found |
+| `AuthenticationError` | Invalid API key |
+
+## Examples
+
+<CodeGroup>
+```python Async
+from superserve_sdk import Superserve
+
+async with Superserve() as client:
+    # Full ID
+    run = await client.get_run("run_xyz789")
+
+    # Without prefix (also works)
+    run = await client.get_run("xyz789")
+
+    print(f"Status: {run.status}")
+    print(f"Output: {run.output}")
+```
+
+```python Sync
+from superserve_sdk import SuperserveSync
+
+with SuperserveSync() as client:
+    run = client.get_run("run_xyz789")
+    print(f"Status: {run.status}")
+```
+</CodeGroup>
+
+## Polling Pattern
+
+```python
+import asyncio
+
+run = await client.run("agent", "Long task...", wait=False)
+
+while run.status in ("pending", "running"):
+    await asyncio.sleep(5)
+    run = await client.get_run(run.id)
+
+print(f"Final status: {run.status}")
+```

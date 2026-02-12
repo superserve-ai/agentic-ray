@@ -1,0 +1,409 @@
+---
+title: "Running Agents"
+description: "Execute agent runs, handle outputs, manage run lifecycle, and work with sessions"
+icon: "play"
+---
+
+Runs are individual executions of an agent with a specific prompt. This guide covers how to create runs, handle outputs, and manage run lifecycle.
+
+## Running an Agent
+
+The simplest way to run an agent is with `client.runs.run()`:
+
+```typescript
+const output = await client.runs.run({
+  agentId: 'agt_abc123',
+  prompt: 'List all TypeScript files in the src directory'
+});
+
+console.log(output);
+```
+
+<Steps>
+  <Step title="Creates a new run">
+    A new run is initialized with the provided agent and prompt
+  </Step>
+  <Step title="Streams all events internally">
+    The SDK handles the streaming connection automatically
+  </Step>
+  <Step title="Returns the final output">
+    The accumulated output is returned when the run completes
+  </Step>
+</Steps>
+
+## Streaming Runs
+
+For real-time output, use `client.runs.stream()`:
+
+<CodeGroup>
+```typescript Node.js
+const stream = await client.runs.stream({
+  agentId: 'agt_abc123',
+  prompt: 'Explain how this codebase is organized'
+});
+
+for await (const event of stream) {
+  if (event.type === 'message.delta') {
+    process.stdout.write(event.content);
+  }
+}
+```
+
+```typescript Browser
+const stream = await client.runs.stream({
+  agentId: 'agt_abc123',
+  prompt: 'Explain how this codebase is organized'
+});
+
+const outputEl = document.getElementById('output');
+for await (const event of stream) {
+  if (event.type === 'message.delta') {
+    outputEl.textContent += event.content;
+  }
+}
+```
+</CodeGroup>
+
+<Note>
+  See [Streaming](/streaming) for detailed streaming documentation.
+</Note>
+
+## Run Options
+
+```typescript
+interface CreateRunOptions {
+  // Required: The agent to run
+  agentId: string;
+
+  // Required: The prompt to send
+  prompt: string;
+
+  // Optional: Session ID for conversation continuity
+  sessionId?: string;
+}
+```
+
+### Agent ID
+
+<Info>
+  The `agt_` prefix is optional - both formats work the same:
+  - `agt_abc123`
+  - `abc123`
+</Info>
+
+### Sessions
+
+Use `sessionId` to maintain conversation history across multiple runs:
+
+```typescript
+// First message
+const run1 = await client.runs.stream({
+  agentId,
+  prompt: 'What files are in the project?',
+  sessionId: 'sess_conversation1'
+});
+
+// Follow-up (agent remembers previous context)
+const run2 = await client.runs.stream({
+  agentId,
+  prompt: 'Now describe the main.ts file',
+  sessionId: 'sess_conversation1'
+});
+```
+
+## Getting a Run
+
+Retrieve run details by ID:
+
+```typescript
+const run = await client.runs.get('run_xyz789');
+
+console.log(run.status);      // 'completed', 'running', etc.
+console.log(run.output);      // Final output (if completed)
+console.log(run.usage);       // Token usage metrics
+console.log(run.durationMs);  // Run duration
+console.log(run.toolsUsed);   // Tools that were invoked
+```
+
+## Listing Runs
+
+List runs with optional filters:
+
+<Tabs>
+  <Tab title="All Runs">
+    ```typescript
+    const runs = await client.runs.list();
+    ```
+  </Tab>
+  <Tab title="By Agent">
+    ```typescript
+    const agentRuns = await client.runs.list({
+      agentId: 'agt_abc123'
+    });
+    ```
+  </Tab>
+  <Tab title="By Status">
+    ```typescript
+    const completedRuns = await client.runs.list({
+      status: 'completed',
+      limit: 20
+    });
+    ```
+  </Tab>
+  <Tab title="With Pagination">
+    ```typescript
+    const page = await client.runs.list({
+      agentId: 'agt_abc123',
+      status: 'completed',
+      limit: 10,
+      offset: 0
+    });
+    ```
+  </Tab>
+</Tabs>
+
+### List Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `agentId` | string | Filter by agent |
+| `status` | RunStatus | Filter by status |
+| `limit` | number | Results per page (1-100) |
+| `offset` | number | Skip this many results |
+
+## Cancelling a Run
+
+Cancel a running or pending run:
+
+```typescript
+const cancelled = await client.runs.cancel('run_xyz789');
+
+console.log(cancelled.status); // 'cancelled'
+```
+
+<Warning>
+  Only runs with status `pending` or `running` can be cancelled.
+</Warning>
+
+## Resuming a Stream
+
+If a connection is lost during streaming, resume from an existing run:
+
+```typescript
+try {
+  const stream = await client.runs.stream({ agentId, prompt });
+
+  for await (const event of stream) {
+    // Process events...
+  }
+} catch (error) {
+  // Connection lost - resume streaming
+  const resumed = await client.runs.resumeStream('run_xyz789');
+
+  for await (const event of resumed) {
+    // Continue processing...
+  }
+}
+```
+
+## Run Object
+
+The `Run` type contains all run information:
+
+```typescript
+interface Run {
+  id: string;               // Unique ID (e.g., 'run_xyz789')
+  agentId: string;          // Agent that ran
+  status: RunStatus;        // Current status
+  prompt: string;           // The input prompt
+  output: string | null;    // Final output (if completed)
+  errorMessage: string | null; // Error message (if failed)
+  sessionId: string | null; // Session ID if provided
+  usage: UsageMetrics | null; // Token usage
+  turns: number;            // Number of conversation turns
+  durationMs: number;       // Total duration
+  toolsUsed: string[];      // Tools invoked during run
+  createdAt: string;        // ISO timestamp
+  startedAt: string | null; // When run started
+  completedAt: string | null; // When run completed
+}
+```
+
+### Run Status
+
+<CardGroup cols={5}>
+  <Card title="pending" icon="clock">
+    Waiting to start
+  </Card>
+  <Card title="running" icon="spinner">
+    Currently executing
+  </Card>
+  <Card title="completed" icon="check">
+    Finished successfully
+  </Card>
+  <Card title="failed" icon="xmark">
+    Failed with error
+  </Card>
+  <Card title="cancelled" icon="ban">
+    Cancelled by user
+  </Card>
+</CardGroup>
+
+```typescript
+type RunStatus =
+  | 'pending'    // Waiting to start
+  | 'running'    // Currently executing
+  | 'completed'  // Finished successfully
+  | 'failed'     // Failed with error
+  | 'cancelled'  // Cancelled by user
+```
+
+### Usage Metrics
+
+```typescript
+interface UsageMetrics {
+  inputTokens: number;   // Tokens in prompt
+  outputTokens: number;  // Tokens in response
+  totalTokens: number;   // inputTokens + outputTokens
+}
+```
+
+## Error Handling
+
+```typescript
+import {
+  NotFoundError,
+  ConflictError,
+  RunFailedError,
+  RunCancelledError,
+  AuthenticationError
+} from '@superserve/sdk';
+
+try {
+  const output = await client.runs.run({ agentId, prompt });
+} catch (error) {
+  if (error instanceof RunFailedError) {
+    console.error(`Run ${error.runId} failed: ${error.message}`);
+    console.error('Error code:', error.code);
+  } else if (error instanceof RunCancelledError) {
+    console.error(`Run ${error.runId} was cancelled`);
+  } else if (error instanceof NotFoundError) {
+    console.error('Agent not found');
+  } else if (error instanceof ConflictError) {
+    console.error('Cannot cancel: run already completed');
+  }
+}
+```
+
+### Common Error Codes
+
+| Code | Description |
+|------|-------------|
+| `timeout` | Run exceeded the agent's timeout |
+| `max_turns_exceeded` | Exceeded maxTurns limit |
+| `execution_error` | Tool execution failed |
+| `model_error` | AI model returned an error |
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Streaming for Long-Running Tasks" icon="bolt">
+    Streaming provides real-time feedback for complex tasks:
+
+    ```typescript
+    // Good for long tasks - provides real-time feedback
+    const stream = await client.runs.stream({
+      agentId,
+      prompt: 'Analyze all files in the project'
+    });
+
+    for await (const event of stream) {
+      if (event.type === 'message.delta') {
+        process.stdout.write(event.content);
+      }
+    }
+
+    // Quick tasks can use run()
+    const output = await client.runs.run({
+      agentId,
+      prompt: 'What is 2 + 2?'
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Handle Streaming Errors Gracefully" icon="shield">
+    Always wrap streams in try-catch and check failure details:
+
+    ```typescript
+    const stream = await client.runs.stream({ agentId, prompt });
+
+    try {
+      for await (const event of stream) {
+        // Process events...
+      }
+    } catch (error) {
+      if (error instanceof RunFailedError) {
+        // Check stream.failure for details
+        console.error(stream.failure?.error);
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use Sessions for Multi-Turn Conversations" icon="comments">
+    Sessions maintain context across multiple runs:
+
+    ```typescript
+    const sessionId = `sess_${Date.now()}`;
+
+    async function chat(message: string) {
+      return client.runs.run({
+        agentId,
+        prompt: message,
+        sessionId
+      });
+    }
+
+    await chat('Hello! What can you do?');
+    await chat('Great! Now help me with X');
+    await chat('Thanks! One more thing...');
+    ```
+  </Accordion>
+
+  <Accordion title="Monitor Usage" icon="chart-line">
+    Track token usage for cost management:
+
+    ```typescript
+    const stream = await client.runs.stream({ agentId, prompt });
+    await stream.finalMessage();
+
+    if (stream.metrics) {
+      console.log('Tokens used:', stream.metrics.usage.totalTokens);
+      console.log('Duration:', stream.metrics.durationMs, 'ms');
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## TypeScript Types
+
+Import types for type-safe usage:
+
+```typescript
+import type {
+  Run,
+  RunStatus,
+  CreateRunOptions,
+  ListRunsOptions,
+  UsageMetrics
+} from '@superserve/sdk';
+
+const options: CreateRunOptions = {
+  agentId: 'agt_abc123',
+  prompt: 'Hello, agent!',
+  sessionId: 'sess_xyz'
+};
+
+const run: Run = await client.runs.get('run_xyz789');
+const usage: UsageMetrics | null = run.usage;
+```

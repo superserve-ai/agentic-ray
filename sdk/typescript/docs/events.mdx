@@ -1,0 +1,425 @@
+---
+title: "Event Types Reference"
+description: "Complete reference for all SSE event types emitted during agent runs"
+icon: "list"
+---
+
+The Superserve SDK uses Server-Sent Events (SSE) to stream real-time updates during agent runs. This guide documents all event types and their TypeScript definitions.
+
+## Event Overview
+
+<CardGroup cols={2}>
+  <Card title="run.started" icon="play">
+    Run has started executing
+  </Card>
+  <Card title="message.delta" icon="message">
+    Text output chunk from the agent
+  </Card>
+  <Card title="tool.start" icon="wrench">
+    Agent started using a tool
+  </Card>
+  <Card title="tool.end" icon="check">
+    Tool execution completed
+  </Card>
+  <Card title="run.completed" icon="flag-checkered">
+    Run finished successfully
+  </Card>
+  <Card title="run.failed" icon="xmark">
+    Run encountered an error
+  </Card>
+  <Card title="run.cancelled" icon="ban">
+    Run was cancelled
+  </Card>
+</CardGroup>
+
+## RunEvent Union Type
+
+All events are part of a discriminated union:
+
+```typescript
+type RunEvent =
+  | RunStartedEvent
+  | MessageDeltaEvent
+  | ToolStartEvent
+  | ToolEndEvent
+  | RunCompletedEvent
+  | RunFailedEvent
+  | RunCancelledEvent;
+```
+
+Use the `type` property to discriminate:
+
+```typescript
+for await (const event of stream) {
+  switch (event.type) {
+    case 'run.started':
+      // event is RunStartedEvent
+      break;
+    case 'message.delta':
+      // event is MessageDeltaEvent
+      break;
+    // ... etc
+  }
+}
+```
+
+## Event Definitions
+
+### RunStartedEvent
+
+Emitted when a run begins execution.
+
+```typescript
+interface RunStartedEvent {
+  type: 'run.started';
+  runId: string;
+}
+```
+
+```typescript Example
+if (event.type === 'run.started') {
+  console.log(`Run ${event.runId} started`);
+}
+```
+
+### MessageDeltaEvent
+
+Emitted for each chunk of text output from the agent.
+
+```typescript
+interface MessageDeltaEvent {
+  type: 'message.delta';
+  content: string;
+}
+```
+
+```typescript Example
+let fullMessage = '';
+
+for await (const event of stream) {
+  if (event.type === 'message.delta') {
+    fullMessage += event.content;
+    process.stdout.write(event.content);
+  }
+}
+```
+
+<Note>
+  - Content may be partial words or sentences
+  - Order is guaranteed; concatenate all deltas for full message
+  - May contain newlines and special characters
+</Note>
+
+### ToolStartEvent
+
+Emitted when the agent starts using a tool.
+
+```typescript
+interface ToolStartEvent {
+  type: 'tool.start';
+  tool: string;
+  input: Record<string, unknown>;
+}
+```
+
+```typescript Example
+if (event.type === 'tool.start') {
+  console.log(`Using tool: ${event.tool}`);
+  console.log('Input:', JSON.stringify(event.input, null, 2));
+}
+```
+
+<Accordion title="Tool-specific inputs">
+  ```typescript
+  // Bash tool
+  { tool: 'Bash', input: { command: 'ls -la' } }
+
+  // Read tool
+  { tool: 'Read', input: { path: '/path/to/file.ts' } }
+
+  // Write tool
+  { tool: 'Write', input: { path: '/path/to/file.ts', content: '...' } }
+
+  // Glob tool
+  { tool: 'Glob', input: { pattern: '**/*.ts' } }
+
+  // Grep tool
+  { tool: 'Grep', input: { pattern: 'TODO', path: './src' } }
+  ```
+</Accordion>
+
+### ToolEndEvent
+
+Emitted when a tool execution completes.
+
+```typescript
+interface ToolEndEvent {
+  type: 'tool.end';
+  tool: string;
+  output: string;
+  durationMs: number;
+}
+```
+
+```typescript Example
+if (event.type === 'tool.end') {
+  console.log(`Tool ${event.tool} completed in ${event.durationMs}ms`);
+  console.log('Output:', event.output);
+}
+```
+
+<Info>
+  - `output` may be truncated for large results
+  - `durationMs` is the tool execution time only
+</Info>
+
+### RunCompletedEvent
+
+Emitted when a run finishes successfully.
+
+```typescript
+interface RunCompletedEvent {
+  type: 'run.completed';
+  runId: string;
+  usage: UsageMetrics;
+  durationMs: number;
+}
+
+interface UsageMetrics {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+```
+
+```typescript Example
+if (event.type === 'run.completed') {
+  console.log(`Run ${event.runId} completed`);
+  console.log(`Duration: ${event.durationMs}ms`);
+  console.log(`Tokens used: ${event.usage.totalTokens}`);
+}
+```
+
+### RunFailedEvent
+
+Emitted when a run encounters an error.
+
+```typescript
+interface RunFailedEvent {
+  type: 'run.failed';
+  runId: string;
+  error: RunError;
+}
+
+interface RunError {
+  code?: string;
+  message: string;
+}
+```
+
+```typescript Example
+if (event.type === 'run.failed') {
+  console.error(`Run ${event.runId} failed`);
+  console.error(`Error: ${event.error.message}`);
+  if (event.error.code) {
+    console.error(`Code: ${event.error.code}`);
+  }
+}
+```
+
+#### Common Error Codes
+
+| Code | Description |
+|------|-------------|
+| `timeout` | Run exceeded timeout |
+| `max_turns_exceeded` | Exceeded turn limit |
+| `execution_error` | Tool execution failed |
+| `model_error` | AI model error |
+
+### RunCancelledEvent
+
+Emitted when a run is cancelled by the user.
+
+```typescript
+interface RunCancelledEvent {
+  type: 'run.cancelled';
+  runId: string;
+}
+```
+
+```typescript Example
+if (event.type === 'run.cancelled') {
+  console.log(`Run ${event.runId} was cancelled`);
+}
+```
+
+## Event Type Guard Functions
+
+Create type guards for cleaner code:
+
+```typescript
+function isMessageDelta(event: RunEvent): event is MessageDeltaEvent {
+  return event.type === 'message.delta';
+}
+
+function isToolEvent(event: RunEvent): event is ToolStartEvent | ToolEndEvent {
+  return event.type === 'tool.start' || event.type === 'tool.end';
+}
+
+function isTerminalEvent(event: RunEvent): event is RunCompletedEvent | RunFailedEvent | RunCancelledEvent {
+  return ['run.completed', 'run.failed', 'run.cancelled'].includes(event.type);
+}
+
+// Usage
+for await (const event of stream) {
+  if (isMessageDelta(event)) {
+    process.stdout.write(event.content);
+  } else if (isTerminalEvent(event)) {
+    break;
+  }
+}
+```
+
+## Event Ordering
+
+Events follow this general order:
+
+<Steps>
+  <Step title="run.started">
+    Always first - indicates the run has begun
+  </Step>
+  <Step title="message.delta / tool.start / tool.end">
+    Interleaved during execution - multiple events of each type
+  </Step>
+  <Step title="Terminal Event">
+    Always last - either `run.completed`, `run.failed`, or `run.cancelled`
+  </Step>
+</Steps>
+
+<Tabs>
+  <Tab title="Successful Run">
+    ```
+    run.started
+    message.delta (multiple)
+    tool.start
+    tool.end
+    message.delta (multiple)
+    run.completed
+    ```
+  </Tab>
+  <Tab title="Failed Run">
+    ```
+    run.started
+    message.delta
+    run.failed
+    ```
+  </Tab>
+  <Tab title="Cancelled Run">
+    ```
+    run.started
+    message.delta
+    tool.start
+    run.cancelled
+    ```
+  </Tab>
+</Tabs>
+
+## Complete Event Handler Example
+
+```typescript
+import type { RunEvent } from '@superserve/sdk';
+
+function createEventHandler() {
+  let messageContent = '';
+  const toolCalls: { tool: string; duration: number }[] = [];
+
+  return {
+    handle(event: RunEvent): void {
+      switch (event.type) {
+        case 'run.started':
+          console.log(`[START] Run ${event.runId}`);
+          break;
+
+        case 'message.delta':
+          messageContent += event.content;
+          process.stdout.write(event.content);
+          break;
+
+        case 'tool.start':
+          console.log(`\n[TOOL] ${event.tool} starting...`);
+          break;
+
+        case 'tool.end':
+          console.log(`[TOOL] ${event.tool} completed (${event.durationMs}ms)`);
+          toolCalls.push({ tool: event.tool, duration: event.durationMs });
+          break;
+
+        case 'run.completed':
+          console.log('\n[DONE]');
+          console.log(`Duration: ${event.durationMs}ms`);
+          console.log(`Tokens: ${event.usage.totalTokens}`);
+          break;
+
+        case 'run.failed':
+          console.error(`\n[ERROR] ${event.error.message}`);
+          break;
+
+        case 'run.cancelled':
+          console.log('\n[CANCELLED]');
+          break;
+      }
+    },
+
+    getResults() {
+      return { messageContent, toolCalls };
+    }
+  };
+}
+
+// Usage
+const handler = createEventHandler();
+for await (const event of stream) {
+  handler.handle(event);
+}
+const results = handler.getResults();
+```
+
+## SSE Wire Format
+
+Events are transmitted as Server-Sent Events:
+
+```
+event: run.started
+data: {"run_id": "run_abc123"}
+
+event: message.delta
+data: {"content": "Hello"}
+
+event: message.delta
+data: {"content": ", world!"}
+
+event: run.completed
+data: {"run_id": "run_abc123", "usage": {...}, "duration_ms": 1000}
+```
+
+<Note>
+  The SDK handles parsing automatically. For raw SSE parsing, see the [SSE utilities](/streaming#sse-utilities).
+</Note>
+
+## TypeScript Imports
+
+```typescript
+import type {
+  RunEvent,
+  RunEventType,
+  RunStartedEvent,
+  MessageDeltaEvent,
+  ToolStartEvent,
+  ToolEndEvent,
+  RunCompletedEvent,
+  RunFailedEvent,
+  RunCancelledEvent,
+  RunError,
+  UsageMetrics
+} from '@superserve/sdk';
+```

@@ -1,0 +1,83 @@
+---
+title: 'ToolEndEvent'
+description: 'Emitted when a tool execution completes'
+icon: 'check'
+---
+
+Emitted when a tool execution completes.
+
+## Definition
+
+```python
+class ToolEndEvent(BaseEvent):
+    run_id: str
+    type: str = "tool.end"
+    tool: str
+    tool_call_id: str
+    output: str
+    duration_ms: int
+    success: bool
+```
+
+## Properties
+
+<ParamField path="run_id" type="str" required>
+  The run identifier.
+</ParamField>
+
+<ParamField path="type" type="str" required>
+  Always `"tool.end"`.
+</ParamField>
+
+<ParamField path="tool" type="str" required>
+  Tool name.
+</ParamField>
+
+<ParamField path="tool_call_id" type="str" required>
+  Matches the corresponding `ToolStartEvent`.
+</ParamField>
+
+<ParamField path="output" type="str" required>
+  Tool output or error message.
+</ParamField>
+
+<ParamField path="duration_ms" type="int" required>
+  Execution time in milliseconds.
+</ParamField>
+
+<ParamField path="success" type="bool" required>
+  Whether the tool succeeded.
+</ParamField>
+
+## Example
+
+```python
+from superserve_sdk import Superserve, ToolEndEvent
+
+async with Superserve() as client:
+    async for event in client.stream("agent", "List files"):
+        if isinstance(event, ToolEndEvent):
+            if event.success:
+                print(f"{event.tool} succeeded in {event.duration_ms}ms")
+                print(f"Output: {event.output[:100]}...")
+            else:
+                print(f"{event.tool} failed: {event.output}")
+```
+
+## Matching Start and End Events
+
+```python
+tool_calls = {}
+
+async for event in client.stream("agent", "Task"):
+    if isinstance(event, ToolStartEvent):
+        tool_calls[event.tool_call_id] = {
+            "tool": event.tool,
+            "input": event.input,
+        }
+    elif isinstance(event, ToolEndEvent):
+        call = tool_calls[event.tool_call_id]
+        call["output"] = event.output
+        call["success"] = event.success
+        call["duration_ms"] = event.duration_ms
+```

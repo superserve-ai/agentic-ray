@@ -1,0 +1,251 @@
+---
+title: 'Superserve'
+description: 'Async client for the Superserve API'
+icon: 'plug'
+---
+
+The main async client class for interacting with the Superserve API.
+
+## Constructor
+
+```python
+Superserve(
+    api_key: str | None = None,
+    base_url: str = "https://api.superserve.ai",
+    timeout: float = 60.0,
+    credentials_path: Path | None = None,
+)
+```
+
+### Parameters
+
+<ParamField path="api_key" type="str | None" default="None">
+  API key for authentication. If not provided, loaded from environment or credentials file.
+</ParamField>
+
+<ParamField path="base_url" type="str" default="https://api.superserve.ai">
+  Base URL for the Superserve API.
+</ParamField>
+
+<ParamField path="timeout" type="float" default="60.0">
+  Default timeout for HTTP requests in seconds.
+</ParamField>
+
+<ParamField path="credentials_path" type="Path | None" default="None">
+  Custom path to credentials file. Defaults to `~/.superserve/credentials.json`.
+</ParamField>
+
+## Usage
+
+The client should be used as an async context manager:
+
+```python
+from superserve_sdk import Superserve
+
+async with Superserve() as client:
+    agents = await client.list_agents()
+```
+
+Or manually manage the lifecycle:
+
+```python
+client = Superserve()
+await client.__aenter__()
+try:
+    agents = await client.list_agents()
+finally:
+    await client.__aexit__(None, None, None)
+```
+
+## Agent Methods
+
+### create_agent
+
+```python
+async def create_agent(
+    name: str,
+    model: str = "claude-sonnet-4-20250514",
+    system_prompt: str = "",
+    tools: list[str] = ["Bash", "Read", "Write", "Glob", "Grep"],
+    max_turns: int = 10,
+    timeout_seconds: int = 300,
+) -> Agent
+```
+
+Creates a new agent.
+
+<ResponseField name="returns" type="Agent">
+  The created agent.
+</ResponseField>
+
+### list_agents
+
+```python
+async def list_agents(
+    limit: int = 20,
+    offset: int = 0,
+) -> list[Agent]
+```
+
+Lists all agents.
+
+<ResponseField name="returns" type="list[Agent]">
+  List of agents.
+</ResponseField>
+
+### get_agent
+
+```python
+async def get_agent(agent_id: str) -> Agent
+```
+
+Gets an agent by ID or name.
+
+<ResponseField name="returns" type="Agent">
+  The agent.
+</ResponseField>
+
+### update_agent
+
+```python
+async def update_agent(
+    agent_id: str,
+    model: str | None = None,
+    system_prompt: str | None = None,
+    tools: list[str] | None = None,
+    max_turns: int | None = None,
+    timeout_seconds: int | None = None,
+) -> Agent
+```
+
+Updates an agent's configuration.
+
+<ResponseField name="returns" type="Agent">
+  The updated agent.
+</ResponseField>
+
+### delete_agent
+
+```python
+async def delete_agent(agent_id: str) -> None
+```
+
+Deletes an agent.
+
+## Run Methods
+
+### run
+
+```python
+async def run(
+    agent_id: str,
+    prompt: str,
+    session_id: str | None = None,
+    wait: bool = True,
+    poll_interval: float = 1.0,
+) -> Run
+```
+
+Runs an agent with a prompt.
+
+<ResponseField name="returns" type="Run">
+  The run result.
+</ResponseField>
+
+### stream
+
+```python
+async def stream(
+    agent_id: str,
+    prompt: str,
+    session_id: str | None = None,
+) -> AsyncIterator[RunEvent]
+```
+
+Streams events from an agent execution.
+
+<ResponseField name="returns" type="AsyncIterator[RunEvent]">
+  Async iterator of run events.
+</ResponseField>
+
+### stream_with_metrics
+
+```python
+async def stream_with_metrics(
+    agent_id: str,
+    prompt: str,
+    session_id: str | None = None,
+) -> tuple[AsyncIterator[RunEvent], MetricsHandle]
+```
+
+Streams events with automatic metrics collection.
+
+<ResponseField name="returns" type="tuple[AsyncIterator[RunEvent], MetricsHandle]">
+  Tuple of event iterator and metrics handle.
+</ResponseField>
+
+### get_run
+
+```python
+async def get_run(run_id: str) -> Run
+```
+
+Gets a run by ID.
+
+<ResponseField name="returns" type="Run">
+  The run.
+</ResponseField>
+
+### list_runs
+
+```python
+async def list_runs(
+    agent_id: str | None = None,
+    status: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> list[Run]
+```
+
+Lists runs with optional filters.
+
+<ResponseField name="returns" type="list[Run]">
+  List of runs.
+</ResponseField>
+
+### cancel_run
+
+```python
+async def cancel_run(run_id: str) -> Run
+```
+
+Cancels a running or pending run.
+
+<ResponseField name="returns" type="Run">
+  The cancelled run.
+</ResponseField>
+
+## Example
+
+```python
+import asyncio
+from superserve_sdk import Superserve, MessageDeltaEvent
+
+async def main():
+    async with Superserve() as client:
+        # Create an agent
+        agent = await client.create_agent(
+            name="my-agent",
+            system_prompt="You are helpful.",
+        )
+
+        # Stream a response
+        async for event in client.stream(agent.id, "Hello!"):
+            if isinstance(event, MessageDeltaEvent):
+                print(event.content, end="", flush=True)
+
+        # Clean up
+        await client.delete_agent(agent.id)
+
+asyncio.run(main())
+```

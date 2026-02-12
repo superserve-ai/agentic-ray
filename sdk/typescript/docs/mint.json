@@ -1,0 +1,80 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "Superserve TypeScript SDK",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#3178c6",
+    "light": "#4b9cd3",
+    "dark": "#235a97",
+    "anchors": {
+      "from": "#3178c6",
+      "to": "#4b9cd3"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "Support",
+      "url": "mailto:support@superserve.ai"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Dashboard",
+    "url": "https://dashboard.superserve.ai"
+  },
+  "tabs": [
+    {
+      "name": "API Reference",
+      "url": "api-reference"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": ["index", "authentication"]
+    },
+    {
+      "group": "Core Concepts",
+      "pages": ["agents", "runs", "streaming", "events"]
+    },
+    {
+      "group": "Advanced",
+      "pages": ["errors", "examples"]
+    },
+    {
+      "group": "API Reference",
+      "pages": ["api-reference/overview", "api-reference/client", "api-reference/agents", "api-reference/runs", "api-reference/streaming", "api-reference/types", "api-reference/errors"]
+    }
+  ],
+  "footerSocials": {
+    "github": "https://github.com/superserve-ai/superserve-sdk-ts",
+    "twitter": "https://twitter.com/superserve_ai",
+    "linkedin": "https://linkedin.com/company/superserve-ai"
+  },
+  "feedback": {
+    "thumbsRating": true,
+    "suggestEdit": true,
+    "raiseIssue": true
+  },
+  "analytics": {
+    "posthog": {
+      "apiKey": "YOUR_POSTHOG_API_KEY"
+    }
+  },
+  "api": {
+    "baseUrl": "https://api.superserve.ai",
+    "auth": {
+      "method": "bearer"
+    }
+  },
+  "backgroundImage": "/background.png",
+  "modeToggle": {
+    "default": "dark"
+  },
+  "seo": {
+    "indexHiddenPages": false
+  }
+}

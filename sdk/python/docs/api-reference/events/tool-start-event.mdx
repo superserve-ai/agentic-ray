@@ -1,0 +1,65 @@
+---
+title: 'ToolStartEvent'
+description: 'Emitted when a tool execution begins'
+icon: 'gear'
+---
+
+Emitted when a tool execution begins.
+
+## Definition
+
+```python
+from typing import Any
+
+class ToolStartEvent(BaseEvent):
+    run_id: str
+    type: str = "tool.start"
+    tool: str
+    tool_call_id: str
+    input: dict[str, Any]
+```
+
+## Properties
+
+<ParamField path="run_id" type="str" required>
+  The run identifier.
+</ParamField>
+
+<ParamField path="type" type="str" required>
+  Always `"tool.start"`.
+</ParamField>
+
+<ParamField path="tool" type="str" required>
+  Tool name: `Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`.
+</ParamField>
+
+<ParamField path="tool_call_id" type="str" required>
+  Unique identifier for this tool call. Used to match with `ToolEndEvent`.
+</ParamField>
+
+<ParamField path="input" type="dict[str, Any]" required>
+  Tool input parameters.
+</ParamField>
+
+## Tool Input Examples
+
+| Tool | Input Example |
+|------|---------------|
+| Bash | `{"command": "ls -la"}` |
+| Read | `{"file_path": "/path/to/file.py"}` |
+| Write | `{"file_path": "/path/to/file.py", "content": "..."}` |
+| Glob | `{"pattern": "**/*.py"}` |
+| Grep | `{"pattern": "def main", "path": "/src"}` |
+
+## Example
+
+```python
+from superserve_sdk import Superserve, ToolStartEvent
+
+async with Superserve() as client:
+    async for event in client.stream("agent", "List files"):
+        if isinstance(event, ToolStartEvent):
+            print(f"Tool: {event.tool}")
+            print(f"ID: {event.tool_call_id}")
+            print(f"Input: {event.input}")
+```

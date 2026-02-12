@@ -1,0 +1,746 @@
+---
+title: "Code Examples"
+description: "Complete, working examples for common use cases with the Superserve SDK"
+icon: "code"
+---
+
+This page provides complete, working examples for common use cases with the Superserve SDK.
+
+## Node.js Examples
+
+<AccordionGroup>
+  <Accordion title="Basic Agent Interaction" icon="play" defaultOpen>
+    ```typescript
+    import { SuperserveClient } from '@superserve/sdk';
+
+    async function main() {
+      // Create client (uses SUPERSERVE_API_KEY env var)
+      const client = new SuperserveClient();
+
+      // Create an agent
+      const agent = await client.agents.create({
+        name: 'code-helper',
+        model: 'claude-sonnet-4-20250514',
+        systemPrompt: 'You are a helpful coding assistant.',
+        tools: ['Read', 'Glob', 'Grep']
+      });
+
+      console.log(`Created agent: ${agent.id}`);
+
+      // Run the agent
+      const output = await client.runs.run({
+        agentId: agent.id,
+        prompt: 'What TypeScript files are in the src directory?'
+      });
+
+      console.log('Response:', output);
+    }
+
+    main().catch(console.error);
+    ```
+  </Accordion>
+
+  <Accordion title="Real-Time Streaming" icon="bolt">
+    ```typescript
+    import { SuperserveClient } from '@superserve/sdk';
+
+    async function streamExample() {
+      const client = new SuperserveClient();
+
+      const stream = await client.runs.stream({
+        agentId: 'agt_abc123',
+        prompt: 'Explain async/await in JavaScript'
+      });
+
+      console.log('Run ID:', stream.run.id);
+      console.log('---');
+
+      for await (const event of stream) {
+        switch (event.type) {
+          case 'run.started':
+            console.log('[Started]');
+            break;
+
+          case 'message.delta':
+            process.stdout.write(event.content);
+            break;
+
+          case 'tool.start':
+            console.log(`\n[Tool: ${event.tool}]`);
+            break;
+
+          case 'tool.end':
+            console.log(`[Done: ${event.durationMs}ms]`);
+            break;
+
+          case 'run.completed':
+            console.log('\n---');
+            console.log(`Tokens: ${event.usage.totalTokens}`);
+            console.log(`Duration: ${event.durationMs}ms`);
+            break;
+
+          case 'run.failed':
+            console.error(`\n[Error] ${event.error.message}`);
+            break;
+        }
+      }
+    }
+
+    streamExample().catch(console.error);
+    ```
+  </Accordion>
+
+  <Accordion title="Multi-Turn Conversation" icon="comments">
+    ```typescript
+    import { SuperserveClient } from '@superserve/sdk';
+
+    async function conversation() {
+      const client = new SuperserveClient();
+      const agentId = 'agt_abc123';
+      const sessionId = `session_${Date.now()}`;
+
+      async function chat(message: string): Promise<string> {
+        console.log(`You: ${message}`);
+
+        const output = await client.runs.run({
+          agentId,
+          prompt: message,
+          sessionId
+        });
+
+        console.log(`Agent: ${output}`);
+        return output;
+      }
+
+      // Multi-turn conversation
+      await chat('Hello! What can you help me with?');
+      await chat('Can you explain what a Promise is?');
+      await chat('Now give me a code example of that.');
+      await chat('Thanks! One more thing - how do I handle errors?');
+    }
+
+    conversation().catch(console.error);
+    ```
+  </Accordion>
+
+  <Accordion title="Error Handling Example" icon="shield">
+    ```typescript
+    import {
+      SuperserveClient,
+      NotFoundError,
+      AuthenticationError,
+      RunFailedError,
+      ValidationError
+    } from '@superserve/sdk';
+
+    async function robustRun() {
+      const client = new SuperserveClient();
+
+      try {
+        const output = await client.runs.run({
+          agentId: 'agt_abc123',
+          prompt: 'List all files in the project'
+        });
+
+        console.log('Success:', output);
+      } catch (error) {
+        if (error instanceof AuthenticationError) {
+          console.error('Invalid API key. Please check your credentials.');
+          process.exit(1);
+        }
+
+        if (error instanceof NotFoundError) {
+          console.error('Agent not found. Create it first.');
+          process.exit(1);
+        }
+
+        if (error instanceof ValidationError) {
+          console.error('Invalid request:', error.message);
+          console.error('Details:', error.details);
+          process.exit(1);
+        }
+
+        if (error instanceof RunFailedError) {
+          console.error(`Run failed: ${error.message}`);
+          console.error(`Error code: ${error.code}`);
+          console.error(`Run ID: ${error.runId}`);
+
+          // Handle specific failure types
+          if (error.code === 'timeout') {
+            console.error('Consider increasing the agent timeout.');
+          }
+          process.exit(1);
+        }
+
+        // Unexpected error
+        throw error;
+      }
+    }
+
+    robustRun().catch(console.error);
+    ```
+  </Accordion>
+
+  <Accordion title="Agent CRUD Operations" icon="database">
+    ```typescript
+    import { SuperserveClient } from '@superserve/sdk';
+    import type { Agent } from '@superserve/sdk';
+
+    async function agentManagement() {
+      const client = new SuperserveClient();
+
+      // Create
+      const agent = await client.agents.create({
+        name: 'demo-agent',
+        model: 'claude-sonnet-4-20250514',
+        systemPrompt: 'You are a demo assistant.',
+        tools: ['Bash', 'Read', 'Write'],
+        maxTurns: 10,
+        timeoutSeconds: 300
+      });
+      console.log('Created:', agent.id);
+
+      // Read
+      const fetched = await client.agents.get(agent.id);
+      console.log('Name:', fetched.name);
+      console.log('Model:', fetched.model);
+      console.log('Tools:', fetched.tools);
+
+      // List
+      const agents = await client.agents.list({ limit: 10 });
+      console.log('Total agents:', agents.length);
+      agents.forEach(a => console.log(`  - ${a.name} (${a.id})`));
+
+      // Update
+      const updated = await client.agents.update(agent.id, {
+        systemPrompt: 'Updated system prompt.',
+        maxTurns: 20
+      });
+      console.log('Updated at:', updated.updatedAt);
+
+      // Delete
+      await client.agents.delete(agent.id);
+      console.log('Deleted');
+    }
+
+    agentManagement().catch(console.error);
+    ```
+  </Accordion>
+
+  <Accordion title="Streaming with Timeout" icon="clock">
+    ```typescript
+    import {
+      SuperserveClient,
+      StreamAbortedError,
+      RunFailedError
+    } from '@superserve/sdk';
+
+    async function streamWithTimeout(timeoutMs: number = 30000) {
+      const client = new SuperserveClient();
+
+      const stream = await client.runs.stream({
+        agentId: 'agt_abc123',
+        prompt: 'Analyze the entire codebase'
+      });
+
+      // Set up timeout
+      const timeout = setTimeout(() => {
+        console.log('\nTimeout reached, aborting...');
+        stream.abort();
+      }, timeoutMs);
+
+      try {
+        for await (const event of stream) {
+          if (event.type === 'message.delta') {
+            process.stdout.write(event.content);
+          }
+        }
+        console.log('\nCompleted successfully');
+      } catch (error) {
+        if (error instanceof StreamAbortedError) {
+          console.log('\nStream was aborted (timeout)');
+        } else if (error instanceof RunFailedError) {
+          console.error(`\nRun failed: ${error.message}`);
+        } else {
+          throw error;
+        }
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    streamWithTimeout(60000).catch(console.error);
+    ```
+  </Accordion>
+
+  <Accordion title="Run Monitoring" icon="chart-line">
+    ```typescript
+    import { SuperserveClient } from '@superserve/sdk';
+
+    async function monitorRuns() {
+      const client = new SuperserveClient();
+      const agentId = 'agt_abc123';
+
+      // Get all runs for an agent
+      const runs = await client.runs.list({
+        agentId,
+        limit: 100
+      });
+
+      // Calculate statistics
+      const completed = runs.filter(r => r.status === 'completed');
+      const failed = runs.filter(r => r.status === 'failed');
+
+      console.log('Run Statistics');
+      console.log('--------------');
+      console.log(`Total runs: ${runs.length}`);
+      console.log(`Completed: ${completed.length}`);
+      console.log(`Failed: ${failed.length}`);
+      console.log(`Success rate: ${((completed.length / runs.length) * 100).toFixed(1)}%`);
+
+      // Token usage
+      const totalTokens = completed.reduce(
+        (sum, r) => sum + (r.usage?.totalTokens ?? 0),
+        0
+      );
+      console.log(`Total tokens used: ${totalTokens}`);
+
+      // Average duration
+      const avgDuration = completed.reduce(
+        (sum, r) => sum + r.durationMs,
+        0
+      ) / completed.length;
+      console.log(`Average duration: ${(avgDuration / 1000).toFixed(2)}s`);
+
+      // Most used tools
+      const toolCounts: Record<string, number> = {};
+      for (const run of completed) {
+        for (const tool of run.toolsUsed) {
+          toolCounts[tool] = (toolCounts[tool] ?? 0) + 1;
+        }
+      }
+      console.log('\nTool Usage:');
+      Object.entries(toolCounts)
+        .sort((a, b) => b[1] - a[1])
+        .forEach(([tool, count]) => {
+          console.log(`  ${tool}: ${count} times`);
+        });
+    }
+
+    monitorRuns().catch(console.error);
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Browser Examples
+
+<Tabs>
+  <Tab title="React">
+    ```tsx
+    import React, { useState, useCallback } from 'react';
+    import { SuperserveClient, RunFailedError } from '@superserve/sdk';
+    import type { RunEvent } from '@superserve/sdk';
+
+    interface Message {
+      role: 'user' | 'assistant';
+      content: string;
+    }
+
+    function AgentChat({ apiKey, agentId }: { apiKey: string; agentId: string }) {
+      const [messages, setMessages] = useState<Message[]>([]);
+      const [input, setInput] = useState('');
+      const [isStreaming, setIsStreaming] = useState(false);
+
+      const client = new SuperserveClient({ apiKey });
+
+      const sendMessage = useCallback(async () => {
+        if (!input.trim() || isStreaming) return;
+
+        const userMessage = input;
+        setInput('');
+        setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+        setIsStreaming(true);
+
+        try {
+          const stream = await client.runs.stream({
+            agentId,
+            prompt: userMessage
+          });
+
+          let assistantContent = '';
+          setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
+          for await (const event of stream) {
+            if (event.type === 'message.delta') {
+              assistantContent += event.content;
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  role: 'assistant',
+                  content: assistantContent
+                };
+                return updated;
+              });
+            }
+          }
+        } catch (error) {
+          if (error instanceof RunFailedError) {
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: `Error: ${error.message}`
+            }]);
+          }
+        } finally {
+          setIsStreaming(false);
+        }
+      }, [input, isStreaming, agentId, client]);
+
+      return (
+        <div className="chat-container">
+          <div className="messages">
+            {messages.map((msg, i) => (
+              <div key={i} className={`message ${msg.role}`}>
+                <strong>{msg.role}:</strong> {msg.content}
+              </div>
+            ))}
+          </div>
+          <div className="input-area">
+            <input
+              type="text"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyPress={e => e.key === 'Enter' && sendMessage()}
+              disabled={isStreaming}
+              placeholder="Type a message..."
+            />
+            <button onClick={sendMessage} disabled={isStreaming}>
+              {isStreaming ? 'Sending...' : 'Send'}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    export default AgentChat;
+    ```
+  </Tab>
+  <Tab title="Vue 3">
+    ```typescript
+    // useAgent.ts
+    import { ref, Ref } from 'vue';
+    import { SuperserveClient, RunFailedError } from '@superserve/sdk';
+    import type { RunEvent } from '@superserve/sdk';
+
+    export function useAgent(apiKey: string, agentId: string) {
+      const client = new SuperserveClient({ apiKey });
+      const isLoading = ref(false);
+      const error = ref<string | null>(null);
+      const response = ref('');
+      const events = ref<RunEvent[]>([]);
+
+      async function run(prompt: string): Promise<string> {
+        isLoading.value = true;
+        error.value = null;
+        response.value = '';
+        events.value = [];
+
+        try {
+          const stream = await client.runs.stream({ agentId, prompt });
+
+          for await (const event of stream) {
+            events.value.push(event);
+
+            if (event.type === 'message.delta') {
+              response.value += event.content;
+            }
+          }
+
+          return response.value;
+        } catch (e) {
+          if (e instanceof RunFailedError) {
+            error.value = e.message;
+          } else {
+            error.value = 'An unexpected error occurred';
+          }
+          throw e;
+        } finally {
+          isLoading.value = false;
+        }
+      }
+
+      return {
+        isLoading,
+        error,
+        response,
+        events,
+        run
+      };
+    }
+
+    // Usage in component
+    // <script setup lang="ts">
+    // import { useAgent } from './useAgent';
+    //
+    // const { isLoading, error, response, run } = useAgent(API_KEY, AGENT_ID);
+    //
+    // async function handleSubmit(prompt: string) {
+    //   await run(prompt);
+    // }
+    // </script>
+    ```
+  </Tab>
+  <Tab title="Vanilla JS">
+    ```html
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Superserve SDK Demo</title>
+    </head>
+    <body>
+      <div id="app">
+        <textarea id="prompt" rows="4" placeholder="Enter your prompt..."></textarea>
+        <button id="run">Run Agent</button>
+        <div id="output"></div>
+      </div>
+
+      <script type="module">
+        import { SuperserveClient } from 'https://cdn.skypack.dev/@superserve/sdk';
+
+        const client = new SuperserveClient({
+          apiKey: 'YOUR_API_KEY'
+        });
+
+        const agentId = 'agt_abc123';
+        const promptEl = document.getElementById('prompt');
+        const outputEl = document.getElementById('output');
+        const runBtn = document.getElementById('run');
+
+        runBtn.addEventListener('click', async () => {
+          const prompt = promptEl.value.trim();
+          if (!prompt) return;
+
+          outputEl.textContent = '';
+          runBtn.disabled = true;
+
+          try {
+            const stream = await client.runs.stream({ agentId, prompt });
+
+            for await (const event of stream) {
+              if (event.type === 'message.delta') {
+                outputEl.textContent += event.content;
+              }
+            }
+          } catch (error) {
+            outputEl.textContent = `Error: ${error.message}`;
+          } finally {
+            runBtn.disabled = false;
+          }
+        });
+      </script>
+    </body>
+    </html>
+    ```
+  </Tab>
+</Tabs>
+
+## Advanced Examples
+
+<AccordionGroup>
+  <Accordion title="Parallel Agent Runs" icon="arrows-split-up-and-left">
+    ```typescript
+    import { SuperserveClient } from '@superserve/sdk';
+
+    async function parallelRuns() {
+      const client = new SuperserveClient();
+
+      const prompts = [
+        { agentId: 'agt_code', prompt: 'Review the main.ts file' },
+        { agentId: 'agt_docs', prompt: 'Generate documentation' },
+        { agentId: 'agt_test', prompt: 'Write unit tests' }
+      ];
+
+      // Run all in parallel
+      const results = await Promise.allSettled(
+        prompts.map(p => client.runs.run(p))
+      );
+
+      results.forEach((result, i) => {
+        if (result.status === 'fulfilled') {
+          console.log(`Task ${i + 1} completed:`, result.value.slice(0, 100) + '...');
+        } else {
+          console.error(`Task ${i + 1} failed:`, result.reason.message);
+        }
+      });
+    }
+
+    parallelRuns().catch(console.error);
+    ```
+  </Accordion>
+
+  <Accordion title="Custom Event Handler" icon="sliders">
+    ```typescript
+    import { SuperserveClient } from '@superserve/sdk';
+    import type { RunEvent } from '@superserve/sdk';
+
+    interface RunStats {
+      startTime: number;
+      endTime?: number;
+      messageLength: number;
+      toolCalls: Array<{ tool: string; duration: number }>;
+      tokens?: { input: number; output: number };
+    }
+
+    function createStatsCollector() {
+      const stats: RunStats = {
+        startTime: 0,
+        messageLength: 0,
+        toolCalls: []
+      };
+
+      return {
+        handle(event: RunEvent): void {
+          switch (event.type) {
+            case 'run.started':
+              stats.startTime = Date.now();
+              break;
+
+            case 'message.delta':
+              stats.messageLength += event.content.length;
+              break;
+
+            case 'tool.end':
+              stats.toolCalls.push({
+                tool: event.tool,
+                duration: event.durationMs
+              });
+              break;
+
+            case 'run.completed':
+              stats.endTime = Date.now();
+              stats.tokens = {
+                input: event.usage.inputTokens,
+                output: event.usage.outputTokens
+              };
+              break;
+          }
+        },
+
+        getStats(): RunStats {
+          return { ...stats };
+        },
+
+        printReport(): void {
+          const duration = (stats.endTime ?? Date.now()) - stats.startTime;
+          console.log('\n--- Run Statistics ---');
+          console.log(`Duration: ${duration}ms`);
+          console.log(`Message length: ${stats.messageLength} chars`);
+          console.log(`Tool calls: ${stats.toolCalls.length}`);
+          if (stats.toolCalls.length > 0) {
+            const totalToolTime = stats.toolCalls.reduce((s, t) => s + t.duration, 0);
+            console.log(`  Total tool time: ${totalToolTime}ms`);
+            stats.toolCalls.forEach(t => {
+              console.log(`  - ${t.tool}: ${t.duration}ms`);
+            });
+          }
+          if (stats.tokens) {
+            console.log(`Tokens: ${stats.tokens.input} in, ${stats.tokens.output} out`);
+          }
+        }
+      };
+    }
+
+    // Usage
+    async function runWithStats() {
+      const client = new SuperserveClient();
+      const stream = await client.runs.stream({
+        agentId: 'agt_abc123',
+        prompt: 'Analyze the project structure'
+      });
+
+      const collector = createStatsCollector();
+
+      for await (const event of stream) {
+        collector.handle(event);
+        if (event.type === 'message.delta') {
+          process.stdout.write(event.content);
+        }
+      }
+
+      collector.printReport();
+    }
+
+    runWithStats().catch(console.error);
+    ```
+  </Accordion>
+
+  <Accordion title="Retry Logic" icon="arrows-rotate">
+    ```typescript
+    import {
+      SuperserveClient,
+      SuperserveAPIError,
+      ValidationError,
+      AuthenticationError
+    } from '@superserve/sdk';
+
+    interface RetryOptions {
+      maxRetries: number;
+      baseDelay: number;
+      maxDelay: number;
+    }
+
+    async function runWithRetry(
+      client: SuperserveClient,
+      options: { agentId: string; prompt: string },
+      retryOptions: RetryOptions = { maxRetries: 3, baseDelay: 1000, maxDelay: 10000 }
+    ): Promise<string> {
+      let lastError: Error | undefined;
+
+      for (let attempt = 0; attempt <= retryOptions.maxRetries; attempt++) {
+        try {
+          return await client.runs.run(options);
+        } catch (error) {
+          lastError = error as Error;
+
+          // Don't retry on client errors
+          if (error instanceof ValidationError ||
+              error instanceof AuthenticationError) {
+            throw error;
+          }
+
+          // Retry on server errors
+          if (error instanceof SuperserveAPIError && error.status >= 500) {
+            if (attempt < retryOptions.maxRetries) {
+              const delay = Math.min(
+                retryOptions.baseDelay * Math.pow(2, attempt),
+                retryOptions.maxDelay
+              );
+              console.log(`Retry ${attempt + 1}/${retryOptions.maxRetries} in ${delay}ms...`);
+              await new Promise(r => setTimeout(r, delay));
+              continue;
+            }
+          }
+
+          throw error;
+        }
+      }
+
+      throw lastError;
+    }
+
+    // Usage
+    async function main() {
+      const client = new SuperserveClient();
+
+      const result = await runWithRetry(
+        client,
+        { agentId: 'agt_abc123', prompt: 'Hello!' },
+        { maxRetries: 3, baseDelay: 1000, maxDelay: 10000 }
+      );
+
+      console.log(result);
+    }
+
+    main().catch(console.error);
+    ```
+  </Accordion>
+</AccordionGroup>

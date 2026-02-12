@@ -1,0 +1,222 @@
+---
+title: "Superserve TypeScript SDK"
+description: "Official TypeScript SDK for Superserve hosted agents - build powerful AI-powered applications with type-safe, streaming APIs"
+icon: "rocket"
+---
+
+Official TypeScript SDK for [Superserve](https://superserve.ai) hosted agents.
+
+## Overview
+
+The Superserve SDK provides a type-safe, modern TypeScript client for interacting with the Superserve API. It allows you to:
+
+<CardGroup cols={2}>
+  <Card title="Create and Manage Agents" icon="robot" href="/agents">
+    Configure AI agents with custom system prompts, tools, and models
+  </Card>
+  <Card title="Run Agents" icon="play" href="/runs">
+    Execute agent runs with prompts and get structured outputs
+  </Card>
+  <Card title="Stream Responses" icon="bolt" href="/streaming">
+    Real-time streaming of agent outputs via Server-Sent Events (SSE)
+  </Card>
+  <Card title="Handle Errors Gracefully" icon="shield-check" href="/errors">
+    Typed error classes for different failure scenarios
+  </Card>
+</CardGroup>
+
+## Features
+
+<CardGroup cols={3}>
+  <Card title="TypeScript First" icon="code">
+    Full TypeScript support with comprehensive type definitions
+  </Card>
+  <Card title="Universal" icon="globe">
+    Works in both Node.js (18+) and modern browsers
+  </Card>
+  <Card title="Zero Dependencies" icon="feather">
+    Uses native `fetch` with no runtime dependencies
+  </Card>
+  <Card title="Async Iterators" icon="arrows-repeat">
+    Async iterator support for streaming responses
+  </Card>
+  <Card title="Environment Config" icon="gear">
+    Environment variable configuration support
+  </Card>
+  <Card title="Type-Safe Errors" icon="bug">
+    Typed error classes for better error handling
+  </Card>
+</CardGroup>
+
+## Installation
+
+<Tabs>
+  <Tab title="npm">
+    ```bash
+    npm install @superserve/sdk
+    ```
+  </Tab>
+  <Tab title="yarn">
+    ```bash
+    yarn add @superserve/sdk
+    ```
+  </Tab>
+  <Tab title="pnpm">
+    ```bash
+    pnpm add @superserve/sdk
+    ```
+  </Tab>
+</Tabs>
+
+## Quick Start
+
+<Steps>
+  <Step title="Install the SDK">
+    Install the package using your preferred package manager (see above).
+  </Step>
+  <Step title="Set up your API key">
+    Get your API key from the [Superserve Dashboard](https://dashboard.superserve.ai) and set it as an environment variable:
+    ```bash
+    export SUPERSERVE_API_KEY=your-api-key
+    ```
+  </Step>
+  <Step title="Create your first agent">
+    Use the SDK to create and run an agent:
+    ```typescript
+    import { SuperserveClient } from '@superserve/sdk';
+
+    const client = new SuperserveClient();
+
+    const agent = await client.agents.create({
+      name: 'my-assistant',
+      model: 'claude-sonnet-4-20250514',
+      systemPrompt: 'You are a helpful coding assistant.',
+      tools: ['Bash', 'Read', 'Write', 'Glob', 'Grep']
+    });
+
+    console.log(`Created agent: ${agent.id}`);
+    ```
+  </Step>
+  <Step title="Run the agent">
+    Execute the agent with a prompt and get the output:
+    ```typescript
+    const output = await client.runs.run({
+      agentId: agent.id,
+      prompt: 'List all TypeScript files in the current directory'
+    });
+
+    console.log(output);
+    ```
+  </Step>
+</Steps>
+
+## Streaming Responses
+
+For real-time output, use the streaming API:
+
+<CodeGroup>
+```typescript Node.js
+const stream = await client.runs.stream({
+  agentId: agent.id,
+  prompt: 'Explain how async/await works'
+});
+
+for await (const event of stream) {
+  switch (event.type) {
+    case 'run.started':
+      console.log('Run started:', event.runId);
+      break;
+    case 'message.delta':
+      process.stdout.write(event.content);
+      break;
+    case 'run.completed':
+      console.log('\nCompleted!');
+      break;
+  }
+}
+```
+
+```typescript Browser
+const stream = await client.runs.stream({
+  agentId: agent.id,
+  prompt: 'Explain how async/await works'
+});
+
+let output = '';
+for await (const event of stream) {
+  if (event.type === 'message.delta') {
+    output += event.content;
+    document.getElementById('output').textContent = output;
+  }
+}
+```
+</CodeGroup>
+
+## Error Handling
+
+The SDK provides typed error classes for different failure scenarios:
+
+```typescript
+import {
+  NotFoundError,
+  AuthenticationError,
+  RunFailedError
+} from '@superserve/sdk';
+
+try {
+  await client.runs.run({ agentId, prompt });
+} catch (error) {
+  if (error instanceof AuthenticationError) {
+    console.error('Invalid API key');
+  } else if (error instanceof NotFoundError) {
+    console.error('Agent not found');
+  } else if (error instanceof RunFailedError) {
+    console.error(`Run failed: ${error.message}`);
+  }
+}
+```
+
+<Note>
+  See the [Errors](/errors) documentation for a complete list of error types and handling patterns.
+</Note>
+
+## Documentation
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/authentication">
+    API key setup and configuration options
+  </Card>
+  <Card title="Agents" icon="robot" href="/agents">
+    Creating and managing AI agents
+  </Card>
+  <Card title="Runs" icon="play" href="/runs">
+    Running agents and handling outputs
+  </Card>
+  <Card title="Streaming" icon="bolt" href="/streaming">
+    Real-time streaming with RunStream
+  </Card>
+  <Card title="Events" icon="list" href="/events">
+    SSE event types reference
+  </Card>
+  <Card title="Errors" icon="shield-check" href="/errors">
+    Error handling and error types
+  </Card>
+  <Card title="Examples" icon="code" href="/examples">
+    Complete code examples
+  </Card>
+  <Card title="API Reference" icon="book" href="/api-reference/overview">
+    Complete API documentation
+  </Card>
+</CardGroup>
+
+## Requirements
+
+<Info>
+  The SDK requires:
+  - **Node.js 18.0.0** or higher (for native fetch support)
+  - Modern browsers with `fetch` and `ReadableStream` support
+</Info>
+
+## License
+
+MIT

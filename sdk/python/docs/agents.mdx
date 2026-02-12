@@ -1,0 +1,339 @@
+---
+title: 'Agent Management'
+description: 'Create, configure, and manage AI agents with the Superserve SDK'
+icon: 'robot'
+---
+
+Agents are the core resource in Superserve. An agent represents a configured AI assistant that can execute prompts and use tools.
+
+## Agent Model
+
+An agent has the following properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `str` | Unique identifier (e.g., `agt_abc123`) |
+| `name` | `str` | Human-readable name (1-63 characters) |
+| `model` | `str` | AI model to use (e.g., `claude-sonnet-4-20250514`) |
+| `system_prompt` | `str` | System instructions for the agent |
+| `tools` | `list[str]` | Available tools (e.g., `["Bash", "Read", "Write"]`) |
+| `max_turns` | `int` | Maximum conversation turns (1-100) |
+| `timeout_seconds` | `int` | Execution timeout (10-3600) |
+| `status` | `str` | Agent status (`active`, `deleted`) |
+| `created_at` | `datetime` | Creation timestamp |
+| `updated_at` | `datetime` | Last modification timestamp |
+
+## Creating Agents
+
+Create a new agent with `create_agent()`:
+
+<CodeGroup>
+```python Async
+from superserve_sdk import Superserve
+
+async with Superserve() as client:
+    agent = await client.create_agent(
+        name="my-assistant",
+        model="claude-sonnet-4-20250514",
+        system_prompt="You are a helpful coding assistant.",
+        tools=["Bash", "Read", "Write", "Glob", "Grep"],
+        max_turns=20,
+        timeout_seconds=600,
+    )
+    print(f"Created agent: {agent.id}")
+```
+
+```python Sync
+from superserve_sdk import SuperserveSync
+
+with SuperserveSync() as client:
+    agent = client.create_agent(
+        name="my-assistant",
+        model="claude-sonnet-4-20250514",
+        system_prompt="You are a helpful coding assistant.",
+        tools=["Bash", "Read", "Write", "Glob", "Grep"],
+        max_turns=20,
+        timeout_seconds=600,
+    )
+    print(f"Created agent: {agent.id}")
+```
+</CodeGroup>
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | `str` | Required | Agent name (lowercase, alphanumeric, hyphens) |
+| `model` | `str` | `claude-sonnet-4-20250514` | Model identifier |
+| `system_prompt` | `str` | `""` | System instructions |
+| `tools` | `list[str]` | `["Bash", "Read", "Write", "Glob", "Grep"]` | Available tools |
+| `max_turns` | `int` | `10` | Maximum turns |
+| `timeout_seconds` | `int` | `300` | Timeout in seconds |
+
+### Available Tools
+
+<CardGroup cols={3}>
+  <Card title="Bash" icon="terminal">
+    Execute shell commands
+  </Card>
+  <Card title="Read" icon="file">
+    Read file contents
+  </Card>
+  <Card title="Write" icon="pen">
+    Write to files
+  </Card>
+  <Card title="Edit" icon="pen-to-square">
+    Edit file contents
+  </Card>
+  <Card title="Glob" icon="magnifying-glass">
+    Find files by pattern
+  </Card>
+  <Card title="Grep" icon="search">
+    Search file contents
+  </Card>
+</CardGroup>
+
+### Naming Conventions
+
+<Note>
+  Agent names must:
+  - Be 1-63 characters
+  - Start with a letter
+  - Contain only lowercase letters, numbers, and hyphens
+  - Not end with a hyphen
+</Note>
+
+Valid examples: `my-agent`, `code-reviewer-v2`, `assistant1`
+
+## Listing Agents
+
+List all your agents with `list_agents()`:
+
+```python
+async with Superserve() as client:
+    # List all agents
+    agents = await client.list_agents()
+    for agent in agents:
+        print(f"- {agent.name} ({agent.id}): {agent.status}")
+
+    # With pagination
+    agents = await client.list_agents(limit=10, offset=0)
+```
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | `int` | `20` | Maximum agents to return |
+| `offset` | `int` | `0` | Number of agents to skip |
+
+## Getting an Agent
+
+Retrieve a specific agent by ID or name:
+
+```python
+async with Superserve() as client:
+    # By ID
+    agent = await client.get_agent("agt_abc123")
+
+    # By name
+    agent = await client.get_agent("my-assistant")
+
+    print(f"Agent: {agent.name}")
+    print(f"Model: {agent.model}")
+    print(f"Tools: {agent.tools}")
+```
+
+<Info>
+  **Resolution Logic**: When you pass an ID starting with `agt_`, the SDK fetches directly. For names, it lists agents and finds a match.
+</Info>
+
+## Updating Agents
+
+Update an agent's configuration with `update_agent()`:
+
+```python
+async with Superserve() as client:
+    # Update by ID
+    agent = await client.update_agent(
+        "agt_abc123",
+        system_prompt="You are an expert Python developer.",
+        max_turns=30,
+    )
+
+    # Update by name
+    agent = await client.update_agent(
+        "my-assistant",
+        model="claude-opus-4-20250514",
+        tools=["Read", "Write", "Edit"],
+    )
+```
+
+### Parameters
+
+All parameters are optional - only provided values are updated:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `model` | `str` | New model identifier |
+| `system_prompt` | `str` | New system instructions |
+| `tools` | `list[str]` | New tool list |
+| `max_turns` | `int` | New max turns |
+| `timeout_seconds` | `int` | New timeout |
+
+<Warning>
+  Agent names cannot be changed after creation.
+</Warning>
+
+## Deleting Agents
+
+Delete an agent with `delete_agent()`:
+
+```python
+async with Superserve() as client:
+    # Delete by ID
+    await client.delete_agent("agt_abc123")
+
+    # Delete by name
+    await client.delete_agent("my-assistant")
+```
+
+<Warning>
+  Deleted agents cannot be recovered. Active runs will be cancelled.
+</Warning>
+
+## Error Handling
+
+<Tabs>
+  <Tab title="NotFoundError">
+    Raised when an agent doesn't exist:
+
+    ```python
+    from superserve_sdk import Superserve, NotFoundError
+
+    async with Superserve() as client:
+        try:
+            agent = await client.get_agent("nonexistent")
+        except NotFoundError as e:
+            print(f"Agent not found: {e.resource_id}")
+    ```
+  </Tab>
+
+  <Tab title="ConflictError">
+    Raised when creating an agent with a duplicate name:
+
+    ```python
+    from superserve_sdk import Superserve, ConflictError
+
+    async with Superserve() as client:
+        try:
+            agent = await client.create_agent(name="existing-name")
+        except ConflictError as e:
+            print(f"Name conflict: {e.message}")
+    ```
+  </Tab>
+
+  <Tab title="ValidationError">
+    Raised when configuration is invalid:
+
+    ```python
+    from superserve_sdk import Superserve, ValidationError
+
+    async with Superserve() as client:
+        try:
+            agent = await client.create_agent(
+                name="invalid_name!",  # Invalid characters
+                max_turns=200,  # Exceeds limit
+            )
+        except ValidationError as e:
+            print(f"Invalid config: {e.message}")
+    ```
+  </Tab>
+</Tabs>
+
+## Synchronous API
+
+All agent methods are available in the sync client:
+
+```python
+from superserve_sdk import SuperserveSync
+
+with SuperserveSync() as client:
+    # Create
+    agent = client.create_agent(name="sync-agent")
+
+    # List
+    agents = client.list_agents()
+
+    # Get
+    agent = client.get_agent("sync-agent")
+
+    # Update
+    agent = client.update_agent("sync-agent", max_turns=15)
+
+    # Delete
+    client.delete_agent("sync-agent")
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Descriptive Names" icon="tag">
+    ```python
+    # Good
+    agent = await client.create_agent(name="code-reviewer-python")
+    agent = await client.create_agent(name="docs-generator-v2")
+
+    # Avoid
+    agent = await client.create_agent(name="agent1")
+    agent = await client.create_agent(name="test")
+    ```
+  </Accordion>
+
+  <Accordion title="Configure Appropriate Limits" icon="sliders">
+    ```python
+    # For quick tasks
+    agent = await client.create_agent(
+        name="quick-helper",
+        max_turns=5,
+        timeout_seconds=60,
+    )
+
+    # For complex tasks
+    agent = await client.create_agent(
+        name="code-analyzer",
+        max_turns=50,
+        timeout_seconds=1800,
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Minimize Tools" icon="toolbox">
+    Only enable tools the agent actually needs:
+
+    ```python
+    # File reader - only needs read access
+    agent = await client.create_agent(
+        name="file-reader",
+        tools=["Read", "Glob"],
+    )
+
+    # Code modifier - needs write access
+    agent = await client.create_agent(
+        name="code-modifier",
+        tools=["Read", "Write", "Edit", "Glob", "Grep"],
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Clean Up Unused Agents" icon="broom">
+    ```python
+    async with Superserve() as client:
+        agents = await client.list_agents()
+        for agent in agents:
+            if agent.name.startswith("test-"):
+                await client.delete_agent(agent.id)
+                print(f"Deleted: {agent.name}")
+    ```
+  </Accordion>
+</AccordionGroup>

@@ -6,10 +6,10 @@ from pathlib import Path
 
 # Staging:
 PLATFORM_API_URL = os.environ.get(
-    "SUPERSERVE_API_URL", "https://api-staging.superserve.com"
+    "SUPERSERVE_API_URL", "https://api-staging.superserve.ai"
 )
 DASHBOARD_URL = os.environ.get(
-    "SUPERSERVE_DASHBOARD_URL", "https://app-staging.superserve.com"
+    "SUPERSERVE_DASHBOARD_URL", "https://console-staging.superserve.ai"
 )
 # Local development: uncomment for local testing
 # PLATFORM_API_URL = os.environ.get("SUPERSERVE_API_URL", "http://localhost:8000")

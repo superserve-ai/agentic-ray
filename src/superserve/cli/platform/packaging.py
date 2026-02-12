@@ -10,7 +10,7 @@ import zipfile
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .types import (
     AgentManifest,
@@ -19,10 +19,6 @@ from .types import (
     MCPToolInfo,
     ProjectManifest,
 )
-
-if TYPE_CHECKING:
-    from superserve.mcp_serve import MCPServerConfig
-    from superserve.serve import AgentConfig
 
 
 def _extract_mcp_tools(mcp_server: Any) -> list[MCPToolInfo]:
@@ -89,9 +85,9 @@ def _extract_mcp_resources(mcp_server: Any) -> list[MCPResourceInfo]:
 
 def package_project(
     project_path: Path,
-    agents: list[AgentConfig],
+    agents: list[Any],
     project_name: str,
-    mcp_servers: list[MCPServerConfig] | None = None,
+    mcp_servers: list[Any] | None = None,
 ) -> tuple[Path, ProjectManifest]:
     """Package agents and MCP servers for cloud deployment.
 

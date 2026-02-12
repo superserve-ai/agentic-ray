@@ -1,0 +1,123 @@
+---
+title: 'RunMetrics'
+description: 'Aggregated metrics for a run'
+icon: 'chart-line'
+---
+
+Dataclass containing aggregated metrics for a run.
+
+## Definition
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class RunMetrics:
+    run_id: str
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    turns: int
+    duration_ms: int
+    tools_used: list[str]
+    tool_calls: list[ToolMetrics]
+    content_chunks: int
+    total_content_length: int
+    started_at: float
+    ended_at: float
+    success: bool
+    error_message: str | None
+```
+
+## Properties
+
+<ParamField path="run_id" type="str" required>
+  Run identifier.
+</ParamField>
+
+<ParamField path="input_tokens" type="int" required>
+  Input tokens used.
+</ParamField>
+
+<ParamField path="output_tokens" type="int" required>
+  Output tokens generated.
+</ParamField>
+
+<ParamField path="total_tokens" type="int" required>
+  Total tokens (input + output).
+</ParamField>
+
+<ParamField path="turns" type="int" required>
+  Number of conversation turns.
+</ParamField>
+
+<ParamField path="duration_ms" type="int" required>
+  API-reported duration in milliseconds.
+</ParamField>
+
+<ParamField path="tools_used" type="list[str]" required>
+  Unique tools used during execution.
+</ParamField>
+
+<ParamField path="tool_calls" type="list[ToolMetrics]" required>
+  Detailed metrics for each tool call.
+</ParamField>
+
+<ParamField path="content_chunks" type="int" required>
+  Number of message delta events received.
+</ParamField>
+
+<ParamField path="total_content_length" type="int" required>
+  Total characters in content.
+</ParamField>
+
+<ParamField path="started_at" type="float" required>
+  Unix timestamp when run started.
+</ParamField>
+
+<ParamField path="ended_at" type="float" required>
+  Unix timestamp when run ended.
+</ParamField>
+
+<ParamField path="success" type="bool" required>
+  Whether run completed successfully.
+</ParamField>
+
+<ParamField path="error_message" type="str | None" required>
+  Error message if failed.
+</ParamField>
+
+## Computed Properties
+
+```python
+# Wall clock duration (client-side)
+wall_time = metrics.wall_clock_duration_ms
+
+# Tool call count
+count = metrics.tool_call_count
+
+# Average tool duration
+avg = metrics.average_tool_duration_ms
+
+# Get calls for a specific tool
+bash_calls = metrics.get_tool_calls_by_name("Bash")
+```
+
+## Example
+
+```python
+from superserve_sdk import Superserve, MessageDeltaEvent
+
+async with Superserve() as client:
+    events, handle = await client.stream_with_metrics("agent", "Hello")
+
+    async for event in events:
+        if isinstance(event, MessageDeltaEvent):
+            print(event.content, end="")
+
+    metrics = handle.metrics
+    print(f"\n\nTokens: {metrics.total_tokens}")
+    print(f"Duration: {metrics.duration_ms}ms")
+    print(f"Tool calls: {metrics.tool_call_count}")
+    print(f"Success: {metrics.success}")
+```

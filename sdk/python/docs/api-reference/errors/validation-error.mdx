@@ -1,0 +1,46 @@
+---
+title: 'ValidationError'
+description: 'Request validation failed (HTTP 422)'
+icon: 'triangle-exclamation'
+---
+
+Raised when request validation fails.
+
+## Definition
+
+```python
+class ValidationError(APIError):
+    status_code: int = 422
+    field: str | None
+```
+
+## Properties
+
+<ParamField path="field" type="str | None" required>
+  The invalid field, if applicable.
+</ParamField>
+
+## Common Causes
+
+- Invalid agent name format
+- `max_turns` out of range (1-100)
+- `timeout_seconds` out of range (10-3600)
+- Prompt too long (>100,000 characters)
+- Missing required fields
+
+## Usage
+
+```python
+from superserve_sdk import Superserve, ValidationError
+
+async with Superserve() as client:
+    try:
+        await client.create_agent(
+            name="invalid_name!",
+            max_turns=999,
+        )
+    except ValidationError as e:
+        print(f"Validation error: {e.message}")
+        if e.field:
+            print(f"Invalid field: {e.field}")
+```

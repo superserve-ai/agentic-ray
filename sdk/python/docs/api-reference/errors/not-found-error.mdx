@@ -1,0 +1,48 @@
+---
+title: 'NotFoundError'
+description: 'Resource not found (HTTP 404)'
+icon: 'magnifying-glass'
+---
+
+Raised when a resource is not found.
+
+## Definition
+
+```python
+class NotFoundError(APIError):
+    status_code: int = 404
+    resource: str
+    resource_id: str
+```
+
+## Properties
+
+<ParamField path="resource" type="str" required>
+  Resource type (e.g., "Agent", "Run").
+</ParamField>
+
+<ParamField path="resource_id" type="str" required>
+  The ID that wasn't found.
+</ParamField>
+
+## Usage
+
+```python
+from superserve_sdk import Superserve, NotFoundError
+
+async with Superserve() as client:
+    try:
+        agent = await client.get_agent("nonexistent")
+    except NotFoundError as e:
+        print(f"{e.resource} not found: {e.resource_id}")
+```
+
+## Get or Create Pattern
+
+```python
+async def get_or_create_agent(name: str):
+    try:
+        return await client.get_agent(name)
+    except NotFoundError:
+        return await client.create_agent(name=name)
+```

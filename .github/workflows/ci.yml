@@ -30,8 +30,8 @@ jobs:
       - name: Run ruff check
         run: uv run ruff check .
 
-      - name: Run black check
-        run: uv run black --check .
+      - name: Run ruff format check
+        run: uv run ruff format --check .
 
       - name: Run mypy
         run: uv run mypy src/superserve
@@ -41,30 +41,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install gVisor
-        run: |
-          set -e
-          ARCH=$(uname -m)
-          URL=https://storage.googleapis.com/gvisor/releases/release/latest/${ARCH}
-          wget ${URL}/runsc ${URL}/runsc.sha512 ${URL}/containerd-shim-runsc-v1 ${URL}/containerd-shim-runsc-v1.sha512
-          sha512sum -c runsc.sha512 -c containerd-shim-runsc-v1.sha512
-          rm -f *.sha512
-          chmod a+rx runsc containerd-shim-runsc-v1
-          sudo mv runsc containerd-shim-runsc-v1 /usr/local/bin
-
-          # Configure Docker to use gVisor
-          sudo mkdir -p /etc/docker
-          cat <<EOF | sudo tee /etc/docker/daemon.json
-          {
-            "runtimes": {
-              "runsc": {
-                "path": "/usr/local/bin/runsc"
-              }
-            }
-          }
-          EOF
-          sudo systemctl restart docker
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4

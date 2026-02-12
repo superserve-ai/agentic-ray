@@ -1,0 +1,323 @@
+---
+title: "Agent Management"
+description: "Create, configure, and manage AI agents with custom capabilities, tools, and behaviors"
+icon: "robot"
+---
+
+Agents are AI assistants configured with specific capabilities, tools, and behaviors. This guide covers how to create, manage, and configure agents using the Superserve SDK.
+
+## Creating an Agent
+
+Use `client.agents.create()` to create a new agent:
+
+```typescript
+const agent = await client.agents.create({
+  name: 'my-code-assistant',
+  model: 'claude-sonnet-4-20250514',
+  systemPrompt: 'You are an expert TypeScript developer. Help users write clean, well-tested code.',
+  tools: ['Bash', 'Read', 'Write', 'Glob', 'Grep'],
+  maxTurns: 10,
+  timeoutSeconds: 300
+});
+
+console.log(`Created agent ${agent.id}: ${agent.name}`);
+```
+
+### Agent Configuration
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `name` | string | Yes | - | Unique agent name (lowercase, numbers, hyphens) |
+| `model` | AgentModel | No | `claude-sonnet-4-20250514` | AI model to use |
+| `systemPrompt` | string | No | `""` | Instructions for the agent |
+| `tools` | AgentTool[] | No | `["Bash", "Read", "Write", "Glob", "Grep"]` | Available tools |
+| `maxTurns` | number | No | `10` | Maximum conversation turns |
+| `timeoutSeconds` | number | No | `300` | Timeout for each run |
+
+### Agent Name Rules
+
+<Info>
+  Agent names must follow these rules:
+  - Must start with a lowercase letter
+  - Can contain lowercase letters, numbers, and hyphens
+  - Maximum 64 characters
+  - Must be unique within your account
+</Info>
+
+### Available Models
+
+<CardGroup cols={3}>
+  <Card title="Claude Sonnet 4" icon="bolt">
+    `claude-sonnet-4-20250514`
+
+    Fast and balanced (default)
+  </Card>
+  <Card title="Claude Opus 4" icon="crown">
+    `claude-opus-4-20250514`
+
+    Most capable model
+  </Card>
+  <Card title="Claude Haiku 3.5" icon="feather">
+    `claude-haiku-3-5-20241022`
+
+    Fastest, most economical
+  </Card>
+</CardGroup>
+
+```typescript
+type AgentModel =
+  | 'claude-sonnet-4-20250514'  // Fast, balanced (default)
+  | 'claude-opus-4-20250514'    // Most capable
+  | 'claude-haiku-3-5-20241022' // Fastest, most economical
+```
+
+### Available Tools
+
+<CardGroup cols={2}>
+  <Card title="Bash" icon="terminal">
+    Execute shell commands
+  </Card>
+  <Card title="Read" icon="file">
+    Read file contents
+  </Card>
+  <Card title="Write" icon="pen">
+    Write to files
+  </Card>
+  <Card title="Glob" icon="magnifying-glass">
+    Find files by pattern
+  </Card>
+  <Card title="Grep" icon="filter">
+    Search file contents
+  </Card>
+  <Card title="WebSearch" icon="globe">
+    Search the web
+  </Card>
+  <Card title="WebFetch" icon="download">
+    Fetch web content
+  </Card>
+</CardGroup>
+
+```typescript
+type AgentTool =
+  | 'Bash'      // Execute shell commands
+  | 'Read'      // Read files
+  | 'Write'     // Write files
+  | 'Glob'      // Find files by pattern
+  | 'Grep'      // Search file contents
+  | 'WebSearch' // Search the web
+  | 'WebFetch'  // Fetch web content
+```
+
+## Getting an Agent
+
+Retrieve an agent by ID:
+
+```typescript
+const agent = await client.agents.get('agt_abc123');
+
+console.log(agent.name);        // Agent name
+console.log(agent.model);       // Model in use
+console.log(agent.tools);       // Available tools
+console.log(agent.status);      // 'active' or 'deleted'
+console.log(agent.createdAt);   // ISO timestamp
+```
+
+<Note>
+  The agent ID prefix (`agt_`) is optional - both `agt_abc123` and `abc123` work the same.
+</Note>
+
+## Listing Agents
+
+List all agents with optional pagination:
+
+```typescript
+// List all agents
+const agents = await client.agents.list();
+
+// List with pagination
+const page = await client.agents.list({
+  limit: 10,   // Results per page (1-100)
+  offset: 0    // Skip this many results
+});
+
+for (const agent of agents) {
+  console.log(`${agent.name} (${agent.id}) - ${agent.status}`);
+}
+```
+
+## Updating an Agent
+
+Update agent configuration (only specified fields are changed):
+
+```typescript
+const updated = await client.agents.update('agt_abc123', {
+  systemPrompt: 'Updated instructions for the agent.',
+  maxTurns: 15,
+  tools: ['Bash', 'Read', 'Write', 'Glob', 'Grep', 'WebSearch']
+});
+
+console.log('Updated at:', updated.updatedAt);
+```
+
+### Update Options
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `model` | AgentModel | Change the AI model |
+| `systemPrompt` | string | Update instructions |
+| `tools` | AgentTool[] | Change available tools |
+| `maxTurns` | number | Update turn limit |
+| `timeoutSeconds` | number | Update timeout |
+
+<Warning>
+  The agent `name` cannot be changed after creation.
+</Warning>
+
+## Deleting an Agent
+
+Delete an agent (soft delete - history is preserved):
+
+```typescript
+await client.agents.delete('agt_abc123');
+```
+
+After deletion:
+- The agent status changes to `deleted`
+- New runs cannot be created
+- Existing runs and history remain accessible
+- The agent name becomes available for reuse
+
+## Agent Object
+
+The `Agent` type contains all agent information:
+
+```typescript
+interface Agent {
+  id: string;              // Unique ID (e.g., 'agt_abc123')
+  name: string;            // Agent name
+  model: AgentModel;       // AI model
+  systemPrompt: string;    // System instructions
+  tools: AgentTool[];      // Available tools
+  maxTurns: number;        // Max turns per run
+  timeoutSeconds: number;  // Run timeout
+  status: AgentStatus;     // 'active' | 'deleted'
+  createdAt: string;       // ISO 8601 timestamp
+  updatedAt: string;       // ISO 8601 timestamp
+}
+```
+
+## Error Handling
+
+```typescript
+import {
+  NotFoundError,
+  ConflictError,
+  ValidationError,
+  AuthenticationError
+} from '@superserve/sdk';
+
+try {
+  await client.agents.create({ name: 'my-agent' });
+} catch (error) {
+  if (error instanceof ConflictError) {
+    console.error('Agent name already exists');
+  } else if (error instanceof ValidationError) {
+    console.error('Invalid configuration:', error.details);
+  } else if (error instanceof NotFoundError) {
+    console.error('Agent not found');
+  } else if (error instanceof AuthenticationError) {
+    console.error('Authentication failed');
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Descriptive Names" icon="tag">
+    Choose names that clearly describe the agent's purpose:
+
+    ```typescript
+    // Good
+    await client.agents.create({ name: 'pr-reviewer' });
+    await client.agents.create({ name: 'test-generator' });
+
+    // Avoid
+    await client.agents.create({ name: 'agent1' });
+    ```
+  </Accordion>
+
+  <Accordion title="Minimize Tools" icon="shield">
+    Only enable tools the agent needs for security and efficiency:
+
+    ```typescript
+    // Read-only agent
+    await client.agents.create({
+      name: 'code-reviewer',
+      tools: ['Read', 'Glob', 'Grep']  // No Bash or Write
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Set Appropriate Timeouts" icon="clock">
+    Match timeouts to expected task complexity:
+
+    ```typescript
+    // Quick task
+    await client.agents.create({
+      name: 'quick-assistant',
+      timeoutSeconds: 60,
+      maxTurns: 5
+    });
+
+    // Complex task
+    await client.agents.create({
+      name: 'deep-analyzer',
+      timeoutSeconds: 900,  // 15 minutes
+      maxTurns: 50
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Version Your System Prompts" icon="code-branch">
+    Track changes to your prompts for debugging and rollback:
+
+    ```typescript
+    const systemPromptV2 = `
+    You are a code reviewer (v2).
+    Focus on:
+    - Type safety
+    - Error handling
+    - Performance
+    `;
+
+    await client.agents.update(agentId, {
+      systemPrompt: systemPromptV2
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## TypeScript Types
+
+Import types for type-safe usage:
+
+```typescript
+import type {
+  Agent,
+  AgentConfig,
+  AgentModel,
+  AgentTool,
+  AgentStatus,
+  ListAgentsOptions,
+  UpdateAgentOptions
+} from '@superserve/sdk';
+
+const config: AgentConfig = {
+  name: 'typed-agent',
+  model: 'claude-sonnet-4-20250514',
+  tools: ['Bash', 'Read']
+};
+
+const agent: Agent = await client.agents.create(config);
+```

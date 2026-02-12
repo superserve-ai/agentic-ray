@@ -1,0 +1,119 @@
+---
+title: 'Run Model'
+description: 'The Run data model and its properties'
+icon: 'play'
+---
+
+The `Run` class represents an agent execution in Superserve.
+
+## Definition
+
+```python
+from pydantic import BaseModel
+from datetime import datetime
+
+class Run(BaseModel):
+    id: str
+    agent_id: str
+    status: str
+    prompt: str
+    output: str | None
+    error_message: str | None
+    session_id: str | None
+    usage: UsageMetrics | None
+    turns: int
+    duration_ms: int
+    tools_used: list[str]
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+```
+
+## Properties
+
+<ParamField path="id" type="str" required>
+  Unique identifier. Format: `run_` followed by a random string.
+</ParamField>
+
+<ParamField path="agent_id" type="str" required>
+  ID of the agent that executed this run.
+</ParamField>
+
+<ParamField path="status" type="str" required>
+  Current status:
+  - `pending` - Waiting to start
+  - `running` - Currently executing
+  - `completed` - Finished successfully
+  - `failed` - Execution failed
+  - `cancelled` - Run was cancelled
+</ParamField>
+
+<ParamField path="prompt" type="str" required>
+  The user prompt that was sent.
+</ParamField>
+
+<ParamField path="output" type="str | None" required>
+  Final output text. Only set when status is `completed`.
+</ParamField>
+
+<ParamField path="error_message" type="str | None" required>
+  Error message. Only set when status is `failed`.
+</ParamField>
+
+<ParamField path="session_id" type="str | None" required>
+  Session ID for multi-turn conversations.
+</ParamField>
+
+<ParamField path="usage" type="UsageMetrics | None" required>
+  Token usage metrics. Only set when completed.
+</ParamField>
+
+<ParamField path="turns" type="int" required>
+  Number of conversation turns executed.
+</ParamField>
+
+<ParamField path="duration_ms" type="int" required>
+  Total execution duration in milliseconds.
+</ParamField>
+
+<ParamField path="tools_used" type="list[str]" required>
+  List of tools used during execution.
+</ParamField>
+
+<ParamField path="created_at" type="datetime" required>
+  When the run was created.
+</ParamField>
+
+<ParamField path="started_at" type="datetime | None" required>
+  When execution started.
+</ParamField>
+
+<ParamField path="completed_at" type="datetime | None" required>
+  When execution completed.
+</ParamField>
+
+## UsageMetrics
+
+```python
+class UsageMetrics(BaseModel):
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+```
+
+## Example
+
+```python
+from superserve_sdk import Superserve
+
+async with Superserve() as client:
+    run = await client.run("my-agent", "Hello!")
+
+    print(f"ID: {run.id}")
+    print(f"Status: {run.status}")
+    print(f"Output: {run.output}")
+    print(f"Duration: {run.duration_ms}ms")
+
+    if run.usage:
+        print(f"Tokens: {run.usage.total_tokens}")
+```

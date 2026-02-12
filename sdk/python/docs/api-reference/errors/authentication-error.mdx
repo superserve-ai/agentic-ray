@@ -1,0 +1,47 @@
+---
+title: 'AuthenticationError'
+description: 'Authentication failed (HTTP 401)'
+icon: 'lock'
+---
+
+Raised when authentication fails.
+
+## Definition
+
+```python
+class AuthenticationError(APIError):
+    status_code: int = 401
+```
+
+## Common Causes
+
+- Missing API key
+- Invalid API key
+- Expired API key
+- Revoked API key
+
+## Usage
+
+```python
+from superserve_sdk import Superserve, AuthenticationError
+
+async with Superserve(api_key="invalid") as client:
+    try:
+        await client.list_agents()
+    except AuthenticationError as e:
+        print(f"Auth failed: {e.message}")
+        # Re-authenticate or check API key
+```
+
+## Handling
+
+```python
+async def with_retry(api_key: str):
+    try:
+        async with Superserve(api_key=api_key) as client:
+            return await client.list_agents()
+    except AuthenticationError:
+        new_key = await refresh_api_key()
+        async with Superserve(api_key=new_key) as client:
+            return await client.list_agents()
+```

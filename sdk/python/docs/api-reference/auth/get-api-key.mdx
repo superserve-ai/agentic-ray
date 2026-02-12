@@ -1,0 +1,54 @@
+---
+title: 'get_api_key'
+description: 'Retrieve an API key from available sources'
+icon: 'key'
+---
+
+Retrieves an API key using the standard priority order.
+
+## Signature
+
+```python
+def get_api_key(
+    api_key: str | None = None,
+    credentials_path: Path | None = None,
+) -> str | None
+```
+
+## Parameters
+
+<ParamField path="api_key" type="str | None" default="None">
+  Explicit API key to return directly.
+</ParamField>
+
+<ParamField path="credentials_path" type="Path | None" default="None">
+  Custom path to credentials file.
+</ParamField>
+
+## Returns
+
+<ResponseField name="str | None" type="str | None">
+  The API key if found, otherwise None.
+</ResponseField>
+
+## Priority Order
+
+1. Explicit `api_key` parameter
+2. `SUPERSERVE_API_KEY` environment variable
+3. Credentials file at `credentials_path` or `~/.superserve/credentials.json`
+
+## Example
+
+```python
+from superserve_sdk import get_api_key
+
+# Use priority order
+key = get_api_key()
+if key:
+    print(f"Found key: {key[:10]}...")
+else:
+    print("No API key found")
+
+# Provide explicit key
+key = get_api_key(api_key="sk_explicit")
+```
