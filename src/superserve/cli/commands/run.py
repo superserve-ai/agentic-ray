@@ -48,11 +48,16 @@ def _stream_events(client, event_iter, as_json: bool) -> int:
                 f"({input_tokens:,} input / {output_tokens:,} output tokens)",
                 err=True,
             )
+            if event.data.get("max_turns_reached"):
+                msg = sanitize_terminal_output(
+                    event.data.get("max_turns_message", "Max turns reached.")
+                )
+                click.echo(f"\nWarning: {msg}", err=True)
             return 0
 
         elif event.type == "run.failed":
             error = event.data.get("error", {})
-            message = error.get("message", "Unknown error")
+            message = sanitize_terminal_output(error.get("message", "Unknown error"))
             click.echo(f"\nError: {message}", err=True)
             return 1
 
@@ -205,7 +210,9 @@ def list_runs(agent: str | None, status: str | None, limit: int, as_json: bool):
     click.echo("-" * 82)
 
     for run in run_list:
-        run_id_short = run.id[-12:] if len(run.id) > 12 else run.id
+        run_id_clean = run.id.replace("run_", "").replace("-", "")
+        # First 12 hex chars of UUID (no dashes) — matches Docker/Git short ID convention
+        run_id_short = run_id_clean[:12]
         agent_display = (
             sanitize_terminal_output(run.agent_name)
             if run.agent_name
@@ -229,10 +236,11 @@ def get_run(run_id: str, full: bool, as_json: bool):
     try:
         run = client.get_run(run_id)
     except PlatformAPIError as e:
+        click.echo(f"Error: {sanitize_terminal_output(e.message)}", err=True)
         if e.status_code == 404:
-            click.echo(f"Run '{run_id}' not found", err=True)
-        else:
-            click.echo(f"Error: {e.message}", err=True)
+            click.echo("Hint: Run 'superserve runs list' to see your runs.", err=True)
+        elif e.status_code == 409:
+            click.echo("Hint: Use more characters to narrow it down.", err=True)
         sys.exit(1)
 
     if as_json:

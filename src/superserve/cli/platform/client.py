@@ -495,18 +495,59 @@ class PlatformClient:
         data = resp.json()
         return [RunResponse.model_validate(r) for r in data.get("runs", [])]
 
-    def get_run(self, run_id: str) -> RunResponse:
-        """Get a run by ID.
+    def _resolve_id(
+        self, entity_id: str, prefix: str, endpoint: str, entity_name: str
+    ) -> str:
+        """Resolve an entity ID or short prefix to a full prefixed ID.
 
         Args:
-            run_id: Run ID (with or without run_ prefix).
+            entity_id: Full ID, UUID, or short prefix.
+            prefix: ID prefix (e.g. "run", "ses").
+            endpoint: API resolve endpoint (e.g. "/runs/resolve").
+            entity_name: Human-readable name for error messages.
+
+        Returns:
+            Full ID with prefix.
+        """
+        clean = entity_id.replace(f"{prefix}_", "").replace("-", "")
+        # Full UUID (32 hex chars) — no need to resolve
+        if len(clean) >= 32:
+            if not entity_id.startswith(f"{prefix}_"):
+                entity_id = f"{prefix}_{entity_id}"
+            return entity_id
+
+        # Short prefix — resolve via API
+        resp = self._request("GET", endpoint, params={"id_prefix": clean})
+        ids: list[str] = resp.json().get("ids", [])
+        if len(ids) == 0:
+            raise PlatformAPIError(
+                404, f"No {entity_name} found matching '{entity_id}'"
+            )
+        if len(ids) > 1:
+            short_ids = [i.replace(f"{prefix}_", "").replace("-", "")[:12] for i in ids]
+            raise PlatformAPIError(
+                409, f"Ambiguous ID '{entity_id}' — matches: {', '.join(short_ids)}"
+            )
+        return ids[0]
+
+    def _resolve_run_id(self, run_id: str) -> str:
+        """Resolve a run ID or short prefix to a full run ID."""
+        return self._resolve_id(run_id, "run", "/runs/resolve", "run")
+
+    def _resolve_session_id(self, session_id: str) -> str:
+        """Resolve a session ID or short prefix to a full session ID."""
+        return self._resolve_id(session_id, "ses", "/sessions/resolve", "session")
+
+    def get_run(self, run_id: str) -> RunResponse:
+        """Get a run by ID or short prefix.
+
+        Args:
+            run_id: Run ID, UUID, or short prefix.
 
         Returns:
             Run details.
         """
-        if not run_id.startswith("run_"):
-            run_id = f"run_{run_id}"
-
+        run_id = self._resolve_run_id(run_id)
         resp = self._request("GET", f"/runs/{run_id}")
         return RunResponse.model_validate(resp.json())
 
@@ -514,14 +555,12 @@ class PlatformClient:
         """Cancel a running run.
 
         Args:
-            run_id: Run ID.
+            run_id: Run ID or short prefix.
 
         Returns:
             Updated run.
         """
-        if not run_id.startswith("run_"):
-            run_id = f"run_{run_id}"
-
+        run_id = self._resolve_run_id(run_id)
         resp = self._request("POST", f"/runs/{run_id}/cancel")
         return RunResponse.model_validate(resp.json())
 
@@ -697,11 +736,12 @@ class PlatformClient:
         """Get session details.
 
         Args:
-            session_id: Session ID.
+            session_id: Session ID or short prefix.
 
         Returns:
             Session data dictionary.
         """
+        session_id = self._resolve_session_id(session_id)
         resp = self._request("GET", f"/sessions/{session_id}")
         return cast(dict[str, Any], resp.json())
 
@@ -709,11 +749,12 @@ class PlatformClient:
         """End a session.
 
         Args:
-            session_id: Session ID.
+            session_id: Session ID or short prefix.
 
         Returns:
             Updated session data dictionary.
         """
+        session_id = self._resolve_session_id(session_id)
         resp = self._request("POST", f"/sessions/{session_id}/end")
         return cast(dict[str, Any], resp.json())
 
