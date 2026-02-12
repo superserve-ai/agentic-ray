@@ -211,6 +211,7 @@ def list_runs(agent: str | None, status: str | None, limit: int, as_json: bool):
 
     for run in run_list:
         run_id_clean = run.id.replace("run_", "").replace("-", "")
+        # First 12 hex chars of UUID (no dashes) — matches Docker/Git short ID convention
         run_id_short = run_id_clean[:12]
         agent_display = (
             sanitize_terminal_output(run.agent_name)

@@ -47,6 +47,7 @@ def list_sessions(agent, filter_status, as_json):
 
     for s in session_list:
         sid_clean = s["id"].replace("ses_", "").replace("-", "")
+        # First 12 hex chars of UUID (no dashes) — matches Docker/Git short ID convention
         sid_short = sid_clean[:12]
         agent_display = sanitize_terminal_output(
             s.get("agent_name") or s.get("agent_id", "?")
