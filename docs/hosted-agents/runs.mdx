@@ -1,0 +1,160 @@
+---
+title: Runs
+description: Execute agents and stream real-time output
+---
+
+# Runs
+
+A Run is a single execution of an Agent with a specific prompt. Runs stream their output in real-time via Server-Sent Events (SSE).
+
+## Run Lifecycle
+
+```
+pending → running → completed
+                  ↘ failed
+                  ↘ cancelled
+```
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Run created, waiting for sandbox |
+| `running` | Agent is executing |
+| `completed` | Run finished successfully |
+| `failed` | Run encountered an error |
+| `cancelled` | Run was cancelled by user |
+
+## Creating a Run
+
+### Via CLI
+
+```bash
+superserve run my-agent "Analyze the performance of this code"
+```
+
+### Via API
+
+```bash
+curl -X POST https://api.superserve.ai/v1/runs \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "agt_abc123",
+    "prompt": "Analyze the performance of this code"
+  }'
+```
+
+### Response
+
+```json
+{
+  "id": "run_def456",
+  "agent_id": "agt_abc123",
+  "status": "pending",
+  "prompt": "Analyze the performance of this code",
+  "created_at": "2026-02-07T10:05:00Z"
+}
+```
+
+## Streaming Events
+
+Connect to the SSE endpoint to receive real-time events:
+
+```bash
+curl -N https://api.superserve.ai/v1/runs/run_def456/events \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: text/event-stream"
+```
+
+### Event Types
+
+| Event | Description |
+|-------|-------------|
+| `run.started` | Run has started executing |
+| `message.delta` | Text output chunk from Claude |
+| `tool.start` | Tool execution started |
+| `tool.end` | Tool execution completed |
+| `run.completed` | Run finished successfully |
+| `run.failed` | Run encountered an error |
+| `run.cancelled` | Run was cancelled |
+
+### Example Event Stream
+
+```
+event: run.started
+data: {"run_id": "run_def456", "agent_id": "agt_abc123"}
+
+event: message.delta
+data: {"content": "I'll analyze the code for performance issues."}
+
+event: tool.start
+data: {"tool": "Read", "input": {"file": "app.py"}}
+
+event: tool.end
+data: {"tool": "Read", "output": "...", "duration_ms": 50}
+
+event: message.delta
+data: {"content": "I found several potential optimizations..."}
+
+event: run.completed
+data: {"run_id": "run_def456", "usage": {"input_tokens": 500, "output_tokens": 200}, "duration_ms": 5000}
+```
+
+## Getting Run Details
+
+After completion, get the full run details:
+
+```bash
+curl https://api.superserve.ai/v1/runs/run_def456 \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "id": "run_def456",
+  "agent_id": "agt_abc123",
+  "status": "completed",
+  "prompt": "Analyze the performance of this code",
+  "output": "I found several potential optimizations...",
+  "usage": {
+    "input_tokens": 500,
+    "output_tokens": 200,
+    "total_tokens": 700
+  },
+  "turns": 3,
+  "duration_ms": 5000,
+  "tools_used": ["Read", "Grep"],
+  "created_at": "2026-02-07T10:05:00Z",
+  "completed_at": "2026-02-07T10:05:05Z"
+}
+```
+
+## Cancelling a Run
+
+Cancel a running or pending run:
+
+```bash
+curl -X POST https://api.superserve.ai/v1/runs/run_def456/cancel \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Multi-turn Sessions
+
+For conversations that span multiple runs, use a session ID:
+
+```bash
+# First message
+superserve run my-agent "Hello, I need help with Python" --session sess-123
+
+# Follow-up (context preserved)
+superserve run my-agent "Now show me an example" --session sess-123
+```
+
+Via API:
+
+```json
+{
+  "agent_id": "agt_abc123",
+  "prompt": "Now show me an example",
+  "session_id": "sess-123"
+}
+```
