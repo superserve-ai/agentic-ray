@@ -4,17 +4,22 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from typing import Any, cast
 
 import requests
 
 from .auth import get_credentials
 from .config import DEFAULT_TIMEOUT, PLATFORM_API_URL, USER_AGENT
 from .types import (
+    AgentConfig,
+    AgentResponse,
     Credentials,
     DeviceCodeResponse,
     LogEntry,
     ProjectManifest,
     ProjectResponse,
+    RunEvent,
+    RunResponse,
 )
 
 
@@ -45,6 +50,8 @@ class PlatformClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self._session = requests.Session()
+        # Cache for agent name -> ID resolution to avoid repeated API calls
+        self._agent_name_cache: dict[str, str] = {}
 
     def _get_headers(self, authenticated: bool = True) -> dict[str, str]:
         """Get request headers.
@@ -328,3 +335,445 @@ class PlatformClient:
                     yield LogEntry.model_validate(data)
                 except (json.JSONDecodeError, ValueError):
                     continue
+
+    # ==================== AGENTS ====================
+
+    def create_agent(self, config: AgentConfig) -> AgentResponse:
+        """Create a new hosted agent.
+
+        Args:
+            config: Agent configuration.
+
+        Returns:
+            Created agent.
+        """
+        resp = self._request(
+            "POST",
+            "/agents",
+            json_data={
+                "name": config.name,
+                "model": config.model,
+                "system_prompt": config.system_prompt,
+                "tools": config.tools,
+                "max_turns": config.max_turns,
+                "timeout_seconds": config.timeout_seconds,
+            },
+        )
+        return AgentResponse.model_validate(resp.json())
+
+    def list_agents(self) -> list[AgentResponse]:
+        """List all hosted agents.
+
+        Returns:
+            List of agents.
+        """
+        resp = self._request("GET", "/agents")
+        data = resp.json()
+        return [AgentResponse.model_validate(a) for a in data.get("agents", [])]
+
+    def _resolve_agent_id(self, name_or_id: str) -> str:
+        """Resolve an agent name to its ID, using cache when possible.
+
+        Args:
+            name_or_id: Agent name or ID.
+
+        Returns:
+            Agent ID (with agt_ prefix).
+
+        Raises:
+            PlatformAPIError: If agent not found.
+        """
+        # Already an ID
+        if name_or_id.startswith("agt_"):
+            return name_or_id
+
+        # Check cache first
+        if name_or_id in self._agent_name_cache:
+            return self._agent_name_cache[name_or_id]
+
+        # Fetch agents and populate cache
+        agents = self.list_agents()
+        for agent in agents:
+            self._agent_name_cache[agent.name] = agent.id
+
+        # Return from cache or raise error
+        if name_or_id in self._agent_name_cache:
+            return self._agent_name_cache[name_or_id]
+
+        raise PlatformAPIError(404, f"Agent '{name_or_id}' not found")
+
+    def get_agent(self, name_or_id: str) -> AgentResponse:
+        """Get a hosted agent by name or ID.
+
+        Args:
+            name_or_id: Agent name or ID (with or without agt_ prefix).
+
+        Returns:
+            Agent details.
+        """
+        # Resolve name to ID if needed (uses cache)
+        agent_id = self._resolve_agent_id(name_or_id)
+
+        resp = self._request("GET", f"/agents/{agent_id}")
+        return AgentResponse.model_validate(resp.json())
+
+    def delete_agent(self, name_or_id: str) -> None:
+        """Delete a hosted agent.
+
+        Args:
+            name_or_id: Agent name or ID.
+        """
+        # Resolve name to ID if needed (uses cache)
+        agent_id = self._resolve_agent_id(name_or_id)
+
+        self._request("DELETE", f"/agents/{agent_id}")
+
+        # Invalidate cache entry for the deleted agent
+        for name, cached_id in list(self._agent_name_cache.items()):
+            if cached_id == agent_id:
+                del self._agent_name_cache[name]
+                break
+
+    # ==================== RUNS ====================
+
+    def create_run(
+        self,
+        agent_id: str,
+        prompt: str,
+        session_id: str | None = None,
+    ) -> RunResponse:
+        """Create a new run for an agent.
+
+        Args:
+            agent_id: Agent ID or name.
+            prompt: User prompt.
+            session_id: Optional session ID for multi-turn.
+
+        Returns:
+            Created run.
+        """
+        # Resolve name to ID if needed (uses cache)
+        resolved_id = self._resolve_agent_id(agent_id)
+
+        data: dict[str, str] = {
+            "agent_id": resolved_id,
+            "prompt": prompt,
+        }
+        if session_id:
+            data["session_id"] = session_id
+
+        resp = self._request("POST", "/runs", json_data=data)
+        return RunResponse.model_validate(resp.json())
+
+    def list_runs(
+        self,
+        agent_id: str | None = None,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> list[RunResponse]:
+        """List runs.
+
+        Args:
+            agent_id: Filter by agent ID or name.
+            status: Filter by status.
+            limit: Maximum number of runs to return.
+
+        Returns:
+            List of runs.
+        """
+        params: dict[str, int | str] = {"limit": limit}
+
+        if agent_id:
+            # Resolve name to ID if needed (uses cache)
+            resolved_id = self._resolve_agent_id(agent_id)
+            params["agent_id"] = resolved_id
+
+        if status:
+            params["status"] = status
+
+        resp = self._request("GET", "/runs", params=params)
+        data = resp.json()
+        return [RunResponse.model_validate(r) for r in data.get("runs", [])]
+
+    def _resolve_id(
+        self, entity_id: str, prefix: str, endpoint: str, entity_name: str
+    ) -> str:
+        """Resolve an entity ID or short prefix to a full prefixed ID.
+
+        Args:
+            entity_id: Full ID, UUID, or short prefix.
+            prefix: ID prefix (e.g. "run", "ses").
+            endpoint: API resolve endpoint (e.g. "/runs/resolve").
+            entity_name: Human-readable name for error messages.
+
+        Returns:
+            Full ID with prefix.
+        """
+        clean = entity_id.replace(f"{prefix}_", "").replace("-", "")
+        # Full UUID (32 hex chars) — no need to resolve
+        if len(clean) >= 32:
+            if not entity_id.startswith(f"{prefix}_"):
+                entity_id = f"{prefix}_{entity_id}"
+            return entity_id
+
+        # Short prefix — resolve via API
+        resp = self._request("GET", endpoint, params={"id_prefix": clean})
+        ids: list[str] = resp.json().get("ids", [])
+        if len(ids) == 0:
+            raise PlatformAPIError(
+                404, f"No {entity_name} found matching '{entity_id}'"
+            )
+        if len(ids) > 1:
+            short_ids = [i.replace(f"{prefix}_", "").replace("-", "")[:12] for i in ids]
+            raise PlatformAPIError(
+                409, f"Ambiguous ID '{entity_id}' — matches: {', '.join(short_ids)}"
+            )
+        return ids[0]
+
+    def _resolve_run_id(self, run_id: str) -> str:
+        """Resolve a run ID or short prefix to a full run ID."""
+        return self._resolve_id(run_id, "run", "/runs/resolve", "run")
+
+    def _resolve_session_id(self, session_id: str) -> str:
+        """Resolve a session ID or short prefix to a full session ID."""
+        return self._resolve_id(session_id, "ses", "/sessions/resolve", "session")
+
+    def get_run(self, run_id: str) -> RunResponse:
+        """Get a run by ID or short prefix.
+
+        Args:
+            run_id: Run ID, UUID, or short prefix.
+
+        Returns:
+            Run details.
+        """
+        run_id = self._resolve_run_id(run_id)
+        resp = self._request("GET", f"/runs/{run_id}")
+        return RunResponse.model_validate(resp.json())
+
+    def cancel_run(self, run_id: str) -> RunResponse:
+        """Cancel a running run.
+
+        Args:
+            run_id: Run ID or short prefix.
+
+        Returns:
+            Updated run.
+        """
+        run_id = self._resolve_run_id(run_id)
+        resp = self._request("POST", f"/runs/{run_id}/cancel")
+        return RunResponse.model_validate(resp.json())
+
+    def _parse_sse_stream(self, resp: requests.Response) -> Iterator[RunEvent]:
+        """Parse SSE events from a streaming response using chunk-based reading.
+
+        Uses iter_content(chunk_size=None) for real-time streaming instead of
+        iter_lines() which buffers in 512-byte chunks.
+        """
+        buffer = ""
+        current_event_type: str | None = None
+        data_lines: list[str] = []
+
+        for chunk in resp.iter_content(chunk_size=None, decode_unicode=True):
+            buffer += chunk
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                line = line.rstrip("\r")
+
+                if not line:
+                    # Empty line = end of SSE event
+                    if current_event_type and data_lines:
+                        full_data = "\n".join(data_lines)
+                        try:
+                            parsed = json.loads(full_data)
+                        except json.JSONDecodeError:
+                            parsed = {"raw": full_data}
+                        yield RunEvent(type=current_event_type, data=parsed)
+                    current_event_type = None
+                    data_lines = []
+                    continue
+
+                if line.startswith("event: "):
+                    current_event_type = line[7:]
+                elif line.startswith("data: "):
+                    data_lines.append(line[6:])
+
+    def create_and_stream_run(
+        self,
+        agent_id: str,
+        prompt: str,
+    ) -> Iterator[RunEvent]:
+        """Create a run and stream events in real-time via SSE.
+
+        Uses POST /runs/stream which proxies the SSE stream directly from
+        the sandbox, delivering tokens as they're generated.
+
+        Args:
+            agent_id: Agent ID or name.
+            prompt: User prompt.
+
+        Yields:
+            Run events as they arrive.
+        """
+        resolved_id = self._resolve_agent_id(agent_id)
+
+        data: dict[str, str] = {
+            "agent_id": resolved_id,
+            "prompt": prompt,
+        }
+
+        resp = self._request("POST", "/runs/stream", json_data=data, stream=True)
+
+        self._current_stream_run_id = resp.headers.get("X-Run-ID")
+
+        yield from self._parse_sse_stream(resp)
+
+    # ==================== AGENT SECRETS ====================
+
+    def get_agent_secrets(self, name_or_id: str) -> list[str]:
+        """Get secret keys for an agent (values never returned).
+
+        Args:
+            name_or_id: Agent name or ID.
+
+        Returns:
+            List of secret key names.
+        """
+        # Resolve name to ID if needed (uses cache)
+        agent_id = self._resolve_agent_id(name_or_id)
+
+        resp = self._request("GET", f"/agents/{agent_id}/secrets")
+        return cast(list[str], resp.json().get("keys", []))
+
+    def set_agent_secrets(self, name_or_id: str, secrets: dict[str, str]) -> list[str]:
+        """Set secrets for an agent (merges with existing).
+
+        Args:
+            name_or_id: Agent name or ID.
+            secrets: Dictionary of secret key-value pairs.
+
+        Returns:
+            Updated list of secret key names.
+        """
+        # Resolve name to ID if needed (uses cache)
+        agent_id = self._resolve_agent_id(name_or_id)
+
+        resp = self._request(
+            "PATCH",
+            f"/agents/{agent_id}/secrets",
+            json_data={"secrets": secrets},
+        )
+        return cast(list[str], resp.json().get("keys", []))
+
+    def delete_agent_secret(self, name_or_id: str, key: str) -> list[str]:
+        """Delete a secret from an agent.
+
+        Args:
+            name_or_id: Agent name or ID.
+            key: Secret key to delete.
+
+        Returns:
+            Updated list of secret key names.
+        """
+        # Resolve name to ID if needed (uses cache)
+        agent_id = self._resolve_agent_id(name_or_id)
+
+        resp = self._request("DELETE", f"/agents/{agent_id}/secrets/{key}")
+        return cast(list[str], resp.json().get("keys", []))
+
+    # ==================== SESSIONS ====================
+
+    def create_session(
+        self,
+        agent_name_or_id: str,
+        title: str | None = None,
+        idle_timeout_seconds: int = 1800,
+    ) -> dict[str, Any]:
+        """Create a new session.
+
+        Args:
+            agent_name_or_id: Agent name or ID.
+            title: Optional session title.
+            idle_timeout_seconds: Idle timeout in seconds.
+
+        Returns:
+            Session data dictionary.
+        """
+        agent_id = self._resolve_agent_id(agent_name_or_id)
+        resp = self._request(
+            "POST",
+            "/sessions",
+            json_data={
+                "agent_id": agent_id,
+                "title": title,
+                "idle_timeout_seconds": idle_timeout_seconds,
+            },
+        )
+        return cast(dict[str, Any], resp.json())
+
+    def list_sessions(
+        self, agent_id: str | None = None, status: str | None = None, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        """List sessions.
+
+        Args:
+            agent_id: Filter by agent name or ID.
+            status: Filter by status.
+            limit: Maximum number of sessions to return.
+
+        Returns:
+            List of session dictionaries.
+        """
+        params: dict[str, str] = {"limit": str(limit)}
+        if agent_id:
+            params["agent_id"] = self._resolve_agent_id(agent_id)
+        if status:
+            params["status"] = status
+        resp = self._request("GET", "/sessions", params=params)
+        return cast(list[dict[str, Any]], resp.json().get("sessions", []))
+
+    def get_session(self, session_id: str) -> dict[str, Any]:
+        """Get session details.
+
+        Args:
+            session_id: Session ID or short prefix.
+
+        Returns:
+            Session data dictionary.
+        """
+        session_id = self._resolve_session_id(session_id)
+        resp = self._request("GET", f"/sessions/{session_id}")
+        return cast(dict[str, Any], resp.json())
+
+    def end_session(self, session_id: str) -> dict[str, Any]:
+        """End a session.
+
+        Args:
+            session_id: Session ID or short prefix.
+
+        Returns:
+            Updated session data dictionary.
+        """
+        session_id = self._resolve_session_id(session_id)
+        resp = self._request("POST", f"/sessions/{session_id}/end")
+        return cast(dict[str, Any], resp.json())
+
+    def stream_session_message(
+        self, session_id: str, prompt: str
+    ) -> Iterator[RunEvent]:
+        """Send a message to a session and stream the response.
+
+        Args:
+            session_id: Session ID.
+            prompt: User prompt.
+
+        Yields:
+            Run events as they arrive.
+        """
+        resp = self._request(
+            "POST",
+            f"/sessions/{session_id}/messages",
+            json_data={"prompt": prompt},
+            stream=True,
+        )
+        yield from self._parse_sse_stream(resp)
