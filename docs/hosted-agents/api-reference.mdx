@@ -1,0 +1,171 @@
+---
+title: API Reference
+description: Complete REST API reference for Hosted Agents
+---
+
+# API Reference
+
+Base URL: `https://api.superserve.ai/v1`
+
+All endpoints require authentication via Bearer token.
+
+## Authentication
+
+```bash
+Authorization: Bearer sk_live_...
+```
+
+## Agents
+
+### Create Agent
+
+<ParamField path="POST" type="/agents">
+  Create a new agent configuration.
+</ParamField>
+
+**Request Body**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Agent name (1-63 chars, lowercase alphanumeric + hyphens) |
+| `model` | string | No | Claude model (default: `claude-sonnet-4-20250514`) |
+| `system_prompt` | string | No | System instructions |
+| `tools` | array | No | Allowed tools |
+| `max_turns` | integer | No | Max turns (1-100, default: 10) |
+| `timeout_seconds` | integer | No | Timeout (10-3600, default: 300) |
+
+**Response**: `201 Created`
+
+```json
+{
+  "id": "agt_abc123",
+  "name": "my-agent",
+  "model": "claude-sonnet-4-20250514",
+  "status": "active",
+  "created_at": "2026-02-07T10:00:00Z"
+}
+```
+
+### List Agents
+
+<ParamField path="GET" type="/agents">
+  List all agents for the authenticated user.
+</ParamField>
+
+**Query Parameters**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `limit` | integer | Max results (1-100, default: 20) |
+| `offset` | integer | Pagination offset |
+
+### Get Agent
+
+<ParamField path="GET" type="/agents/{agent_id}">
+  Get agent details by ID.
+</ParamField>
+
+### Update Agent
+
+<ParamField path="PATCH" type="/agents/{agent_id}">
+  Update agent configuration.
+</ParamField>
+
+### Delete Agent
+
+<ParamField path="DELETE" type="/agents/{agent_id}">
+  Soft delete an agent.
+</ParamField>
+
+**Response**: `204 No Content`
+
+---
+
+## Runs
+
+### Create Run
+
+<ParamField path="POST" type="/runs">
+  Create and start a new run.
+</ParamField>
+
+**Request Body**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `agent_id` | string | Yes | Agent ID |
+| `prompt` | string | Yes | User prompt (1-100,000 chars) |
+| `session_id` | string | No | Session ID for multi-turn |
+
+**Response**: `201 Created`
+
+### List Runs
+
+<ParamField path="GET" type="/runs">
+  List runs with optional filters.
+</ParamField>
+
+**Query Parameters**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `agent_id` | string | Filter by agent |
+| `status` | string | Filter by status |
+| `limit` | integer | Max results |
+| `offset` | integer | Pagination offset |
+
+### Get Run
+
+<ParamField path="GET" type="/runs/{run_id}">
+  Get run details including output and metrics.
+</ParamField>
+
+### Stream Run Events
+
+<ParamField path="GET" type="/runs/{run_id}/events">
+  Stream run events via SSE.
+</ParamField>
+
+**Headers**
+
+```
+Accept: text/event-stream
+```
+
+**Response**: Server-Sent Events stream
+
+### Cancel Run
+
+<ParamField path="POST" type="/runs/{run_id}/cancel">
+  Cancel a pending or running run.
+</ParamField>
+
+---
+
+## Error Responses
+
+All errors follow this format:
+
+```json
+{
+  "error": {
+    "code": "agent_not_found",
+    "message": "Agent with id 'agt_xxx' not found",
+    "type": "invalid_request_error"
+  }
+}
+```
+
+### Error Codes
+
+| HTTP Status | Code | Type | Description |
+|-------------|------|------|-------------|
+| 400 | `invalid_request` | `invalid_request_error` | Malformed request |
+| 401 | `unauthorized` | `authentication_error` | Invalid or missing token |
+| 404 | `agent_not_found` | `invalid_request_error` | Agent not found |
+| 404 | `run_not_found` | `invalid_request_error` | Run not found |
+| 404 | `session_not_found` | `invalid_request_error` | Session not found |
+| 409 | `conflict` | `invalid_request_error` | Resource already exists |
+| 422 | `validation_error` | `invalid_request_error` | Invalid field values |
+| 429 | `rate_limited` | `rate_limit_error` | Too many requests |
+| 500 | `internal_error` | `api_error` | Server error |

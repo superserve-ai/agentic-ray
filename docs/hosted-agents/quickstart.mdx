@@ -1,0 +1,113 @@
+---
+title: Quickstart
+description: Deploy your first hosted agent in 5 minutes
+---
+
+# Quickstart
+
+This guide will walk you through deploying and running your first hosted agent.
+
+## Prerequisites
+
+- Python 3.12+
+- A Superserve account ([sign up free](https://superserve.ai))
+
+## Step 1: Install the CLI
+
+```bash
+pip install superserve
+```
+
+## Step 2: Authenticate
+
+```bash
+superserve login
+```
+
+This opens your browser to complete OAuth authentication.
+
+## Step 3: Create an Agent
+
+Create your first agent with a system prompt:
+
+```bash
+superserve agents create \
+  --name my-first-agent \
+  --system-prompt "You are a helpful assistant. Be concise." \
+  --tools Bash,Read,Write
+```
+
+You should see:
+```
+Created agent 'my-first-agent' (agt_abc123)
+```
+
+## Step 4: Run the Agent
+
+Execute your agent with a prompt:
+
+```bash
+superserve run my-first-agent "What is the capital of France?"
+```
+
+You'll see the streaming output:
+```
+The capital of France is Paris.
+
+Completed in 1.2s (150 input / 12 output tokens)
+```
+
+## Step 5: View Run History
+
+See your recent runs:
+
+```bash
+superserve runs list
+```
+
+```
+ID                   AGENT                STATUS       DURATION   CREATED
+run_def456...        agt_abc123...        completed    1.2s       2026-02-07 10:05
+```
+
+## Using the API
+
+You can also use the REST API directly:
+
+### Create an Agent
+
+```bash
+curl -X POST https://api.superserve.ai/v1/agents \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-api-agent",
+    "system_prompt": "Be helpful and concise.",
+    "tools": ["Bash", "Read", "Write"]
+  }'
+```
+
+### Run the Agent
+
+```bash
+curl -X POST https://api.superserve.ai/v1/runs \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "agt_abc123",
+    "prompt": "What is 2+2?"
+  }'
+```
+
+### Stream Events
+
+```bash
+curl -N https://api.superserve.ai/v1/runs/run_def456/events \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Next Steps
+
+- [Learn about Agent configuration](/hosted-agents/agents)
+- [Understand Run lifecycle](/hosted-agents/runs)
+- [Full API Reference](/hosted-agents/api-reference)

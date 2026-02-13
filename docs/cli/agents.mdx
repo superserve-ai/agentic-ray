@@ -1,0 +1,155 @@
+---
+title: superserve agents
+description: Manage hosted agents via CLI
+---
+
+# superserve agents
+
+Commands for managing hosted agent configurations.
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `agents list` | List all agents |
+| `agents create` | Create a new agent |
+| `agents get` | Get agent details |
+| `agents delete` | Delete an agent |
+
+---
+
+## agents list
+
+List all hosted agents.
+
+```bash
+superserve agents list [OPTIONS]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Output as JSON |
+
+### Example
+
+```bash
+$ superserve agents list
+
+NAME                      MODEL                          STATUS     CREATED
+researcher                claude-sonnet-4-20250514       active     2026-02-07
+code-reviewer             claude-opus-4-20250514         active     2026-02-06
+```
+
+---
+
+## agents create
+
+Create a new hosted agent.
+
+```bash
+superserve agents create [OPTIONS]
+```
+
+### Options
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `--name` | Yes | - | Agent name |
+| `--model` | No | `claude-sonnet-4-20250514` | Claude model |
+| `--system-prompt` | No | `""` | System prompt (or `@file.txt`) |
+| `--tools` | No | `Bash,Read,Write,Glob,Grep` | Comma-separated tools |
+| `--max-turns` | No | `10` | Maximum turns |
+| `--timeout` | No | `300` | Timeout in seconds |
+| `--json` | No | - | Output as JSON |
+
+### Examples
+
+```bash
+# Basic agent
+superserve agents create --name helper
+
+# With system prompt from file
+superserve agents create --name researcher \
+  --system-prompt @prompts/researcher.txt \
+  --tools Bash,Read,Write,WebSearch
+
+# With all options
+superserve agents create \
+  --name code-reviewer \
+  --model claude-opus-4-20250514 \
+  --system-prompt "You are an expert code reviewer" \
+  --tools Bash,Read,Grep \
+  --max-turns 30 \
+  --timeout 600
+```
+
+---
+
+## agents get
+
+Get details of an agent.
+
+```bash
+superserve agents get <NAME> [OPTIONS]
+```
+
+### Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `NAME` | Agent name or ID |
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Output as JSON |
+
+### Example
+
+```bash
+$ superserve agents get researcher
+
+ID:            agt_abc123def456
+Name:          researcher
+Model:         claude-sonnet-4-20250514
+Status:        active
+Max Turns:     10
+Timeout:       300s
+Tools:         Bash, Read, Write, WebSearch
+Created:       2026-02-07T10:00:00Z
+System Prompt: You are a helpful research assistant...
+```
+
+---
+
+## agents delete
+
+Delete an agent.
+
+```bash
+superserve agents delete <NAME> [OPTIONS]
+```
+
+### Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `NAME` | Agent name or ID |
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--yes`, `-y` | Skip confirmation |
+
+### Example
+
+```bash
+$ superserve agents delete researcher
+
+Delete agent 'researcher'? [y/N]: y
+Deleted agent 'researcher'
+```
