@@ -4,14 +4,15 @@ import os
 from importlib.metadata import version
 from pathlib import Path
 
-# Staging:
-PLATFORM_API_URL = os.environ.get(
-    "SUPERSERVE_API_URL", "https://api-staging.superserve.ai"
-)
+# Production (default):
+PLATFORM_API_URL = os.environ.get("SUPERSERVE_API_URL", "https://api.superserve.ai")
 DASHBOARD_URL = os.environ.get(
-    "SUPERSERVE_DASHBOARD_URL", "https://console-staging.superserve.ai"
+    "SUPERSERVE_DASHBOARD_URL", "https://console.superserve.ai"
 )
-# Local development: uncomment for local testing
+# Staging:
+# PLATFORM_API_URL = os.environ.get("SUPERSERVE_API_URL", "https://api-staging.superserve.ai")
+# DASHBOARD_URL = os.environ.get("SUPERSERVE_DASHBOARD_URL", "https://console-staging.superserve.ai")
+# Local:
 # PLATFORM_API_URL = os.environ.get("SUPERSERVE_API_URL", "http://localhost:8000")
 # DASHBOARD_URL = os.environ.get("SUPERSERVE_DASHBOARD_URL", "http://localhost:3001")
 SUPERSERVE_CONFIG_DIR = Path.home() / ".superserve"
