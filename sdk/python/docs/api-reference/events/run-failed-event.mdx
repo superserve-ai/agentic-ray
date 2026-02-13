@@ -1,0 +1,73 @@
+---
+title: 'RunFailedEvent'
+description: 'Emitted when a run fails'
+icon: 'xmark'
+---
+
+Emitted when a run fails. Always the last event for failed runs.
+
+## Definition
+
+```python
+from typing import Any
+
+class RunFailedEvent(BaseEvent):
+    run_id: str
+    type: str = "run.failed"
+    error: dict[str, Any]
+
+    @property
+    def error_message(self) -> str:
+        return self.error.get("message", "Unknown error")
+```
+
+## Properties
+
+<ParamField path="run_id" type="str" required>
+  The run identifier.
+</ParamField>
+
+<ParamField path="type" type="str" required>
+  Always `"run.failed"`.
+</ParamField>
+
+<ParamField path="error" type="dict[str, Any]" required>
+  Error details including code and message.
+</ParamField>
+
+<ParamField path="error_message" type="str" required>
+  Human-readable error message (computed property).
+</ParamField>
+
+## Common Error Codes
+
+| Code | Description |
+|------|-------------|
+| `timeout` | Agent execution timed out |
+| `rate_limit` | Too many requests |
+| `model_error` | Model API error |
+| `tool_error` | Tool execution failed |
+
+## Example
+
+```python
+from superserve_sdk import Superserve, RunFailedEvent
+
+async with Superserve() as client:
+    async for event in client.stream("agent", "Hello"):
+        if isinstance(event, RunFailedEvent):
+            print(f"Run failed!")
+            print(f"Error: {event.error_message}")
+            print(f"Details: {event.error}")
+```
+
+## Error Handling Pattern
+
+```python
+async for event in client.stream("agent", "Task"):
+    match event:
+        case RunCompletedEvent():
+            return {"success": True, "output": event.output}
+        case RunFailedEvent():
+            return {"success": False, "error": event.error_message}
+```

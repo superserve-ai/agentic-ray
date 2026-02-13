@@ -1,0 +1,100 @@
+---
+title: 'API Reference Overview'
+description: 'Complete reference for all Superserve Python SDK classes and methods'
+icon: 'book-open'
+---
+
+This section provides complete API documentation for all public classes, methods, and types in the Superserve Python SDK.
+
+## Quick Reference
+
+<CardGroup cols={2}>
+  <Card title="Client" icon="plug" href="/api-reference/client/superserve">
+    `Superserve` and `SuperserveSync` client classes
+  </Card>
+  <Card title="Agents" icon="robot" href="/api-reference/agents/agent-model">
+    Agent model and CRUD operations
+  </Card>
+  <Card title="Runs" icon="play" href="/api-reference/runs/run-model">
+    Run model, execution, and streaming
+  </Card>
+  <Card title="Events" icon="bolt" href="/api-reference/events/base-event">
+    SSE event types for streaming
+  </Card>
+  <Card title="Metrics" icon="chart-line" href="/api-reference/metrics/run-metrics">
+    Performance and usage tracking
+  </Card>
+  <Card title="Errors" icon="circle-exclamation" href="/api-reference/errors/superserve-error">
+    Exception hierarchy and handling
+  </Card>
+  <Card title="Authentication" icon="key" href="/api-reference/auth/auth-provider">
+    Credential management utilities
+  </Card>
+</CardGroup>
+
+## Installation
+
+```bash
+pip install superserve-sdk
+```
+
+## Import Reference
+
+```python
+# Main clients
+from superserve_sdk import Superserve, SuperserveSync
+
+# Models
+from superserve_sdk import Agent, Run, UsageMetrics
+
+# Events
+from superserve_sdk import (
+    RunEvent,
+    RunStartedEvent,
+    MessageDeltaEvent,
+    ToolStartEvent,
+    ToolEndEvent,
+    RunCompletedEvent,
+    RunFailedEvent,
+    RunCancelledEvent,
+)
+
+# Metrics
+from superserve_sdk import RunMetrics, ToolMetrics, MetricsCollector
+
+# Errors
+from superserve_sdk import (
+    SuperserveError,
+    APIError,
+    AuthenticationError,
+    NotFoundError,
+    ValidationError,
+    ConflictError,
+    RateLimitError,
+    StreamError,
+    ConnectionError,
+    TimeoutError,
+)
+
+# Authentication
+from superserve_sdk import (
+    AuthProvider,
+    get_api_key,
+    save_credentials_to_file,
+    load_credentials_from_file,
+    clear_credentials,
+)
+```
+
+## Type Annotations
+
+The SDK is fully typed and works with mypy and other type checkers:
+
+```python
+from superserve_sdk import Superserve, Agent, Run
+
+async def example(client: Superserve) -> Run:
+    agent: Agent = await client.create_agent(name="typed-agent")
+    run: Run = await client.run(agent.id, "Hello")
+    return run
+```

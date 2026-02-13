@@ -1,0 +1,97 @@
+---
+title: 'update_agent'
+description: 'Update an agent configuration'
+icon: 'pen'
+---
+
+Updates an agent's configuration. Only provided values are updated.
+
+## Signature
+
+```python
+async def update_agent(
+    agent_id: str,
+    model: str | None = None,
+    system_prompt: str | None = None,
+    tools: list[str] | None = None,
+    max_turns: int | None = None,
+    timeout_seconds: int | None = None,
+) -> Agent
+```
+
+## Parameters
+
+<ParamField path="agent_id" type="str" required>
+  Agent ID or name.
+</ParamField>
+
+<ParamField path="model" type="str | None" default="None">
+  New AI model identifier.
+</ParamField>
+
+<ParamField path="system_prompt" type="str | None" default="None">
+  New system instructions.
+</ParamField>
+
+<ParamField path="tools" type="list[str] | None" default="None">
+  New list of available tools.
+</ParamField>
+
+<ParamField path="max_turns" type="int | None" default="None">
+  New maximum turns. Range: 1-100.
+</ParamField>
+
+<ParamField path="timeout_seconds" type="int | None" default="None">
+  New timeout. Range: 10-3600.
+</ParamField>
+
+## Returns
+
+<ResponseField name="Agent" type="Agent">
+  The updated agent.
+</ResponseField>
+
+## Errors
+
+| Error | Cause |
+|-------|-------|
+| `NotFoundError` | Agent not found |
+| `ValidationError` | Invalid parameter value |
+| `AuthenticationError` | Invalid API key |
+
+<Warning>
+  Agent names cannot be changed after creation.
+</Warning>
+
+## Examples
+
+<CodeGroup>
+```python Async
+from superserve_sdk import Superserve
+
+async with Superserve() as client:
+    # Update system prompt
+    agent = await client.update_agent(
+        "my-agent",
+        system_prompt="You are an expert Python developer.",
+    )
+
+    # Update multiple fields
+    agent = await client.update_agent(
+        "agt_abc123",
+        model="claude-opus-4-20250514",
+        max_turns=50,
+        timeout_seconds=1200,
+    )
+```
+
+```python Sync
+from superserve_sdk import SuperserveSync
+
+with SuperserveSync() as client:
+    agent = client.update_agent(
+        "my-agent",
+        tools=["Read", "Glob"],
+    )
+```
+</CodeGroup>

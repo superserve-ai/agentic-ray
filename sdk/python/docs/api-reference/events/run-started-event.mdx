@@ -1,0 +1,36 @@
+---
+title: 'RunStartedEvent'
+description: 'Emitted when a run begins executing'
+icon: 'play'
+---
+
+Emitted when a run begins executing. Always the first event.
+
+## Definition
+
+```python
+class RunStartedEvent(BaseEvent):
+    run_id: str
+    type: str = "run.started"
+```
+
+## Properties
+
+<ParamField path="run_id" type="str" required>
+  The run identifier.
+</ParamField>
+
+<ParamField path="type" type="str" required>
+  Always `"run.started"`.
+</ParamField>
+
+## Example
+
+```python
+from superserve_sdk import Superserve, RunStartedEvent
+
+async with Superserve() as client:
+    async for event in client.stream("agent", "Hello"):
+        if isinstance(event, RunStartedEvent):
+            print(f"Run started: {event.run_id}")
+```

@@ -1,0 +1,65 @@
+---
+title: 'list_agents'
+description: 'List all agents'
+icon: 'list'
+---
+
+Lists all agents with optional pagination.
+
+## Signature
+
+```python
+async def list_agents(
+    limit: int = 20,
+    offset: int = 0,
+) -> list[Agent]
+```
+
+## Parameters
+
+<ParamField path="limit" type="int" default="20">
+  Maximum number of agents to return.
+</ParamField>
+
+<ParamField path="offset" type="int" default="0">
+  Number of agents to skip for pagination.
+</ParamField>
+
+## Returns
+
+<ResponseField name="list[Agent]" type="list[Agent]">
+  List of agents.
+</ResponseField>
+
+## Errors
+
+| Error | Cause |
+|-------|-------|
+| `AuthenticationError` | Invalid API key |
+
+## Examples
+
+<CodeGroup>
+```python Async
+from superserve_sdk import Superserve
+
+async with Superserve() as client:
+    # List all agents
+    agents = await client.list_agents()
+    for agent in agents:
+        print(f"- {agent.name} ({agent.id})")
+
+    # With pagination
+    page_1 = await client.list_agents(limit=10, offset=0)
+    page_2 = await client.list_agents(limit=10, offset=10)
+```
+
+```python Sync
+from superserve_sdk import SuperserveSync
+
+with SuperserveSync() as client:
+    agents = client.list_agents()
+    for agent in agents:
+        print(f"- {agent.name}")
+```
+</CodeGroup>

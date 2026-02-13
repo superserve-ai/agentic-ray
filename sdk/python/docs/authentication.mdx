@@ -1,0 +1,283 @@
+---
+title: 'Authentication'
+description: 'API key setup and credentials management for the Superserve SDK'
+icon: 'key'
+---
+
+The Superserve SDK supports multiple methods for providing your API key, with a clear priority order.
+
+## API Key Sources
+
+The SDK checks for API keys in the following order:
+
+<Steps>
+  <Step title="Explicit Parameter">
+    Passed directly to the client constructor
+  </Step>
+  <Step title="Environment Variable">
+    `SUPERSERVE_API_KEY` environment variable
+  </Step>
+  <Step title="Credentials File">
+    `~/.superserve/credentials.json` file
+  </Step>
+</Steps>
+
+## Authentication Methods
+
+<Tabs>
+  <Tab title="Explicit API Key">
+    Pass the API key directly when creating the client:
+
+    <CodeGroup>
+    ```python Async Client
+    from superserve_sdk import Superserve
+
+    client = Superserve(api_key="sk_your_api_key_here")
+    ```
+
+    ```python Sync Client
+    from superserve_sdk import SuperserveSync
+
+    client = SuperserveSync(api_key="sk_your_api_key_here")
+    ```
+    </CodeGroup>
+
+    <Info>
+      This method is useful for:
+      - Testing with different API keys
+      - Multi-tenant applications
+      - Programmatic key rotation
+    </Info>
+  </Tab>
+
+  <Tab title="Environment Variable">
+    Set the `SUPERSERVE_API_KEY` environment variable:
+
+    <CodeGroup>
+    ```bash Linux/macOS
+    export SUPERSERVE_API_KEY=sk_your_api_key_here
+    ```
+
+    ```powershell Windows PowerShell
+    $env:SUPERSERVE_API_KEY = "sk_your_api_key_here"
+    ```
+
+    ```batch Windows Command Prompt
+    set SUPERSERVE_API_KEY=sk_your_api_key_here
+    ```
+    </CodeGroup>
+
+    Then create clients without specifying the key:
+
+    ```python
+    from superserve_sdk import Superserve
+
+    # API key is automatically loaded from environment
+    async with Superserve() as client:
+        agents = await client.list_agents()
+    ```
+
+    <Note>
+      This is the recommended approach for:
+      - Production deployments
+      - CI/CD pipelines
+      - Docker containers
+    </Note>
+  </Tab>
+
+  <Tab title="Credentials File">
+    Store your API key in a JSON file at `~/.superserve/credentials.json`:
+
+    ```json
+    {
+      "api_key": "sk_your_api_key_here"
+    }
+    ```
+
+    Create the file manually or use the SDK:
+
+    ```python
+    from superserve_sdk import save_credentials_to_file
+
+    save_credentials_to_file("sk_your_api_key_here")
+    ```
+
+    The SDK also supports alternative key names for compatibility:
+
+    <CodeGroup>
+    ```json token
+    {
+      "token": "sk_your_api_key_here"
+    }
+    ```
+
+    ```json access_token
+    {
+      "access_token": "sk_your_api_key_here"
+    }
+    ```
+    </CodeGroup>
+
+    ### Custom Credentials Path
+
+    You can specify a custom path for the credentials file:
+
+    ```python
+    from pathlib import Path
+    from superserve_sdk import Superserve
+
+    client = Superserve(
+        credentials_path=Path("/custom/path/credentials.json")
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Credential Management Functions
+
+### get_api_key()
+
+Retrieve an API key using the priority order:
+
+```python
+from superserve_sdk import get_api_key
+
+# Uses priority order: explicit > env > file
+key = get_api_key()
+
+# Or provide an explicit key
+key = get_api_key(api_key="sk_explicit")
+```
+
+### save_credentials_to_file()
+
+Save credentials securely:
+
+```python
+from superserve_sdk import save_credentials_to_file
+
+# Save to default location (~/.superserve/credentials.json)
+save_credentials_to_file("sk_your_api_key_here")
+
+# Save to custom location
+from pathlib import Path
+save_credentials_to_file("sk_your_api_key_here", path=Path("/custom/creds.json"))
+```
+
+<Info>
+  The file is automatically created with restrictive permissions (600 - owner read/write only).
+</Info>
+
+### load_credentials_from_file()
+
+Load credentials from a file:
+
+```python
+from pathlib import Path
+from superserve_sdk import load_credentials_from_file
+
+creds = load_credentials_from_file(Path("~/.superserve/credentials.json").expanduser())
+if creds:
+    print(f"Found API key: {creds.api_key[:10]}...")
+```
+
+### clear_credentials()
+
+Remove stored credentials:
+
+```python
+from superserve_sdk import clear_credentials
+
+# Clear default credentials
+cleared = clear_credentials()
+print(f"Credentials cleared: {cleared}")
+
+# Clear custom file
+from pathlib import Path
+cleared = clear_credentials(path=Path("/custom/creds.json"))
+```
+
+## AuthProvider Class
+
+For advanced use cases, you can use the `AuthProvider` class directly:
+
+```python
+from superserve_sdk import AuthProvider
+
+# Create a provider
+auth = AuthProvider(api_key="sk_test")
+
+# Check if authenticated
+if auth.is_authenticated():
+    # Get authorization headers
+    headers = auth.get_headers()
+    print(headers)  # {"Authorization": "Bearer sk_test"}
+
+# Refresh cached credentials
+auth.refresh()
+```
+
+## Error Handling
+
+<Warning>
+  If no API key is found, the SDK raises a `ValueError` when making requests.
+</Warning>
+
+```python
+from superserve_sdk import Superserve
+
+async with Superserve() as client:
+    try:
+        agents = await client.list_agents()
+    except ValueError as e:
+        print(f"Authentication error: {e}")
+        # "No API key found. Set SUPERSERVE_API_KEY environment variable,
+        #  pass api_key parameter, or save credentials to ~/.superserve/credentials.json"
+```
+
+For invalid API keys, the SDK raises an `AuthenticationError`:
+
+```python
+from superserve_sdk import Superserve, AuthenticationError
+
+async with Superserve(api_key="invalid_key") as client:
+    try:
+        agents = await client.list_agents()
+    except AuthenticationError as e:
+        print(f"Invalid API key: {e.message}")
+```
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Never Commit Keys" icon="ban">
+    Never commit API keys to version control
+  </Card>
+  <Card title="Use Environment Variables" icon="terminal">
+    Use environment variables in production
+  </Card>
+  <Card title="Rotate Regularly" icon="arrows-rotate">
+    Rotate keys regularly if compromised
+  </Card>
+  <Card title="Restrictive Permissions" icon="lock">
+    Use restrictive permissions on credentials files
+  </Card>
+</CardGroup>
+
+<Accordion title="Example: Loading from AWS Secrets Manager">
+  ```python
+  import boto3
+  from superserve_sdk import Superserve
+
+  # Load from AWS Secrets Manager
+  def get_api_key_from_aws():
+      client = boto3.client("secretsmanager")
+      response = client.get_secret_value(SecretId="superserve/api-key")
+      return response["SecretString"]
+
+  # Use with SDK
+  api_key = get_api_key_from_aws()
+  async with Superserve(api_key=api_key) as client:
+      agents = await client.list_agents()
+  ```
+</Accordion>

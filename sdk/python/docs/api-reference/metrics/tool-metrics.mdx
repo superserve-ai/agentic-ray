@@ -1,0 +1,87 @@
+---
+title: 'ToolMetrics'
+description: 'Metrics for a single tool call'
+icon: 'wrench'
+---
+
+Dataclass containing metrics for a single tool call.
+
+## Definition
+
+```python
+from dataclasses import dataclass
+from typing import Any
+
+@dataclass
+class ToolMetrics:
+    name: str
+    tool_call_id: str
+    input: dict[str, Any]
+    output: str
+    duration_ms: int
+    success: bool
+    started_at: float
+    ended_at: float
+```
+
+## Properties
+
+<ParamField path="name" type="str" required>
+  Tool name (e.g., `Bash`, `Read`).
+</ParamField>
+
+<ParamField path="tool_call_id" type="str" required>
+  Unique identifier for this call.
+</ParamField>
+
+<ParamField path="input" type="dict[str, Any]" required>
+  Input parameters passed to the tool.
+</ParamField>
+
+<ParamField path="output" type="str" required>
+  Tool output or error message.
+</ParamField>
+
+<ParamField path="duration_ms" type="int" required>
+  Execution time in milliseconds.
+</ParamField>
+
+<ParamField path="success" type="bool" required>
+  Whether the tool executed successfully.
+</ParamField>
+
+<ParamField path="started_at" type="float" required>
+  Unix timestamp when tool started.
+</ParamField>
+
+<ParamField path="ended_at" type="float" required>
+  Unix timestamp when tool ended.
+</ParamField>
+
+## Example
+
+```python
+from superserve_sdk import Superserve
+
+async with Superserve() as client:
+    events, handle = await client.stream_with_metrics("agent", "List files")
+    async for _ in events:
+        pass
+
+    for tool in handle.metrics.tool_calls:
+        print(f"Tool: {tool.name}")
+        print(f"  Input: {tool.input}")
+        print(f"  Duration: {tool.duration_ms}ms")
+        print(f"  Success: {tool.success}")
+```
+
+## Analysis
+
+```python
+def analyze_tool_performance(metrics):
+    for tool_name in set(metrics.tools_used):
+        calls = metrics.get_tool_calls_by_name(tool_name)
+        total_time = sum(c.duration_ms for c in calls)
+        success_rate = sum(1 for c in calls if c.success) / len(calls)
+        print(f"{tool_name}: {len(calls)} calls, {total_time}ms, {success_rate:.0%}")
+```

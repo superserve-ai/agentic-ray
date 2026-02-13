@@ -1,0 +1,51 @@
+---
+title: 'MessageDeltaEvent'
+description: 'Emitted when the agent outputs a text chunk'
+icon: 'message'
+---
+
+Emitted when the agent outputs a text chunk.
+
+## Definition
+
+```python
+class MessageDeltaEvent(BaseEvent):
+    run_id: str
+    type: str = "message.delta"
+    content: str
+```
+
+## Properties
+
+<ParamField path="run_id" type="str" required>
+  The run identifier.
+</ParamField>
+
+<ParamField path="type" type="str" required>
+  Always `"message.delta"`.
+</ParamField>
+
+<ParamField path="content" type="str" required>
+  Text chunk. May be empty.
+</ParamField>
+
+## Notes
+
+- Content is delivered in small chunks (typically a few tokens)
+- Empty content chunks may be delivered
+- Concatenate all chunks to get the full message
+
+## Example
+
+```python
+from superserve_sdk import Superserve, MessageDeltaEvent
+
+async with Superserve() as client:
+    content = ""
+    async for event in client.stream("agent", "Tell me a story"):
+        if isinstance(event, MessageDeltaEvent):
+            content += event.content
+            print(event.content, end="", flush=True)
+
+    print(f"\n\nFull content: {content}")
+```

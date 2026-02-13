@@ -1,0 +1,212 @@
+---
+title: 'SuperserveSync'
+description: 'Synchronous client for the Superserve API'
+icon: 'arrows-rotate'
+---
+
+Synchronous wrapper around the async `Superserve` client for simpler use cases.
+
+## Constructor
+
+```python
+SuperserveSync(
+    api_key: str | None = None,
+    base_url: str = "https://api.superserve.ai",
+    timeout: float = 60.0,
+    credentials_path: Path | None = None,
+)
+```
+
+### Parameters
+
+<ParamField path="api_key" type="str | None" default="None">
+  API key for authentication. If not provided, loaded from environment or credentials file.
+</ParamField>
+
+<ParamField path="base_url" type="str" default="https://api.superserve.ai">
+  Base URL for the Superserve API.
+</ParamField>
+
+<ParamField path="timeout" type="float" default="60.0">
+  Default timeout for HTTP requests in seconds.
+</ParamField>
+
+<ParamField path="credentials_path" type="Path | None" default="None">
+  Custom path to credentials file. Defaults to `~/.superserve/credentials.json`.
+</ParamField>
+
+## Usage
+
+The client should be used as a context manager:
+
+```python
+from superserve_sdk import SuperserveSync
+
+with SuperserveSync() as client:
+    agents = client.list_agents()
+```
+
+## Agent Methods
+
+### create_agent
+
+```python
+def create_agent(
+    name: str,
+    model: str = "claude-sonnet-4-20250514",
+    system_prompt: str = "",
+    tools: list[str] = ["Bash", "Read", "Write", "Glob", "Grep"],
+    max_turns: int = 10,
+    timeout_seconds: int = 300,
+) -> Agent
+```
+
+Creates a new agent.
+
+### list_agents
+
+```python
+def list_agents(
+    limit: int = 20,
+    offset: int = 0,
+) -> list[Agent]
+```
+
+Lists all agents.
+
+### get_agent
+
+```python
+def get_agent(agent_id: str) -> Agent
+```
+
+Gets an agent by ID or name.
+
+### update_agent
+
+```python
+def update_agent(
+    agent_id: str,
+    model: str | None = None,
+    system_prompt: str | None = None,
+    tools: list[str] | None = None,
+    max_turns: int | None = None,
+    timeout_seconds: int | None = None,
+) -> Agent
+```
+
+Updates an agent's configuration.
+
+### delete_agent
+
+```python
+def delete_agent(agent_id: str) -> None
+```
+
+Deletes an agent.
+
+## Run Methods
+
+### run
+
+```python
+def run(
+    agent_id: str,
+    prompt: str,
+    session_id: str | None = None,
+    wait: bool = True,
+    poll_interval: float = 1.0,
+) -> Run
+```
+
+Runs an agent with a prompt.
+
+### stream
+
+```python
+def stream(
+    agent_id: str,
+    prompt: str,
+    session_id: str | None = None,
+) -> Iterator[RunEvent]
+```
+
+Returns events from an agent execution.
+
+<Warning>
+  The sync `stream()` method collects all events before yielding, so it's not truly real-time. For real-time streaming, use the async `Superserve` client.
+</Warning>
+
+### stream_with_metrics
+
+```python
+def stream_with_metrics(
+    agent_id: str,
+    prompt: str,
+    session_id: str | None = None,
+) -> tuple[Iterator[RunEvent], MetricsHandle]
+```
+
+Returns events with automatic metrics collection.
+
+### get_run
+
+```python
+def get_run(run_id: str) -> Run
+```
+
+Gets a run by ID.
+
+### list_runs
+
+```python
+def list_runs(
+    agent_id: str | None = None,
+    status: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> list[Run]
+```
+
+Lists runs with optional filters.
+
+### cancel_run
+
+```python
+def cancel_run(run_id: str) -> Run
+```
+
+Cancels a running or pending run.
+
+## Example
+
+```python
+from superserve_sdk import SuperserveSync, MessageDeltaEvent
+
+with SuperserveSync() as client:
+    # Create an agent
+    agent = client.create_agent(
+        name="sync-agent",
+        system_prompt="You are helpful.",
+    )
+
+    # Run the agent
+    run = client.run(agent.id, "What is 2 + 2?")
+    print(f"Output: {run.output}")
+
+    # Clean up
+    client.delete_agent(agent.id)
+```
+
+## When to Use
+
+Use `SuperserveSync` when:
+- You're in a synchronous context (e.g., simple scripts)
+- You don't need real-time streaming
+- Simplicity is more important than performance
+
+Use `Superserve` (async) when:
+- You need real-time streaming
+- You're building a web application
+- You need to make concurrent requests
+- Performance is critical

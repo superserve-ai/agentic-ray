@@ -1,0 +1,50 @@
+---
+title: 'RateLimitError'
+description: 'Rate limit exceeded (HTTP 429)'
+icon: 'gauge-high'
+---
+
+Raised when rate limits are exceeded.
+
+## Definition
+
+```python
+class RateLimitError(APIError):
+    status_code: int = 429
+    retry_after: int | None
+```
+
+## Properties
+
+<ParamField path="retry_after" type="int | None" required>
+  Seconds to wait before retrying, if provided by the API.
+</ParamField>
+
+## Usage
+
+```python
+import asyncio
+from superserve_sdk import Superserve, RateLimitError
+
+async with Superserve() as client:
+    try:
+        await client.run("agent", "Hello")
+    except RateLimitError as e:
+        wait = e.retry_after or 60
+        print(f"Rate limited. Waiting {wait}s...")
+        await asyncio.sleep(wait)
+```
+
+## Retry with Backoff
+
+```python
+async def with_rate_limit_retry(coro, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            return await coro
+        except RateLimitError as e:
+            if attempt == max_retries - 1:
+                raise
+            wait = e.retry_after or (2 ** attempt * 10)
+            await asyncio.sleep(wait)
+```

@@ -1,0 +1,461 @@
+---
+title: 'Error Handling'
+description: 'Exception types, error codes, and handling strategies'
+icon: 'circle-exclamation'
+---
+
+The SDK uses a hierarchy of exception types to provide detailed error information and enable precise error handling.
+
+## Exception Hierarchy
+
+```
+SuperserveError (base)
+    APIError (HTTP errors)
+        AuthenticationError (401)
+        NotFoundError (404)
+        ConflictError (409)
+        ValidationError (422)
+        RateLimitError (429)
+    StreamError (SSE streaming errors)
+    ConnectionError (network errors)
+    TimeoutError (request timeout)
+```
+
+<CardGroup cols={3}>
+  <Card title="SuperserveError" icon="bug">
+    Base exception for all SDK errors
+  </Card>
+  <Card title="APIError" icon="server">
+    HTTP API errors with status codes
+  </Card>
+  <Card title="StreamError" icon="signal-stream">
+    SSE streaming failures
+  </Card>
+</CardGroup>
+
+## SuperserveError
+
+Base exception for all SDK errors.
+
+```python
+from superserve_sdk import SuperserveError
+
+try:
+    await client.get_agent("my-agent")
+except SuperserveError as e:
+    print(f"Error: {e.message}")
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `message` | `str` | Human-readable error message |
+
+## APIError
+
+Base class for HTTP API errors. Contains status code and response details.
+
+```python
+from superserve_sdk import APIError
+
+try:
+    await client.get_agent("my-agent")
+except APIError as e:
+    print(f"Status: {e.status_code}")
+    print(f"Message: {e.message}")
+    print(f"Details: {e.details}")
+    print(f"Retryable: {e.is_retryable}")
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `status_code` | `int` | HTTP status code |
+| `message` | `str` | Error message |
+| `details` | `dict` | Additional error details |
+| `is_retryable` | `bool` | Whether request can be retried |
+
+<Info>
+  The `is_retryable` property returns `True` for:
+  - Status 429 (Rate Limit)
+  - Status 500+ (Server Errors)
+</Info>
+
+## AuthenticationError
+
+Raised when authentication fails (HTTP 401).
+
+```python
+from superserve_sdk import AuthenticationError
+
+try:
+    await client.list_agents()
+except AuthenticationError as e:
+    print("Authentication failed")
+    print(f"Message: {e.message}")
+    # Re-authenticate or check API key
+```
+
+<Warning>
+  Common causes:
+  - Missing API key
+  - Invalid API key
+  - Expired API key
+  - Revoked API key
+</Warning>
+
+### Handling Example
+
+```python
+from superserve_sdk import Superserve, AuthenticationError
+
+async def with_retry(api_key: str):
+    try:
+        async with Superserve(api_key=api_key) as client:
+            return await client.list_agents()
+    except AuthenticationError:
+        # Refresh API key and retry
+        new_key = await refresh_api_key()
+        async with Superserve(api_key=new_key) as client:
+            return await client.list_agents()
+```
+
+## NotFoundError
+
+Raised when a resource is not found (HTTP 404).
+
+```python
+from superserve_sdk import NotFoundError
+
+try:
+    agent = await client.get_agent("nonexistent")
+except NotFoundError as e:
+    print(f"Resource: {e.resource}")
+    print(f"ID: {e.resource_id}")
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `resource` | `str` | Resource type (e.g., "Agent", "Run") |
+| `resource_id` | `str` | The ID that wasn't found |
+
+### Handling Example
+
+```python
+from superserve_sdk import NotFoundError
+
+async def get_or_create_agent(name: str):
+    try:
+        return await client.get_agent(name)
+    except NotFoundError:
+        return await client.create_agent(name=name)
+```
+
+## ValidationError
+
+Raised when request validation fails (HTTP 422).
+
+```python
+from superserve_sdk import ValidationError
+
+try:
+    await client.create_agent(
+        name="invalid_name!",
+        max_turns=999,
+    )
+except ValidationError as e:
+    print(f"Validation failed: {e.message}")
+    if e.field:
+        print(f"Invalid field: {e.field}")
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `field` | `str \| None` | The invalid field |
+
+<Note>
+  Common causes:
+  - Invalid agent name format
+  - max_turns out of range (1-100)
+  - timeout_seconds out of range (10-3600)
+  - Prompt too long (>100,000 characters)
+  - Missing required fields
+</Note>
+
+## ConflictError
+
+Raised when an operation conflicts with current state (HTTP 409).
+
+```python
+from superserve_sdk import ConflictError
+
+try:
+    await client.create_agent(name="existing-agent")
+except ConflictError as e:
+    print(f"Conflict: {e.message}")
+```
+
+<Warning>
+  Common causes:
+  - Creating agent with existing name
+  - Cancelling already completed run
+  - Modifying deleted resource
+</Warning>
+
+### Handling Example
+
+```python
+from superserve_sdk import ConflictError
+
+async def ensure_agent(name: str) -> Agent:
+    try:
+        return await client.create_agent(name=name)
+    except ConflictError:
+        return await client.get_agent(name)
+```
+
+## RateLimitError
+
+Raised when rate limits are exceeded (HTTP 429).
+
+```python
+from superserve_sdk import RateLimitError
+import asyncio
+
+try:
+    await client.run("agent", "Hello")
+except RateLimitError as e:
+    if e.retry_after:
+        print(f"Rate limited. Retry after {e.retry_after}s")
+        await asyncio.sleep(e.retry_after)
+    else:
+        await asyncio.sleep(60)  # Default backoff
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `retry_after` | `int \| None` | Seconds to wait before retry |
+
+### Handling with Retry
+
+```python
+import asyncio
+from superserve_sdk import RateLimitError
+
+async def with_rate_limit_retry(coro, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            return await coro
+        except RateLimitError as e:
+            if attempt == max_retries - 1:
+                raise
+            wait = e.retry_after or (2 ** attempt * 10)
+            await asyncio.sleep(wait)
+```
+
+## StreamError
+
+Raised when SSE streaming fails.
+
+```python
+from superserve_sdk import StreamError
+
+try:
+    async for event in client.stream("agent", "Hello"):
+        print(event)
+except StreamError as e:
+    print(f"Stream error: {e.message}")
+    if e.cause:
+        print(f"Caused by: {e.cause}")
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `cause` | `Exception \| None` | Underlying exception |
+
+<Note>
+  Common causes:
+  - Connection lost during streaming
+  - Invalid SSE data received
+  - Stream parsing failure
+  - Network timeout
+</Note>
+
+### Handling Example
+
+```python
+from superserve_sdk import StreamError
+
+async def resilient_stream(agent: str, prompt: str):
+    try:
+        async for event in client.stream(agent, prompt):
+            yield event
+    except StreamError:
+        # Fall back to non-streaming
+        run = await client.run(agent, prompt)
+        yield RunCompletedEvent(
+            run_id=run.id,
+            output=run.output or "",
+        )
+```
+
+## ConnectionError
+
+Raised when unable to connect to the API.
+
+```python
+from superserve_sdk import ConnectionError
+
+try:
+    await client.list_agents()
+except ConnectionError as e:
+    print(f"Connection failed: {e.message}")
+    if e.cause:
+        print(f"Caused by: {e.cause}")
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `cause` | `Exception \| None` | Underlying exception |
+
+<Warning>
+  Common causes:
+  - Network unavailable
+  - DNS resolution failure
+  - API host unreachable
+  - Firewall blocking
+</Warning>
+
+## TimeoutError
+
+Raised when a request times out.
+
+```python
+from superserve_sdk import TimeoutError
+
+try:
+    await client.run("agent", "Complex task")
+except TimeoutError as e:
+    print(f"Request timed out: {e.message}")
+    if e.timeout_seconds:
+        print(f"Timeout was: {e.timeout_seconds}s")
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `timeout_seconds` | `float \| None` | The timeout that was exceeded |
+
+### Handling Example
+
+```python
+from superserve_sdk import Superserve, TimeoutError
+
+# Increase timeout for long operations
+client = Superserve(api_key="...", timeout=120.0)
+
+# Or handle the error
+try:
+    await client.run("agent", "Long task")
+except TimeoutError:
+    # Use streaming for long tasks
+    async for event in client.stream("agent", "Long task"):
+        ...
+```
+
+## Comprehensive Error Handling
+
+```python
+from superserve_sdk import (
+    Superserve,
+    SuperserveError,
+    AuthenticationError,
+    NotFoundError,
+    ValidationError,
+    ConflictError,
+    RateLimitError,
+    StreamError,
+    ConnectionError,
+    TimeoutError,
+)
+
+async def safe_run(client: Superserve, agent: str, prompt: str):
+    try:
+        return await client.run(agent, prompt)
+
+    except AuthenticationError:
+        raise RuntimeError("Invalid API key")
+
+    except NotFoundError as e:
+        raise ValueError(f"Agent '{e.resource_id}' not found")
+
+    except ValidationError as e:
+        raise ValueError(f"Invalid request: {e.message}")
+
+    except ConflictError as e:
+        raise RuntimeError(f"Conflict: {e.message}")
+
+    except RateLimitError as e:
+        wait = e.retry_after or 60
+        raise RuntimeError(f"Rate limited. Retry in {wait}s")
+
+    except TimeoutError:
+        raise RuntimeError("Request timed out")
+
+    except ConnectionError:
+        raise RuntimeError("Cannot connect to Superserve")
+
+    except SuperserveError as e:
+        # Catch-all for other SDK errors
+        raise RuntimeError(f"Superserve error: {e.message}")
+```
+
+## Retry Decorator
+
+<Accordion title="Reusable Retry Decorator">
+```python
+import asyncio
+from functools import wraps
+from superserve_sdk import RateLimitError, ConnectionError, TimeoutError
+
+def with_retry(max_attempts=3, base_delay=1.0):
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            last_error = None
+            for attempt in range(max_attempts):
+                try:
+                    return await func(*args, **kwargs)
+                except RateLimitError as e:
+                    last_error = e
+                    delay = e.retry_after or (base_delay * 2 ** attempt)
+                except (ConnectionError, TimeoutError) as e:
+                    last_error = e
+                    delay = base_delay * 2 ** attempt
+
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(delay)
+
+            raise last_error
+        return wrapper
+    return decorator
+
+# Usage
+@with_retry(max_attempts=3)
+async def run_agent(client, agent, prompt):
+    return await client.run(agent, prompt)
+```
+</Accordion>

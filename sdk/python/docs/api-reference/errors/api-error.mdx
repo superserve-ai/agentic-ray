@@ -1,0 +1,63 @@
+---
+title: 'APIError'
+description: 'Base class for HTTP API errors'
+icon: 'server'
+---
+
+Base class for HTTP API errors with status code and response details.
+
+## Definition
+
+```python
+class APIError(SuperserveError):
+    status_code: int
+    message: str
+    details: dict
+
+    @property
+    def is_retryable(self) -> bool: ...
+```
+
+## Properties
+
+<ParamField path="status_code" type="int" required>
+  HTTP status code.
+</ParamField>
+
+<ParamField path="message" type="str" required>
+  Error message.
+</ParamField>
+
+<ParamField path="details" type="dict" required>
+  Additional error details from the API response.
+</ParamField>
+
+<ParamField path="is_retryable" type="bool" required>
+  Whether the request can be retried. True for:
+  - Status 429 (Rate Limit)
+  - Status 500+ (Server Errors)
+</ParamField>
+
+## Usage
+
+```python
+from superserve_sdk import Superserve, APIError
+
+async with Superserve() as client:
+    try:
+        await client.get_agent("my-agent")
+    except APIError as e:
+        print(f"Status: {e.status_code}")
+        print(f"Message: {e.message}")
+        print(f"Retryable: {e.is_retryable}")
+```
+
+## Subclasses
+
+| Error | Status Code |
+|-------|-------------|
+| `AuthenticationError` | 401 |
+| `NotFoundError` | 404 |
+| `ConflictError` | 409 |
+| `ValidationError` | 422 |
+| `RateLimitError` | 429 |

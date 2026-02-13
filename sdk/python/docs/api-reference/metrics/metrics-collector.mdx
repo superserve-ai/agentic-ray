@@ -1,0 +1,94 @@
+---
+title: 'MetricsCollector'
+description: 'Collect metrics from streaming events'
+icon: 'chart-mixed'
+---
+
+Class for collecting metrics from streaming events.
+
+## Definition
+
+```python
+class MetricsCollector:
+    def __init__(self, run_id: str = ""): ...
+    def process_event(self, event: RunEvent) -> None: ...
+    def reset(self) -> None: ...
+
+    @property
+    def metrics(self) -> RunMetrics: ...
+```
+
+## Methods
+
+### \_\_init\_\_
+
+```python
+def __init__(self, run_id: str = "")
+```
+
+Create a new metrics collector.
+
+<ParamField path="run_id" type="str" default="">
+  Run ID. Will be set from first event if not provided.
+</ParamField>
+
+### process_event
+
+```python
+def process_event(self, event: RunEvent) -> None
+```
+
+Process an event and update metrics.
+
+<ParamField path="event" type="RunEvent" required>
+  Event to process.
+</ParamField>
+
+### reset
+
+```python
+def reset(self) -> None
+```
+
+Reset the collector to initial state.
+
+### metrics
+
+```python
+@property
+def metrics(self) -> RunMetrics
+```
+
+Get the current collected metrics.
+
+## Example
+
+```python
+from superserve_sdk import Superserve, MetricsCollector, MessageDeltaEvent
+
+async with Superserve() as client:
+    collector = MetricsCollector()
+
+    async for event in client.stream("agent", "Hello"):
+        collector.process_event(event)
+
+        if isinstance(event, MessageDeltaEvent):
+            print(event.content, end="")
+
+    metrics = collector.metrics
+    print(f"\nTokens: {metrics.total_tokens}")
+```
+
+## Using stream_with_metrics
+
+For convenience, use `stream_with_metrics()` instead:
+
+```python
+events, handle = await client.stream_with_metrics("agent", "Hello")
+
+async for event in events:
+    # Events are automatically collected
+    pass
+
+metrics = handle.metrics  # Same as collector.metrics
+```

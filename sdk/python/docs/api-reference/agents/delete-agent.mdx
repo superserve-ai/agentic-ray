@@ -1,0 +1,76 @@
+---
+title: 'delete_agent'
+description: 'Delete an agent'
+icon: 'trash'
+---
+
+Deletes an agent permanently.
+
+## Signature
+
+```python
+async def delete_agent(agent_id: str) -> None
+```
+
+## Parameters
+
+<ParamField path="agent_id" type="str" required>
+  Agent ID or name to delete.
+</ParamField>
+
+## Returns
+
+None
+
+## Errors
+
+| Error | Cause |
+|-------|-------|
+| `NotFoundError` | Agent not found |
+| `AuthenticationError` | Invalid API key |
+
+<Warning>
+  - Deleted agents cannot be recovered
+  - Active runs will be cancelled
+  - The agent name becomes available for reuse
+</Warning>
+
+## Examples
+
+<CodeGroup>
+```python Async
+from superserve_sdk import Superserve, NotFoundError
+
+async with Superserve() as client:
+    # Delete by ID
+    await client.delete_agent("agt_abc123")
+
+    # Delete by name
+    await client.delete_agent("my-agent")
+
+    # Safe delete with error handling
+    try:
+        await client.delete_agent("maybe-exists")
+    except NotFoundError:
+        print("Agent already deleted")
+```
+
+```python Sync
+from superserve_sdk import SuperserveSync
+
+with SuperserveSync() as client:
+    client.delete_agent("my-agent")
+```
+</CodeGroup>
+
+## Cleanup Pattern
+
+```python
+# Delete all test agents
+async with Superserve() as client:
+    agents = await client.list_agents()
+    for agent in agents:
+        if agent.name.startswith("test-"):
+            await client.delete_agent(agent.id)
+            print(f"Deleted: {agent.name}")
+```

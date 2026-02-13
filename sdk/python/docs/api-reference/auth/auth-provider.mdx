@@ -1,0 +1,84 @@
+---
+title: 'AuthProvider'
+description: 'Authentication provider for managing API credentials'
+icon: 'shield'
+---
+
+Class for managing API authentication.
+
+## Definition
+
+```python
+class AuthProvider:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        credentials_path: Path | None = None,
+    ): ...
+
+    def is_authenticated(self) -> bool: ...
+    def get_headers(self) -> dict[str, str]: ...
+    def refresh(self) -> None: ...
+```
+
+## Constructor
+
+<ParamField path="api_key" type="str | None" default="None">
+  Explicit API key. If not provided, loaded from environment or file.
+</ParamField>
+
+<ParamField path="credentials_path" type="Path | None" default="None">
+  Custom path to credentials file.
+</ParamField>
+
+## Methods
+
+### is_authenticated
+
+```python
+def is_authenticated(self) -> bool
+```
+
+Check if an API key is available.
+
+### get_headers
+
+```python
+def get_headers(self) -> dict[str, str]
+```
+
+Get authorization headers for HTTP requests.
+
+Returns: `{"Authorization": "Bearer <api_key>"}`
+
+### refresh
+
+```python
+def refresh(self) -> None
+```
+
+Refresh cached credentials from file.
+
+## Example
+
+```python
+from superserve_sdk import AuthProvider
+
+# Create provider
+auth = AuthProvider(api_key="sk_test")
+
+# Check authentication
+if auth.is_authenticated():
+    headers = auth.get_headers()
+    print(headers)  # {"Authorization": "Bearer sk_test"}
+
+# Refresh from file
+auth.refresh()
+```
+
+## Priority Order
+
+The provider checks for API keys in this order:
+1. Explicit `api_key` parameter
+2. `SUPERSERVE_API_KEY` environment variable
+3. `~/.superserve/credentials.json` file

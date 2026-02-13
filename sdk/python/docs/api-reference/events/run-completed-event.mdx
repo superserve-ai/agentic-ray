@@ -1,0 +1,78 @@
+---
+title: 'RunCompletedEvent'
+description: 'Emitted when a run completes successfully'
+icon: 'flag-checkered'
+---
+
+Emitted when a run completes successfully. Always the last event for successful runs.
+
+## Definition
+
+```python
+class RunCompletedEvent(BaseEvent):
+    run_id: str
+    type: str = "run.completed"
+    output: str
+    usage: UsageMetrics | None
+    turns: int
+    duration_ms: int
+    tools_used: list[str]
+```
+
+## Properties
+
+<ParamField path="run_id" type="str" required>
+  The run identifier.
+</ParamField>
+
+<ParamField path="type" type="str" required>
+  Always `"run.completed"`.
+</ParamField>
+
+<ParamField path="output" type="str" required>
+  Final output text.
+</ParamField>
+
+<ParamField path="usage" type="UsageMetrics | None" required>
+  Token usage metrics.
+</ParamField>
+
+<ParamField path="turns" type="int" required>
+  Number of conversation turns.
+</ParamField>
+
+<ParamField path="duration_ms" type="int" required>
+  Total duration in milliseconds.
+</ParamField>
+
+<ParamField path="tools_used" type="list[str]" required>
+  List of tools used during execution.
+</ParamField>
+
+## UsageMetrics
+
+```python
+class UsageMetrics:
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+```
+
+## Example
+
+```python
+from superserve_sdk import Superserve, RunCompletedEvent
+
+async with Superserve() as client:
+    async for event in client.stream("agent", "Hello"):
+        if isinstance(event, RunCompletedEvent):
+            print(f"Output: {event.output}")
+            print(f"Duration: {event.duration_ms}ms")
+            print(f"Turns: {event.turns}")
+            print(f"Tools: {event.tools_used}")
+
+            if event.usage:
+                print(f"Input tokens: {event.usage.input_tokens}")
+                print(f"Output tokens: {event.usage.output_tokens}")
+                print(f"Total tokens: {event.usage.total_tokens}")
+```

@@ -1,0 +1,64 @@
+---
+title: 'get_agent'
+description: 'Get an agent by ID or name'
+icon: 'magnifying-glass'
+---
+
+Retrieves an agent by its ID or name.
+
+## Signature
+
+```python
+async def get_agent(agent_id: str) -> Agent
+```
+
+## Parameters
+
+<ParamField path="agent_id" type="str" required>
+  Agent ID (e.g., `agt_abc123`) or name (e.g., `my-agent`).
+</ParamField>
+
+## Returns
+
+<ResponseField name="Agent" type="Agent">
+  The agent.
+</ResponseField>
+
+## Resolution Logic
+
+- If `agent_id` starts with `agt_`, fetches directly by ID
+- Otherwise, lists agents and finds a match by name
+
+## Errors
+
+| Error | Cause |
+|-------|-------|
+| `NotFoundError` | Agent not found |
+| `AuthenticationError` | Invalid API key |
+
+## Examples
+
+<CodeGroup>
+```python Async
+from superserve_sdk import Superserve
+
+async with Superserve() as client:
+    # By ID
+    agent = await client.get_agent("agt_abc123")
+
+    # By name
+    agent = await client.get_agent("my-agent")
+
+    print(f"Agent: {agent.name}")
+    print(f"Model: {agent.model}")
+    print(f"Tools: {agent.tools}")
+```
+
+```python Sync
+from superserve_sdk import SuperserveSync
+
+with SuperserveSync() as client:
+    agent = client.get_agent("my-agent")
+    print(f"Agent: {agent.name}")
+```
+</CodeGroup>

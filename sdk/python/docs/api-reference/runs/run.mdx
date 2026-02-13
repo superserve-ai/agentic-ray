@@ -1,0 +1,96 @@
+---
+title: 'run'
+description: 'Run an agent with a prompt'
+icon: 'play'
+---
+
+Executes an agent with a prompt and optionally waits for completion.
+
+## Signature
+
+```python
+async def run(
+    agent_id: str,
+    prompt: str,
+    session_id: str | None = None,
+    wait: bool = True,
+    poll_interval: float = 1.0,
+) -> Run
+```
+
+## Parameters
+
+<ParamField path="agent_id" type="str" required>
+  Agent ID or name.
+</ParamField>
+
+<ParamField path="prompt" type="str" required>
+  User prompt to send to the agent.
+</ParamField>
+
+<ParamField path="session_id" type="str | None" default="None">
+  Session ID for multi-turn conversations.
+</ParamField>
+
+<ParamField path="wait" type="bool" default="True">
+  Whether to wait for the run to complete.
+</ParamField>
+
+<ParamField path="poll_interval" type="float" default="1.0">
+  Seconds between status checks when waiting.
+</ParamField>
+
+## Returns
+
+<ResponseField name="Run" type="Run">
+  The run result.
+</ResponseField>
+
+## Errors
+
+| Error | Cause |
+|-------|-------|
+| `NotFoundError` | Agent not found |
+| `ValidationError` | Invalid prompt |
+| `AuthenticationError` | Invalid API key |
+
+## Examples
+
+<CodeGroup>
+```python Async - Wait
+from superserve_sdk import Superserve
+
+async with Superserve() as client:
+    run = await client.run("my-agent", "Hello!")
+    print(f"Output: {run.output}")
+```
+
+```python Async - No Wait
+from superserve_sdk import Superserve
+
+async with Superserve() as client:
+    run = await client.run("my-agent", "Long task...", wait=False)
+    print(f"Status: {run.status}")  # "pending" or "running"
+
+    # Poll later
+    run = await client.get_run(run.id)
+```
+
+```python Sync
+from superserve_sdk import SuperserveSync
+
+with SuperserveSync() as client:
+    run = client.run("my-agent", "Hello!")
+    print(f"Output: {run.output}")
+```
+</CodeGroup>
+
+## Multi-Turn Example
+
+```python
+session = "user-123"
+
+run1 = await client.run("agent", "My name is Alice", session_id=session)
+run2 = await client.run("agent", "What's my name?", session_id=session)
+print(run2.output)  # Will mention "Alice"
+```

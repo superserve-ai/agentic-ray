@@ -1,0 +1,157 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "Superserve Python SDK",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#6366f1",
+    "light": "#818cf8",
+    "dark": "#4f46e5",
+    "anchors": {
+      "from": "#6366f1",
+      "to": "#4f46e5"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "Support",
+      "url": "mailto:support@superserve.ai"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Dashboard",
+    "url": "https://app.superserve.ai"
+  },
+  "tabs": [
+    {
+      "name": "API Reference",
+      "url": "api-reference"
+    }
+  ],
+  "anchors": [
+    {
+      "name": "GitHub",
+      "icon": "github",
+      "url": "https://github.com/superserve-ai/superserve-sdk-python"
+    },
+    {
+      "name": "Community",
+      "icon": "discord",
+      "url": "https://discord.gg/superserve"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": ["index", "authentication"]
+    },
+    {
+      "group": "Core Concepts",
+      "pages": ["agents", "runs", "events", "metrics"]
+    },
+    {
+      "group": "Reference",
+      "pages": ["errors", "examples"]
+    },
+    {
+      "group": "API Reference",
+      "pages": [
+        "api-reference/overview",
+        {
+          "group": "Client",
+          "pages": [
+            "api-reference/client/superserve",
+            "api-reference/client/superserve-sync"
+          ]
+        },
+        {
+          "group": "Agents",
+          "pages": [
+            "api-reference/agents/agent-model",
+            "api-reference/agents/create-agent",
+            "api-reference/agents/list-agents",
+            "api-reference/agents/get-agent",
+            "api-reference/agents/update-agent",
+            "api-reference/agents/delete-agent"
+          ]
+        },
+        {
+          "group": "Runs",
+          "pages": [
+            "api-reference/runs/run-model",
+            "api-reference/runs/run",
+            "api-reference/runs/stream",
+            "api-reference/runs/get-run",
+            "api-reference/runs/list-runs",
+            "api-reference/runs/cancel-run"
+          ]
+        },
+        {
+          "group": "Events",
+          "pages": [
+            "api-reference/events/base-event",
+            "api-reference/events/run-started-event",
+            "api-reference/events/message-delta-event",
+            "api-reference/events/tool-start-event",
+            "api-reference/events/tool-end-event",
+            "api-reference/events/run-completed-event",
+            "api-reference/events/run-failed-event"
+          ]
+        },
+        {
+          "group": "Metrics",
+          "pages": [
+            "api-reference/metrics/run-metrics",
+            "api-reference/metrics/tool-metrics",
+            "api-reference/metrics/metrics-collector"
+          ]
+        },
+        {
+          "group": "Errors",
+          "pages": [
+            "api-reference/errors/superserve-error",
+            "api-reference/errors/api-error",
+            "api-reference/errors/authentication-error",
+            "api-reference/errors/not-found-error",
+            "api-reference/errors/validation-error",
+            "api-reference/errors/rate-limit-error"
+          ]
+        },
+        {
+          "group": "Authentication",
+          "pages": [
+            "api-reference/auth/auth-provider",
+            "api-reference/auth/get-api-key",
+            "api-reference/auth/save-credentials",
+            "api-reference/auth/load-credentials"
+          ]
+        }
+      ]
+    }
+  ],
+  "footerSocials": {
+    "twitter": "https://twitter.com/superserve_ai",
+    "github": "https://github.com/superserve-ai",
+    "linkedin": "https://linkedin.com/company/superserve-ai"
+  },
+  "analytics": {
+    "posthog": {
+      "apiKey": "YOUR_POSTHOG_API_KEY"
+    }
+  },
+  "feedback": {
+    "thumbsRating": true,
+    "suggestEdit": true,
+    "raiseIssue": true
+  },
+  "openapi": [],
+  "api": {
+    "baseUrl": "https://api.superserve.ai",
+    "auth": {
+      "method": "bearer"
+    }
+  }
+}

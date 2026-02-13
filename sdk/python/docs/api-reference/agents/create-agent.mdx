@@ -1,0 +1,94 @@
+---
+title: 'create_agent'
+description: 'Create a new agent'
+icon: 'plus'
+---
+
+Creates a new agent with the specified configuration.
+
+## Signature
+
+```python
+async def create_agent(
+    name: str,
+    model: str = "claude-sonnet-4-20250514",
+    system_prompt: str = "",
+    tools: list[str] = ["Bash", "Read", "Write", "Glob", "Grep"],
+    max_turns: int = 10,
+    timeout_seconds: int = 300,
+) -> Agent
+```
+
+## Parameters
+
+<ParamField path="name" type="str" required>
+  Agent name. Must be:
+  - 1-63 characters
+  - Start with a letter
+  - Lowercase letters, numbers, and hyphens only
+  - Not end with a hyphen
+</ParamField>
+
+<ParamField path="model" type="str" default="claude-sonnet-4-20250514">
+  AI model identifier.
+</ParamField>
+
+<ParamField path="system_prompt" type="str" default="">
+  System instructions for the agent.
+</ParamField>
+
+<ParamField path="tools" type="list[str]" default='["Bash", "Read", "Write", "Glob", "Grep"]'>
+  Available tools. Options: `Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`.
+</ParamField>
+
+<ParamField path="max_turns" type="int" default="10">
+  Maximum conversation turns. Range: 1-100.
+</ParamField>
+
+<ParamField path="timeout_seconds" type="int" default="300">
+  Execution timeout. Range: 10-3600.
+</ParamField>
+
+## Returns
+
+<ResponseField name="Agent" type="Agent">
+  The created agent.
+</ResponseField>
+
+## Errors
+
+| Error | Cause |
+|-------|-------|
+| `ValidationError` | Invalid name format or parameter out of range |
+| `ConflictError` | Agent with this name already exists |
+| `AuthenticationError` | Invalid API key |
+
+## Examples
+
+<CodeGroup>
+```python Async
+from superserve_sdk import Superserve
+
+async with Superserve() as client:
+    agent = await client.create_agent(
+        name="code-helper",
+        model="claude-sonnet-4-20250514",
+        system_prompt="You are an expert programmer.",
+        tools=["Read", "Write", "Edit", "Glob", "Grep"],
+        max_turns=30,
+        timeout_seconds=600,
+    )
+    print(f"Created: {agent.id}")
+```
+
+```python Sync
+from superserve_sdk import SuperserveSync
+
+with SuperserveSync() as client:
+    agent = client.create_agent(
+        name="code-helper",
+        system_prompt="You are an expert programmer.",
+    )
+    print(f"Created: {agent.id}")
+```
+</CodeGroup>

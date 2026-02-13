@@ -1,0 +1,382 @@
+---
+title: 'SSE Event Types'
+description: 'Typed event classes for streaming agent executions'
+icon: 'bolt'
+---
+
+When streaming agent executions, the SDK delivers events as typed Python objects. Events are parsed from Server-Sent Events (SSE) received from the API.
+
+## Event Hierarchy
+
+All events inherit from `BaseEvent`:
+
+```
+BaseEvent
+    run_id: str
+
+    RunStartedEvent
+    MessageDeltaEvent
+    ToolStartEvent
+    ToolEndEvent
+    RunCompletedEvent
+    RunFailedEvent
+    RunCancelledEvent
+```
+
+<CardGroup cols={3}>
+  <Card title="RunStartedEvent" icon="play">
+    Run begins executing
+  </Card>
+  <Card title="MessageDeltaEvent" icon="message">
+    Text chunk received
+  </Card>
+  <Card title="ToolStartEvent" icon="gear">
+    Tool execution begins
+  </Card>
+  <Card title="ToolEndEvent" icon="check">
+    Tool execution ends
+  </Card>
+  <Card title="RunCompletedEvent" icon="flag-checkered">
+    Run completed successfully
+  </Card>
+  <Card title="RunFailedEvent" icon="xmark">
+    Run failed
+  </Card>
+</CardGroup>
+
+## RunStartedEvent
+
+Emitted when a run begins executing.
+
+```python
+from superserve_sdk import RunStartedEvent
+
+async for event in client.stream("agent", "Hello"):
+    if isinstance(event, RunStartedEvent):
+        print(f"Run {event.run_id} started")
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `run_id` | `str` | The run identifier |
+| `type` | `str` | Always `"run.started"` |
+
+## MessageDeltaEvent
+
+Emitted when the agent outputs a text chunk.
+
+```python
+from superserve_sdk import MessageDeltaEvent
+
+content = ""
+async for event in client.stream("agent", "Tell me a story"):
+    if isinstance(event, MessageDeltaEvent):
+        content += event.content
+        print(event.content, end="", flush=True)
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `run_id` | `str` | The run identifier |
+| `type` | `str` | Always `"message.delta"` |
+| `content` | `str` | Text chunk |
+
+<Note>
+  - Content is delivered in small chunks (typically a few tokens)
+  - Empty content chunks may be delivered
+  - Concatenate all chunks to get the full message
+</Note>
+
+## ToolStartEvent
+
+Emitted when a tool execution begins.
+
+```python
+from superserve_sdk import ToolStartEvent
+
+async for event in client.stream("agent", "List files"):
+    if isinstance(event, ToolStartEvent):
+        print(f"Tool: {event.tool}")
+        print(f"Input: {event.input}")
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `run_id` | `str` | The run identifier |
+| `type` | `str` | Always `"tool.start"` |
+| `tool` | `str` | Tool name (e.g., `"Bash"`, `"Read"`) |
+| `tool_call_id` | `str` | Unique identifier for this tool call |
+| `input` | `dict[str, Any]` | Tool input parameters |
+
+### Tool Input Examples
+
+<Tabs>
+  <Tab title="Bash">
+    ```python
+    event.input = {"command": "ls -la"}
+    ```
+  </Tab>
+  <Tab title="Read">
+    ```python
+    event.input = {"file_path": "/path/to/file.py"}
+    ```
+  </Tab>
+  <Tab title="Write">
+    ```python
+    event.input = {"file_path": "/path/to/file.py", "content": "..."}
+    ```
+  </Tab>
+  <Tab title="Glob">
+    ```python
+    event.input = {"pattern": "**/*.py"}
+    ```
+  </Tab>
+  <Tab title="Grep">
+    ```python
+    event.input = {"pattern": "def main", "path": "/src"}
+    ```
+  </Tab>
+</Tabs>
+
+## ToolEndEvent
+
+Emitted when a tool execution completes.
+
+```python
+from superserve_sdk import ToolEndEvent
+
+async for event in client.stream("agent", "List files"):
+    if isinstance(event, ToolEndEvent):
+        if event.success:
+            print(f"{event.tool} succeeded in {event.duration_ms}ms")
+        else:
+            print(f"{event.tool} failed: {event.output}")
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `run_id` | `str` | The run identifier |
+| `type` | `str` | Always `"tool.end"` |
+| `tool` | `str` | Tool name |
+| `tool_call_id` | `str` | Matches the corresponding `ToolStartEvent` |
+| `output` | `str` | Tool output or error message |
+| `duration_ms` | `int` | Execution time in milliseconds |
+| `success` | `bool` | Whether the tool succeeded |
+
+## RunCompletedEvent
+
+Emitted when a run completes successfully.
+
+```python
+from superserve_sdk import RunCompletedEvent
+
+async for event in client.stream("agent", "Hello"):
+    if isinstance(event, RunCompletedEvent):
+        print(f"Final output: {event.output}")
+        if event.usage:
+            print(f"Total tokens: {event.usage.total_tokens}")
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `run_id` | `str` | The run identifier |
+| `type` | `str` | Always `"run.completed"` |
+| `output` | `str` | Final output text |
+| `usage` | `UsageMetrics \| None` | Token usage |
+| `turns` | `int` | Number of turns executed |
+| `duration_ms` | `int` | Total duration in milliseconds |
+| `tools_used` | `list[str]` | List of tools used |
+
+### UsageMetrics
+
+```python
+if event.usage:
+    print(f"Input tokens: {event.usage.input_tokens}")
+    print(f"Output tokens: {event.usage.output_tokens}")
+    print(f"Total tokens: {event.usage.total_tokens}")
+```
+
+## RunFailedEvent
+
+Emitted when a run fails.
+
+```python
+from superserve_sdk import RunFailedEvent
+
+async for event in client.stream("agent", "Hello"):
+    if isinstance(event, RunFailedEvent):
+        print(f"Run failed: {event.error_message}")
+        print(f"Error details: {event.error}")
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `run_id` | `str` | The run identifier |
+| `type` | `str` | Always `"run.failed"` |
+| `error` | `dict[str, Any]` | Error details |
+| `error_message` | `str` (property) | Human-readable error message |
+
+### Common Error Codes
+
+<CardGroup cols={2}>
+  <Card title="timeout" icon="clock">
+    Agent execution timed out
+  </Card>
+  <Card title="rate_limit" icon="gauge-high">
+    Too many requests
+  </Card>
+  <Card title="model_error" icon="robot">
+    Model API error
+  </Card>
+  <Card title="tool_error" icon="wrench">
+    Tool execution failed
+  </Card>
+</CardGroup>
+
+## RunCancelledEvent
+
+Emitted when a run is cancelled.
+
+```python
+from superserve_sdk import RunCancelledEvent
+
+async for event in client.stream("agent", "Hello"):
+    if isinstance(event, RunCancelledEvent):
+        print(f"Run {event.run_id} was cancelled")
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `run_id` | `str` | The run identifier |
+| `type` | `str` | Always `"run.cancelled"` |
+
+## Type Unions
+
+The SDK provides type unions for event matching:
+
+```python
+from superserve_sdk import RunEvent
+
+# RunEvent = Union of all event types
+async for event in client.stream("agent", "Hello"):
+    event: RunEvent  # Type-safe
+```
+
+## Parsing Events Manually
+
+You can parse events manually using `parse_event()`:
+
+```python
+from superserve_sdk import parse_event
+
+# Parse from type and data
+event = parse_event("message.delta", {
+    "run_id": "run_123",
+    "content": "Hello",
+})
+```
+
+Or use `RawEvent`:
+
+```python
+from superserve_sdk import RawEvent
+
+raw = RawEvent(
+    type="tool.start",
+    data={"run_id": "run_123", "tool": "Bash", "input": {"command": "ls"}},
+)
+event = raw.parse()  # Returns ToolStartEvent
+```
+
+## Complete Event Handling Example
+
+```python
+from superserve_sdk import (
+    Superserve,
+    RunStartedEvent,
+    MessageDeltaEvent,
+    ToolStartEvent,
+    ToolEndEvent,
+    RunCompletedEvent,
+    RunFailedEvent,
+    RunCancelledEvent,
+)
+
+async def handle_run(client: Superserve, agent: str, prompt: str):
+    content_parts = []
+    tool_calls = []
+
+    async for event in client.stream(agent, prompt):
+        match event:
+            case RunStartedEvent():
+                print(f"[Started: {event.run_id}]")
+
+            case MessageDeltaEvent():
+                content_parts.append(event.content)
+                print(event.content, end="", flush=True)
+
+            case ToolStartEvent():
+                print(f"\n[Tool: {event.tool}]", end="")
+                tool_calls.append({
+                    "tool": event.tool,
+                    "id": event.tool_call_id,
+                    "input": event.input,
+                })
+
+            case ToolEndEvent():
+                status = "ok" if event.success else "FAILED"
+                print(f" {status} ({event.duration_ms}ms)")
+                # Update the matching tool call
+                for tc in tool_calls:
+                    if tc["id"] == event.tool_call_id:
+                        tc["output"] = event.output
+                        tc["success"] = event.success
+
+            case RunCompletedEvent():
+                print(f"\n[Completed in {event.duration_ms}ms]")
+                print(f"Tokens: {event.usage.total_tokens if event.usage else 'N/A'}")
+                print(f"Turns: {event.turns}")
+                return {
+                    "content": "".join(content_parts),
+                    "tools": tool_calls,
+                    "usage": event.usage,
+                }
+
+            case RunFailedEvent():
+                print(f"\n[FAILED: {event.error_message}]")
+                return {"error": event.error_message}
+
+            case RunCancelledEvent():
+                print("\n[CANCELLED]")
+                return {"cancelled": True}
+
+# Usage
+async with Superserve() as client:
+    result = await handle_run(client, "my-agent", "Analyze this code")
+```
+
+## Event Timing
+
+<Info>
+  Events are delivered in order:
+
+  1. `RunStartedEvent` - Always first
+  2. Interleaved `MessageDeltaEvent`, `ToolStartEvent`, `ToolEndEvent`
+  3. Terminal event: `RunCompletedEvent`, `RunFailedEvent`, or `RunCancelledEvent`
+
+  Tool events are always paired: every `ToolStartEvent` has a matching `ToolEndEvent`.
+</Info>

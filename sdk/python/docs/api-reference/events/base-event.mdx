@@ -1,0 +1,60 @@
+---
+title: 'BaseEvent'
+description: 'Base class for all SSE events'
+icon: 'bolt'
+---
+
+Base class that all event types inherit from.
+
+## Definition
+
+```python
+from pydantic import BaseModel
+
+class BaseEvent(BaseModel):
+    run_id: str
+    type: str
+```
+
+## Properties
+
+<ParamField path="run_id" type="str" required>
+  The ID of the run that generated this event.
+</ParamField>
+
+<ParamField path="type" type="str" required>
+  Event type identifier.
+</ParamField>
+
+## Event Types
+
+| Type | Event Class |
+|------|-------------|
+| `run.started` | `RunStartedEvent` |
+| `message.delta` | `MessageDeltaEvent` |
+| `tool.start` | `ToolStartEvent` |
+| `tool.end` | `ToolEndEvent` |
+| `run.completed` | `RunCompletedEvent` |
+| `run.failed` | `RunFailedEvent` |
+| `run.cancelled` | `RunCancelledEvent` |
+
+## Type Union
+
+```python
+from superserve_sdk import RunEvent
+
+# RunEvent = Union of all event types
+async for event in client.stream("agent", "Hello"):
+    event: RunEvent  # Type-safe
+```
+
+## Example
+
+```python
+from superserve_sdk import Superserve, BaseEvent
+
+async with Superserve() as client:
+    async for event in client.stream("agent", "Hello"):
+        # All events have run_id and type
+        print(f"Run: {event.run_id}, Type: {event.type}")
+```

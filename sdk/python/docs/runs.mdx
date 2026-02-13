@@ -1,0 +1,432 @@
+---
+title: 'Running Agents'
+description: 'Execute agents, stream responses, and manage runs'
+icon: 'play'
+---
+
+Runs represent agent executions. When you send a prompt to an agent, a run is created to track the execution.
+
+## Run Model
+
+A run has the following properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `str` | Unique identifier (e.g., `run_xyz789`) |
+| `agent_id` | `str` | The agent that executed this run |
+| `status` | `str` | Current status (see below) |
+| `prompt` | `str` | The user prompt |
+| `output` | `str \| None` | Final output (when completed) |
+| `error_message` | `str \| None` | Error message (when failed) |
+| `session_id` | `str \| None` | Session ID for multi-turn |
+| `usage` | `UsageMetrics \| None` | Token usage |
+| `turns` | `int` | Number of turns executed |
+| `duration_ms` | `int` | Total duration in milliseconds |
+| `tools_used` | `list[str]` | Tools used during execution |
+| `created_at` | `datetime` | Creation timestamp |
+| `started_at` | `datetime \| None` | Execution start timestamp |
+| `completed_at` | `datetime \| None` | Completion timestamp |
+
+### Run Statuses
+
+<CardGroup cols={5}>
+  <Card title="pending" icon="clock">
+    Waiting to start
+  </Card>
+  <Card title="running" icon="spinner">
+    Executing
+  </Card>
+  <Card title="completed" icon="check">
+    Finished
+  </Card>
+  <Card title="failed" icon="xmark">
+    Failed
+  </Card>
+  <Card title="cancelled" icon="ban">
+    Cancelled
+  </Card>
+</CardGroup>
+
+## Running an Agent
+
+Use `run()` to execute an agent with a prompt:
+
+<CodeGroup>
+```python Async
+from superserve_sdk import Superserve
+
+async with Superserve() as client:
+    run = await client.run(
+        agent_id="my-assistant",
+        prompt="What is the capital of France?",
+    )
+    print(f"Output: {run.output}")
+```
+
+```python Sync
+from superserve_sdk import SuperserveSync
+
+with SuperserveSync() as client:
+    run = client.run(
+        agent_id="my-assistant",
+        prompt="What is the capital of France?",
+    )
+    print(f"Output: {run.output}")
+```
+</CodeGroup>
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `agent_id` | `str` | Required | Agent ID or name |
+| `prompt` | `str` | Required | User prompt |
+| `session_id` | `str \| None` | `None` | Session for multi-turn |
+| `wait` | `bool` | `True` | Wait for completion |
+| `poll_interval` | `float` | `1.0` | Seconds between status checks |
+
+### Waiting vs. Non-Waiting
+
+<Tabs>
+  <Tab title="Wait (Default)">
+    By default, `run()` waits for the agent to complete:
+
+    ```python
+    run = await client.run("my-agent", "Hello")
+    print(run.status)  # "completed"
+    print(run.output)  # The response
+    ```
+  </Tab>
+
+  <Tab title="Don't Wait">
+    Return immediately without waiting:
+
+    ```python
+    run = await client.run("my-agent", "Hello", wait=False)
+    print(run.status)  # "pending" or "running"
+    print(run.output)  # None
+    ```
+  </Tab>
+</Tabs>
+
+## Streaming Responses
+
+Use `stream()` for real-time event streaming:
+
+```python
+from superserve_sdk import Superserve, MessageDeltaEvent
+
+async with Superserve() as client:
+    async for event in client.stream("my-agent", "Tell me a story"):
+        if isinstance(event, MessageDeltaEvent):
+            print(event.content, end="", flush=True)
+    print()
+```
+
+<Note>
+  Streaming provides a better user experience for longer responses, as users can see output as it's generated.
+</Note>
+
+### Streaming with Tool Events
+
+```python
+from superserve_sdk import (
+    Superserve,
+    MessageDeltaEvent,
+    ToolStartEvent,
+    ToolEndEvent,
+    RunCompletedEvent,
+)
+
+async with Superserve() as client:
+    async for event in client.stream("code-agent", "List Python files"):
+        if isinstance(event, MessageDeltaEvent):
+            print(event.content, end="", flush=True)
+        elif isinstance(event, ToolStartEvent):
+            print(f"\n[Running {event.tool}...]", end="")
+        elif isinstance(event, ToolEndEvent):
+            status = "ok" if event.success else "failed"
+            print(f" {status} ({event.duration_ms}ms)")
+        elif isinstance(event, RunCompletedEvent):
+            print(f"\nCompleted in {event.duration_ms}ms")
+```
+
+## Streaming with Metrics
+
+Track performance while streaming with `stream_with_metrics()`:
+
+```python
+async with Superserve() as client:
+    events, metrics_handle = await client.stream_with_metrics(
+        "my-agent",
+        "Analyze this code",
+    )
+
+    async for event in events:
+        if isinstance(event, MessageDeltaEvent):
+            print(event.content, end="", flush=True)
+
+    # Access metrics after streaming completes
+    metrics = metrics_handle.metrics
+    print(f"\nTokens: {metrics.total_tokens}")
+    print(f"Duration: {metrics.duration_ms}ms")
+    print(f"Tool calls: {metrics.tool_call_count}")
+```
+
+## Multi-Turn Conversations
+
+Use `session_id` to maintain conversation context:
+
+```python
+async with Superserve() as client:
+    session = "user-123-conversation-1"
+
+    # First turn
+    run1 = await client.run(
+        "my-agent",
+        "My name is Alice",
+        session_id=session,
+    )
+
+    # Second turn - agent remembers context
+    run2 = await client.run(
+        "my-agent",
+        "What is my name?",
+        session_id=session,
+    )
+    print(run2.output)  # Will mention "Alice"
+
+    # Third turn
+    run3 = await client.run(
+        "my-agent",
+        "Remember that I like Python",
+        session_id=session,
+    )
+```
+
+<Info>
+  Session IDs can be any string. Common patterns:
+  - `user-{user_id}-{timestamp}`
+  - `conversation-{uuid}`
+  - `{user_id}-{topic}`
+</Info>
+
+## Getting a Run
+
+Retrieve a specific run by ID:
+
+```python
+async with Superserve() as client:
+    run = await client.get_run("run_xyz789")
+
+    print(f"Status: {run.status}")
+    print(f"Duration: {run.duration_ms}ms")
+    if run.usage:
+        print(f"Tokens: {run.usage.total_tokens}")
+```
+
+<Note>
+  The `run_` prefix is optional - `await client.get_run("xyz789")` also works.
+</Note>
+
+## Listing Runs
+
+List runs with optional filters:
+
+```python
+async with Superserve() as client:
+    # All runs
+    runs = await client.list_runs()
+
+    # Filter by agent
+    runs = await client.list_runs(agent_id="my-agent")
+
+    # Filter by status
+    running = await client.list_runs(status="running")
+    completed = await client.list_runs(status="completed")
+
+    # With pagination
+    runs = await client.list_runs(limit=50, offset=100)
+```
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `agent_id` | `str \| None` | `None` | Filter by agent ID or name |
+| `status` | `str \| None` | `None` | Filter by status |
+| `limit` | `int` | `20` | Maximum runs to return |
+| `offset` | `int` | `0` | Number of runs to skip |
+
+## Cancelling Runs
+
+Cancel a running or pending run:
+
+```python
+async with Superserve() as client:
+    # Start a run without waiting
+    run = await client.run("my-agent", "Long task...", wait=False)
+
+    # Cancel it
+    cancelled_run = await client.cancel_run(run.id)
+    print(f"Status: {cancelled_run.status}")  # "cancelled"
+```
+
+<Warning>
+  Cancellation is best-effort. A run that has already completed cannot be cancelled.
+</Warning>
+
+## Polling Pattern
+
+For long-running tasks, you might want custom polling:
+
+```python
+import asyncio
+
+async with Superserve() as client:
+    # Start without waiting
+    run = await client.run("analysis-agent", "Analyze codebase", wait=False)
+
+    # Custom polling loop
+    while run.status in ("pending", "running"):
+        print(f"Status: {run.status}, waiting...")
+        await asyncio.sleep(5)  # Check every 5 seconds
+        run = await client.get_run(run.id)
+
+    if run.status == "completed":
+        print(f"Done: {run.output}")
+    elif run.status == "failed":
+        print(f"Error: {run.error_message}")
+```
+
+## Error Handling
+
+<Tabs>
+  <Tab title="NotFoundError">
+    Raised when a run doesn't exist:
+
+    ```python
+    from superserve_sdk import Superserve, NotFoundError
+
+    async with Superserve() as client:
+        try:
+            run = await client.get_run("nonexistent")
+        except NotFoundError:
+            print("Run not found")
+    ```
+  </Tab>
+
+  <Tab title="ConflictError">
+    Raised when cancelling a completed run:
+
+    ```python
+    from superserve_sdk import Superserve, ConflictError
+
+    async with Superserve() as client:
+        try:
+            await client.cancel_run("already-completed-run")
+        except ConflictError:
+            print("Run already completed, cannot cancel")
+    ```
+  </Tab>
+
+  <Tab title="StreamError">
+    Raised when streaming fails:
+
+    ```python
+    from superserve_sdk import Superserve, StreamError
+
+    async with Superserve() as client:
+        try:
+            async for event in client.stream("my-agent", "Hello"):
+                print(event)
+        except StreamError as e:
+            print(f"Stream error: {e.message}")
+    ```
+  </Tab>
+</Tabs>
+
+## Synchronous API
+
+All run methods are available in the sync client:
+
+```python
+from superserve_sdk import SuperserveSync, MessageDeltaEvent
+
+with SuperserveSync() as client:
+    # Run and wait
+    run = client.run("my-agent", "Hello")
+    print(run.output)
+
+    # Stream (collects all events first)
+    for event in client.stream("my-agent", "Hello"):
+        if isinstance(event, MessageDeltaEvent):
+            print(event.content)
+
+    # Get/list runs
+    run = client.get_run("run_xyz")
+    runs = client.list_runs(status="completed")
+
+    # Cancel
+    client.cancel_run("run_abc")
+```
+
+<Note>
+  The sync `stream()` method collects all events before yielding, so it's not truly real-time. For real-time streaming, use the async client.
+</Note>
+
+## Usage Metrics
+
+Completed runs include token usage:
+
+```python
+run = await client.run("my-agent", "Hello")
+
+if run.usage:
+    print(f"Input tokens: {run.usage.input_tokens}")
+    print(f"Output tokens: {run.usage.output_tokens}")
+    print(f"Total tokens: {run.usage.total_tokens}")
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Streaming for Long Tasks" icon="signal-stream">
+    ```python
+    # Better for user experience
+    async for event in client.stream("agent", "Long task"):
+        if isinstance(event, MessageDeltaEvent):
+            print(event.content, end="", flush=True)
+    ```
+  </Accordion>
+
+  <Accordion title="Handle Failures Gracefully" icon="shield">
+    ```python
+    run = await client.run("agent", prompt)
+
+    if run.status == "failed":
+        print(f"Failed: {run.error_message}")
+        # Handle or retry
+    elif run.status == "cancelled":
+        print("Run was cancelled")
+    ```
+  </Accordion>
+
+  <Accordion title="Use Sessions for Context" icon="comments">
+    ```python
+    # Maintain context across turns
+    session = f"user-{user_id}-{conversation_id}"
+    run = await client.run("agent", prompt, session_id=session)
+    ```
+  </Accordion>
+
+  <Accordion title="Clean Up Long-Running Runs" icon="broom">
+    ```python
+    # Cancel stale runs
+    runs = await client.list_runs(status="running")
+    for run in runs:
+        if is_stale(run.created_at):
+            await client.cancel_run(run.id)
+    ```
+  </Accordion>
+</AccordionGroup>
