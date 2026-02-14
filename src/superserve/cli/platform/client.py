@@ -11,7 +11,6 @@ import requests
 from .auth import get_credentials
 from .config import DEFAULT_TIMEOUT, PLATFORM_API_URL, USER_AGENT
 from .types import (
-    AgentConfig,
     AgentResponse,
     Credentials,
     DeviceCodeResponse,
@@ -249,7 +248,7 @@ class PlatformClient:
 
             resp = self._request("POST", "/projects", files=files, data=form_data)
 
-        return self._parse_project_response(resp.json())
+        return ProjectResponse.model_validate(resp.json())
 
     def get_project(self, name: str) -> ProjectResponse:
         """Get project by name.
@@ -261,7 +260,7 @@ class PlatformClient:
             Project response.
         """
         resp = self._request("GET", f"/projects/{name}")
-        return self._parse_project_response(resp.json())
+        return ProjectResponse.model_validate(resp.json())
 
     def list_projects(self) -> list[ProjectResponse]:
         """List all projects.
@@ -271,7 +270,7 @@ class PlatformClient:
         """
         resp = self._request("GET", "/projects")
         projects = resp.json().get("projects", [])
-        return [self._parse_project_response(d) for d in projects]
+        return [ProjectResponse.model_validate(d) for d in projects]
 
     def delete_project(self, name: str) -> None:
         """Delete a project.
@@ -280,17 +279,6 @@ class PlatformClient:
             name: Project name.
         """
         self._request("DELETE", f"/projects/{name}")
-
-    def _parse_project_response(self, data: dict) -> ProjectResponse:
-        """Parse project response from API.
-
-        Args:
-            data: Raw response data.
-
-        Returns:
-            Parsed ProjectResponse.
-        """
-        return ProjectResponse.model_validate(data)
 
     def get_logs(
         self, name: str, tail: int = 100, agent: str | None = None
@@ -338,27 +326,37 @@ class PlatformClient:
 
     # ==================== AGENTS ====================
 
-    def create_agent(self, config: AgentConfig) -> AgentResponse:
-        """Create a new hosted agent.
+    def deploy_agent(
+        self,
+        name: str,
+        command: str,
+        config: dict,
+        tarball_path: str,
+    ) -> AgentResponse:
+        """Deploy an agent (create or update).
+
+        Sends the project tarball as a multipart form upload to POST /agents.
 
         Args:
-            config: Agent configuration.
+            name: Agent name.
+            command: Command to run the agent.
+            config: Full superserve.yaml as a dict.
+            tarball_path: Path to the .tar.gz package.
 
         Returns:
-            Created agent.
+            Created or updated agent.
         """
-        resp = self._request(
-            "POST",
-            "/agents",
-            json_data={
-                "name": config.name,
-                "model": config.model,
-                "system_prompt": config.system_prompt,
-                "tools": config.tools,
-                "max_turns": config.max_turns,
-                "timeout_seconds": config.timeout_seconds,
-            },
-        )
+        with open(tarball_path, "rb") as f:
+            resp = self._request(
+                "POST",
+                "/agents",
+                files={"file": ("agent.tar.gz", f, "application/gzip")},
+                data={
+                    "name": name,
+                    "command": command,
+                    "config": json.dumps(config),
+                },
+            )
         return AgentResponse.model_validate(resp.json())
 
     def list_agents(self) -> list[AgentResponse]:
@@ -411,9 +409,7 @@ class PlatformClient:
         Returns:
             Agent details.
         """
-        # Resolve name to ID if needed (uses cache)
         agent_id = self._resolve_agent_id(name_or_id)
-
         resp = self._request("GET", f"/agents/{agent_id}")
         return AgentResponse.model_validate(resp.json())
 
@@ -423,9 +419,7 @@ class PlatformClient:
         Args:
             name_or_id: Agent name or ID.
         """
-        # Resolve name to ID if needed (uses cache)
         agent_id = self._resolve_agent_id(name_or_id)
-
         self._request("DELETE", f"/agents/{agent_id}")
 
         # Invalidate cache entry for the deleted agent
@@ -435,35 +429,6 @@ class PlatformClient:
                 break
 
     # ==================== RUNS ====================
-
-    def create_run(
-        self,
-        agent_id: str,
-        prompt: str,
-        session_id: str | None = None,
-    ) -> RunResponse:
-        """Create a new run for an agent.
-
-        Args:
-            agent_id: Agent ID or name.
-            prompt: User prompt.
-            session_id: Optional session ID for multi-turn.
-
-        Returns:
-            Created run.
-        """
-        # Resolve name to ID if needed (uses cache)
-        resolved_id = self._resolve_agent_id(agent_id)
-
-        data: dict[str, str] = {
-            "agent_id": resolved_id,
-            "prompt": prompt,
-        }
-        if session_id:
-            data["session_id"] = session_id
-
-        resp = self._request("POST", "/runs", json_data=data)
-        return RunResponse.model_validate(resp.json())
 
     def list_runs(
         self,
@@ -484,7 +449,6 @@ class PlatformClient:
         params: dict[str, int | str] = {"limit": limit}
 
         if agent_id:
-            # Resolve name to ID if needed (uses cache)
             resolved_id = self._resolve_agent_id(agent_id)
             params["agent_id"] = resolved_id
 
@@ -598,36 +562,6 @@ class PlatformClient:
                 elif line.startswith("data: "):
                     data_lines.append(line[6:])
 
-    def create_and_stream_run(
-        self,
-        agent_id: str,
-        prompt: str,
-    ) -> Iterator[RunEvent]:
-        """Create a run and stream events in real-time via SSE.
-
-        Uses POST /runs/stream which proxies the SSE stream directly from
-        the sandbox, delivering tokens as they're generated.
-
-        Args:
-            agent_id: Agent ID or name.
-            prompt: User prompt.
-
-        Yields:
-            Run events as they arrive.
-        """
-        resolved_id = self._resolve_agent_id(agent_id)
-
-        data: dict[str, str] = {
-            "agent_id": resolved_id,
-            "prompt": prompt,
-        }
-
-        resp = self._request("POST", "/runs/stream", json_data=data, stream=True)
-
-        self._current_stream_run_id = resp.headers.get("X-Run-ID")
-
-        yield from self._parse_sse_stream(resp)
-
     # ==================== AGENT SECRETS ====================
 
     def get_agent_secrets(self, name_or_id: str) -> list[str]:
@@ -639,9 +573,7 @@ class PlatformClient:
         Returns:
             List of secret key names.
         """
-        # Resolve name to ID if needed (uses cache)
         agent_id = self._resolve_agent_id(name_or_id)
-
         resp = self._request("GET", f"/agents/{agent_id}/secrets")
         return cast(list[str], resp.json().get("keys", []))
 
@@ -655,9 +587,7 @@ class PlatformClient:
         Returns:
             Updated list of secret key names.
         """
-        # Resolve name to ID if needed (uses cache)
         agent_id = self._resolve_agent_id(name_or_id)
-
         resp = self._request(
             "PATCH",
             f"/agents/{agent_id}/secrets",
@@ -675,9 +605,7 @@ class PlatformClient:
         Returns:
             Updated list of secret key names.
         """
-        # Resolve name to ID if needed (uses cache)
         agent_id = self._resolve_agent_id(name_or_id)
-
         resp = self._request("DELETE", f"/agents/{agent_id}/secrets/{key}")
         return cast(list[str], resp.json().get("keys", []))
 
