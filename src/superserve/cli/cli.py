@@ -4,7 +4,9 @@
 Usage:
     superserve login [--api-key=KEY]
     superserve logout
-    superserve agents create|list|get|delete
+    superserve init
+    superserve deploy
+    superserve agents list|get|delete
     superserve run <agent> <prompt>
     superserve runs list|get
     superserve secrets set|delete|list
@@ -18,6 +20,8 @@ import requests
 
 from .commands import login, logout
 from .commands.agents import agents
+from .commands.deploy import deploy
+from .commands.init import init
 from .commands.run import run_agent, runs
 from .commands.secrets import secrets
 from .commands.session import sessions
@@ -34,6 +38,10 @@ def cli():
 # Authentication
 cli.add_command(login.login)
 cli.add_command(logout.logout)
+
+# Deploy & init
+cli.add_command(deploy)
+cli.add_command(init)
 
 # Hosted agents commands
 cli.add_command(agents)

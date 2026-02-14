@@ -4,8 +4,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
-
 
 class Credentials(BaseModel):
     """Stored authentication credentials."""
@@ -121,27 +119,13 @@ class LogEntry(BaseModel):
 # ==================== HOSTED AGENTS ====================
 
 
-class AgentConfig(BaseModel):
-    """Agent configuration."""
-
-    name: str
-    model: str = DEFAULT_MODEL
-    system_prompt: str = "You are a helpful assistant."
-    tools: list[str] = ["Bash", "Read", "Write", "Glob", "Grep"]
-    max_turns: int = 10
-    timeout_seconds: int = 300
-
-
 class AgentResponse(BaseModel):
     """Response from agent API."""
 
     id: str
     name: str
-    model: str
-    system_prompt: str
-    tools: list[str]
-    max_turns: int
-    timeout_seconds: int
+    command: str | None = None
+    environment_keys: list[str] = Field(default_factory=list)
     created_at: str
     updated_at: str
 
@@ -168,7 +152,7 @@ class RunResponse(BaseModel):
     usage: UsageMetrics | None = None
     turns: int = 0
     duration_ms: int = 0
-    tools_used: list[str] = []
+    tools_used: list[str] = Field(default_factory=list)
     created_at: str
     started_at: str | None = None
     completed_at: str | None = None

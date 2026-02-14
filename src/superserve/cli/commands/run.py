@@ -10,17 +10,14 @@ from ..platform.client import PlatformAPIError, PlatformClient
 from ..utils import echo_truncated, format_duration, sanitize_terminal_output
 
 
-def _stream_events(client, event_iter, as_json: bool) -> int:
+def _stream_events(event_iter, as_json: bool) -> int:
     """Stream SSE events to terminal. Returns 0 on success, non-zero exit code on failure."""
     for event in event_iter:
         if as_json:
             click.echo(json.dumps({"type": event.type, "data": event.data}))
             continue
 
-        if event.type == "run.started":
-            pass
-
-        elif event.type == "message.delta":
+        if event.type == "message.delta":
             content = event.data.get("content", "")
             click.echo(sanitize_terminal_output(content), nl=False)
 
@@ -89,19 +86,9 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
         superserve run my-agent "Hello" --single
     """
     client = PlatformClient()
-    cancelled = False
 
     def handle_interrupt(signum, frame):
-        nonlocal cancelled
-        run_id = getattr(client, "_current_stream_run_id", None)
-        if run_id and not cancelled:
-            cancelled = True
-            click.echo("\nCancelling run...", err=True)
-            try:
-                client.cancel_run(run_id)
-                click.echo("Run cancelled.", err=True)
-            except PlatformAPIError:
-                pass
+        click.echo("\nCancelled.", err=True)
         sys.exit(130)
 
     signal.signal(signal.SIGINT, handle_interrupt)
@@ -115,29 +102,18 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
         if not prompt.strip():
             return
 
-    # Interactive mode needs a persistent session so the sandbox stays alive
-    # across turns. Single-shot / JSON / piped input use one-shot runs.
     interactive = not single and not as_json and sys.stdin.isatty()
 
     try:
-        if interactive:
-            # Create a session with a persistent sandbox for multi-turn
+        if not as_json:
             click.echo("Creating session...", err=True)
-            session_data = client.create_session(agent)
-            session_id = session_data["id"]
+        session_data = client.create_session(agent)
+        session_id = session_data["id"]
 
-            exit_code = _stream_events(
-                client,
-                client.stream_session_message(session_id, prompt),
-                as_json,
-            )
-        else:
-            # One-shot run (sandbox destroyed after response)
-            exit_code = _stream_events(
-                client,
-                client.create_and_stream_run(agent, prompt),
-                as_json,
-            )
+        exit_code = _stream_events(
+            client.stream_session_message(session_id, prompt),
+            as_json,
+        )
         if exit_code:
             sys.exit(exit_code)
 
@@ -151,11 +127,10 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
             except (EOFError, click.Abort):
                 click.echo()
                 break
-            if not next_prompt.strip():
+            if not next_prompt.strip() or next_prompt.strip().lower() == "exit":
                 break
 
             exit_code = _stream_events(
-                client,
                 client.stream_session_message(session_id, next_prompt),
                 as_json,
             )
