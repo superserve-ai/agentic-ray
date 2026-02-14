@@ -127,7 +127,7 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
             except (EOFError, click.Abort):
                 click.echo()
                 break
-            if not next_prompt.strip():
+            if not next_prompt.strip() or next_prompt.strip().lower() == "exit":
                 break
 
             exit_code = _stream_events(

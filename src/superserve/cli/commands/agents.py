@@ -6,6 +6,7 @@ import sys
 import click
 
 from ..platform.client import PlatformAPIError, PlatformClient
+from ..utils import sanitize_terminal_output
 
 
 @click.group()
@@ -43,10 +44,11 @@ def list_agents(as_json: bool):
 
     for agent in agent_list:
         created = agent.created_at[:10] if agent.created_at else ""
-        command = agent.command or ""
+        name = sanitize_terminal_output(agent.name)
+        command = sanitize_terminal_output(agent.command or "")
         if len(command) > 33:
             command = command[:30] + "..."
-        click.echo(f"{agent.name:<25} {command:<35} {created:<20}")
+        click.echo(f"{name:<25} {command:<35} {created:<20}")
 
 
 @agents.command("get")
@@ -70,8 +72,8 @@ def get_agent(name: str, as_json: bool):
         return
 
     click.echo(f"ID:       {agent.id}")
-    click.echo(f"Name:     {agent.name}")
-    click.echo(f"Command:  {agent.command or '(none)'}")
+    click.echo(f"Name:     {sanitize_terminal_output(agent.name)}")
+    click.echo(f"Command:  {sanitize_terminal_output(agent.command or '(none)')}")
     click.echo(f"Created:  {agent.created_at}")
     click.echo(f"Updated:  {agent.updated_at}")
     if agent.environment_keys:

@@ -49,7 +49,7 @@ def _should_exclude(
 
     # Check user-specified ignore patterns (matched as relative path prefixes)
     if user_ignores:
-        rel_str = str(rel)
+        rel_str = rel.as_posix()
         for pattern in user_ignores:
             if rel_str == pattern or rel_str.startswith(pattern + "/"):
                 return True
@@ -124,7 +124,7 @@ def deploy(project_dir: str, as_json: bool):
 
     name = config["name"]
     command = config["command"]
-    user_ignores = set(config.get("ignore", []))
+    user_ignores = set(config.get("ignore") or [])
 
     if not as_json:
         click.echo(f"Deploying '{name}'...")
@@ -137,6 +137,7 @@ def deploy(project_dir: str, as_json: bool):
         click.echo(f"  Package size: {size_mb:.1f} MB")
 
     # Write to temp file for upload
+    tarball_path = None
     with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
         tmp.write(tarball_bytes)
         tarball_path = tmp.name
@@ -158,7 +159,8 @@ def deploy(project_dir: str, as_json: bool):
             click.echo(f"Error: {e.message}", err=True)
         sys.exit(1)
     finally:
-        os.unlink(tarball_path)
+        if tarball_path:
+            os.unlink(tarball_path)
 
     if as_json:
         click.echo(json.dumps(agent.model_dump(), indent=2))
