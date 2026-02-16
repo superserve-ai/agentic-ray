@@ -17,6 +17,7 @@ name: {name}
 # Command to start your agent (runs inside the sandbox)
 command: python main.py
 
+{secrets_block}\
 # Files and directories to exclude from upload
 # ignore:
 #   - .venv
@@ -24,6 +25,24 @@ command: python main.py
 #   - .git
 #   - node_modules
 """
+
+
+def _detect_env_keys(project_dir: Path) -> list[str]:
+    """Parse variable names from .env.example if it exists."""
+    env_example = project_dir / ".env.example"
+    if not env_example.exists():
+        return []
+
+    keys: list[str] = []
+    for line in env_example.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            key = line.split("=", 1)[0].strip()
+            if key:
+                keys.append(key)
+    return keys
 
 
 @click.command("init")
@@ -51,7 +70,21 @@ def init(name: str | None):
         if name and not name[0].isalpha():
             name = "agent-" + name
 
-    content = TEMPLATE.format(name=name)
+    # Auto-detect secrets from .env.example, or add commented placeholder
+    env_keys = _detect_env_keys(Path.cwd())
+    if env_keys:
+        lines = "secrets:\n"
+        for key in env_keys:
+            lines += f"  - {key}\n"
+        secrets_block = f"# Environment variables your agent needs to run\n{lines}\n"
+    else:
+        secrets_block = (
+            "# Environment variables your agent needs to run\n"
+            "# secrets:\n"
+            "#   - ANTHROPIC_API_KEY\n\n"
+        )
+
+    content = TEMPLATE.format(name=name, secrets_block=secrets_block)
     config_path.write_text(content)
     click.echo(f"Created {SUPERSERVE_YAML}")
     click.echo()
@@ -62,7 +95,12 @@ def init(name: str | None):
     click.echo("     (e.g., python main.py, node index.js, ./start.sh)")
     click.echo("  2. Deploy your agent:")
     click.echo("     superserve deploy")
-    click.echo("  3. Set your API keys as secrets:")
-    click.echo(f"     superserve secrets set {name} ANTHROPIC_API_KEY=sk-...")
+    if env_keys:
+        example_key = env_keys[0]
+        click.echo("  3. Set your secrets:")
+        click.echo(f"     superserve secrets set {name} {example_key}=...")
+    else:
+        click.echo("  3. Set your API keys as secrets:")
+        click.echo(f"     superserve secrets set {name} ANTHROPIC_API_KEY=sk-...")
     click.echo("  4. Run your agent:")
     click.echo(f'     superserve run {name} "your prompt here"')

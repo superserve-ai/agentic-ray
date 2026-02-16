@@ -244,6 +244,21 @@ def deploy(project_dir: str, as_json: bool):
     total_time = format_elapsed(time.time() - deploy_start)
     click.echo()
     click.echo(f"  Deployed '{agent.name}' in {total_time}")
+
+    # ── Secrets ──
+    required = config.get("secrets") or []
+    if required:
+        missing = [s for s in required if s not in agent.environment_keys]
+        if missing:
+            click.echo()
+            click.echo("  Set your secrets before running:")
+            for key in missing:
+                click.echo(f"    superserve secrets set {name} {key}=...")
+    elif not agent.environment_keys:
+        click.echo()
+        click.echo("  Set your API keys as secrets:")
+        click.echo(f"    superserve secrets set {name} KEY=VALUE")
+
     click.echo()
     click.echo(f'  superserve run {agent.name} "your prompt here"')
     click.echo()

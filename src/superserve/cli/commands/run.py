@@ -23,15 +23,8 @@ def _stream_events(event_iter, as_json: bool, spinner: Spinner | None = None) ->
                 return 130
             continue
 
-        if event.type == "status":
-            if spinner:
-                msg = event.data.get("message", "")
-                if msg:
-                    spinner.update(msg)
-
-        elif event.type == "run.started":
-            if spinner:
-                spinner.update("Thinking...")
+        if event.type in ("status", "run.started", "heartbeat"):
+            pass  # Spinner is already running
 
         elif event.type == "message.delta":
             if spinner:
@@ -54,27 +47,17 @@ def _stream_events(event_iter, as_json: bool, spinner: Spinner | None = None) ->
             duration = event.data.get("duration_ms", 0)
             click.echo(f" ({format_duration(duration)})", err=True)
             if spinner:
-                spinner.start("Thinking...")
+                spinner.start()
 
         elif event.type == "run.completed":
             if spinner:
                 spinner.stop()
-            usage = event.data.get("usage", {})
             duration = event.data.get("duration_ms", 0)
-            input_tokens = usage.get("input_tokens", 0)
-            output_tokens = usage.get("output_tokens", 0)
             click.echo()  # Newline after content
-            if input_tokens or output_tokens:
-                click.echo(
-                    f"\nCompleted in {format_duration(duration)} "
-                    f"({input_tokens:,} input / {output_tokens:,} output tokens)",
-                    err=True,
-                )
-            else:
-                click.echo(
-                    f"\nCompleted in {format_duration(duration)}",
-                    err=True,
-                )
+            click.echo(
+                f"\nCompleted in {format_duration(duration)}",
+                err=True,
+            )
             if event.data.get("max_turns_reached"):
                 msg = sanitize_terminal_output(
                     event.data.get("max_turns_message", "Max turns reached.")
@@ -144,10 +127,33 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
     interactive = not single and not as_json and sys.stdin.isatty()
     use_spinner = not as_json and sys.stderr.isatty()
 
+    # Pre-flight: check required secrets are set
+    try:
+        agent_info = client.get_agent(agent)
+        if agent_info.required_secrets:
+            missing = [
+                s
+                for s in agent_info.required_secrets
+                if s not in agent_info.environment_keys
+            ]
+            if missing:
+                click.echo(
+                    f"Error: Missing required secret(s): {', '.join(missing)}",
+                    err=True,
+                )
+                click.echo(
+                    f"Set them with: superserve secrets set {agent_info.name} "
+                    + " ".join(f"{k}=..." for k in missing),
+                    err=True,
+                )
+                sys.exit(1)
+    except PlatformAPIError:
+        pass  # Let the session creation handle auth/404 errors
+
     try:
         if use_spinner:
             spinner = Spinner(show_elapsed=True)
-            spinner.start("Connecting...")
+            spinner.start()
         session_data = client.create_session(agent)
         session_id = session_data["id"]
 
@@ -173,7 +179,7 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
                 break
 
             if spinner:
-                spinner.start("Thinking...")
+                spinner.start()
 
             exit_code = _stream_events(
                 client.stream_session_message(session_id, next_prompt),

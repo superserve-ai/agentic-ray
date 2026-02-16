@@ -203,8 +203,8 @@ class TestRunCommand:
             assert result.exit_code == 1
             assert "not found" in result.output.lower()
 
-    def test_run_completion_shows_usage(self):
-        """Run command shows token usage on completion."""
+    def test_run_completion_shows_duration(self):
+        """Run command shows duration on completion."""
         stderr_runner = CliRunner()
         events = [
             RunEvent(type="message.delta", data={"content": "Answer"}),
@@ -212,11 +212,6 @@ class TestRunCommand:
                 type="run.completed",
                 data={
                     "run_id": "run_123",
-                    "usage": {
-                        "input_tokens": 1500,
-                        "output_tokens": 300,
-                        "total_tokens": 1800,
-                    },
                     "duration_ms": 5000,
                 },
             ),
@@ -230,8 +225,7 @@ class TestRunCommand:
             result = stderr_runner.invoke(cli, ["run", "my-agent", "Hello"])
 
             assert result.exit_code == 0
-            assert "1,500" in result.output
-            assert "300" in result.output
+            assert "Completed in 5.0s" in result.output
 
 
 # ==================== Unit Tests: Client SSE Parsing ====================
