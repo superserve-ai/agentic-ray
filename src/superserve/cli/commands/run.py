@@ -15,6 +15,12 @@ def _stream_events(event_iter, as_json: bool, spinner: Spinner | None = None) ->
     for event in event_iter:
         if as_json:
             click.echo(json.dumps({"type": event.type, "data": event.data}))
+            if event.type == "run.completed":
+                return 0
+            if event.type == "run.failed":
+                return 1
+            if event.type == "run.cancelled":
+                return 130
             continue
 
         if event.type == "status":
