@@ -7,9 +7,8 @@ import pytest
 from click.testing import CliRunner
 
 from superserve.cli.cli import cli
-from superserve.cli.platform.client import PlatformAPIError
+from superserve.cli.platform.client import PlatformAPIError, PlatformClient
 from superserve.cli.platform.types import (
-    Credentials,
     RunEvent,
     RunResponse,
     UsageMetrics,
@@ -20,12 +19,6 @@ from superserve.cli.platform.types import (
 def runner():
     """Provide a CLI runner."""
     return CliRunner()
-
-
-@pytest.fixture
-def mock_credentials():
-    """Mock authenticated credentials."""
-    return Credentials(token="test-token-123")
 
 
 def _make_run_response(**overrides) -> RunResponse:
@@ -39,6 +32,12 @@ def _make_run_response(**overrides) -> RunResponse:
     }
     defaults.update(overrides)
     return RunResponse(**defaults)
+
+
+def _mock_session_client(mock_client, events):
+    """Configure a mock client for session-based streaming."""
+    mock_client.create_session.return_value = {"id": "ses_test-session"}
+    mock_client.stream_session_message.return_value = iter(events)
 
 
 # ==================== Unit Tests: CLI Command ====================
@@ -69,15 +68,16 @@ class TestRunCommand:
 
         with patch("superserve.cli.commands.run.PlatformClient") as mock_client_cls:
             mock_client = MagicMock()
-            mock_client.create_and_stream_run.return_value = iter(events)
+            _mock_session_client(mock_client, events)
             mock_client_cls.return_value = mock_client
 
             result = runner.invoke(cli, ["run", "my-agent", "Hello"])
 
             assert result.exit_code == 0
             assert "Hello world!" in result.output
-            mock_client.create_and_stream_run.assert_called_once_with(
-                "my-agent", "Hello"
+            mock_client.create_session.assert_called_once_with("my-agent")
+            mock_client.stream_session_message.assert_called_once_with(
+                "ses_test-session", "Hello"
             )
 
     def test_run_json_mode(self, runner):
@@ -97,7 +97,7 @@ class TestRunCommand:
 
         with patch("superserve.cli.commands.run.PlatformClient") as mock_client_cls:
             mock_client = MagicMock()
-            mock_client.create_and_stream_run.return_value = iter(events)
+            _mock_session_client(mock_client, events)
             mock_client_cls.return_value = mock_client
 
             result = runner.invoke(cli, ["run", "my-agent", "Hello", "--json"])
@@ -125,7 +125,7 @@ class TestRunCommand:
 
         with patch("superserve.cli.commands.run.PlatformClient") as mock_client_cls:
             mock_client = MagicMock()
-            mock_client.create_and_stream_run.return_value = iter(events)
+            _mock_session_client(mock_client, events)
             mock_client_cls.return_value = mock_client
 
             result = runner.invoke(cli, ["run", "my-agent", "Hello"])
@@ -142,7 +142,7 @@ class TestRunCommand:
 
         with patch("superserve.cli.commands.run.PlatformClient") as mock_client_cls:
             mock_client = MagicMock()
-            mock_client.create_and_stream_run.return_value = iter(events)
+            _mock_session_client(mock_client, events)
             mock_client_cls.return_value = mock_client
 
             result = runner.invoke(cli, ["run", "my-agent", "Hello"])
@@ -180,7 +180,7 @@ class TestRunCommand:
 
         with patch("superserve.cli.commands.run.PlatformClient") as mock_client_cls:
             mock_client = MagicMock()
-            mock_client.create_and_stream_run.return_value = iter(events)
+            _mock_session_client(mock_client, events)
             mock_client_cls.return_value = mock_client
 
             result = stderr_runner.invoke(cli, ["run", "my-agent", "Do stuff"])
@@ -194,7 +194,7 @@ class TestRunCommand:
         """Run command shows auth error when not authenticated."""
         with patch("superserve.cli.commands.run.PlatformClient") as mock_client_cls:
             mock_client = MagicMock()
-            mock_client.create_and_stream_run.side_effect = PlatformAPIError(
+            mock_client.create_session.side_effect = PlatformAPIError(
                 401, "Not authenticated"
             )
             mock_client_cls.return_value = mock_client
@@ -208,7 +208,7 @@ class TestRunCommand:
         """Run command shows error when agent not found."""
         with patch("superserve.cli.commands.run.PlatformClient") as mock_client_cls:
             mock_client = MagicMock()
-            mock_client.create_and_stream_run.side_effect = PlatformAPIError(
+            mock_client.create_session.side_effect = PlatformAPIError(
                 404, "Agent not found"
             )
             mock_client_cls.return_value = mock_client
@@ -239,7 +239,7 @@ class TestRunCommand:
 
         with patch("superserve.cli.commands.run.PlatformClient") as mock_client_cls:
             mock_client = MagicMock()
-            mock_client.create_and_stream_run.return_value = iter(events)
+            _mock_session_client(mock_client, events)
             mock_client_cls.return_value = mock_client
 
             result = stderr_runner.invoke(cli, ["run", "my-agent", "Hello"])
@@ -253,7 +253,7 @@ class TestRunCommand:
 
 
 class TestClientSSEParsing:
-    """Tests for PlatformClient.create_and_stream_run SSE parsing."""
+    """Tests for PlatformClient._parse_sse_stream."""
 
     @staticmethod
     def _make_sse_chunks(events: list[tuple[str, dict]]) -> list[str]:
@@ -264,25 +264,21 @@ class TestClientSSEParsing:
         return chunks
 
     @staticmethod
-    def _make_sse_response(chunks: list[str], headers: dict | None = None) -> MagicMock:
+    def _make_sse_response(chunks: list[str]) -> MagicMock:
         """Build a mock response with iter_content returning SSE chunks."""
         mock_resp = MagicMock()
         mock_resp.iter_content.return_value = iter(chunks)
-        mock_resp.headers = headers or {}
+        mock_resp.headers = {}
         return mock_resp
 
     def test_parses_single_event(self):
         """Client parses a single SSE event."""
-        from superserve.cli.platform.client import PlatformClient
-
         client = PlatformClient(base_url="https://test.api.com")
 
         chunks = self._make_sse_chunks([("run.started", {"run_id": "run_123"})])
-        mock_resp = self._make_sse_response(chunks, {"X-Run-ID": "run_123"})
+        mock_resp = self._make_sse_response(chunks)
 
-        with patch.object(client, "_request", return_value=mock_resp):
-            with patch.object(client, "_resolve_agent_id", return_value="agt_abc"):
-                events = list(client.create_and_stream_run("my-agent", "Hello"))
+        events = list(client._parse_sse_stream(mock_resp))
 
         assert len(events) == 1
         assert events[0].type == "run.started"
@@ -290,8 +286,6 @@ class TestClientSSEParsing:
 
     def test_parses_multiple_events(self):
         """Client parses multiple SSE events in sequence."""
-        from superserve.cli.platform.client import PlatformClient
-
         client = PlatformClient(base_url="https://test.api.com")
 
         chunks = self._make_sse_chunks(
@@ -305,11 +299,9 @@ class TestClientSSEParsing:
                 ),
             ]
         )
-        mock_resp = self._make_sse_response(chunks, {"X-Run-ID": "run_123"})
+        mock_resp = self._make_sse_response(chunks)
 
-        with patch.object(client, "_request", return_value=mock_resp):
-            with patch.object(client, "_resolve_agent_id", return_value="agt_abc"):
-                events = list(client.create_and_stream_run("my-agent", "Hello"))
+        events = list(client._parse_sse_stream(mock_resp))
 
         assert len(events) == 4
         assert events[0].type == "run.started"
@@ -320,73 +312,31 @@ class TestClientSSEParsing:
 
     def test_parses_multiline_data(self):
         """Client handles multiline data fields per SSE spec."""
-        from superserve.cli.platform.client import PlatformClient
-
         client = PlatformClient(base_url="https://test.api.com")
 
-        # Multiline data: two data: lines before blank line
         chunks = ['event: message.delta\ndata: {"content":\ndata: "hello"}\n\n']
-        mock_resp = self._make_sse_response(chunks, {"X-Run-ID": "run_123"})
+        mock_resp = self._make_sse_response(chunks)
 
-        with patch.object(client, "_request", return_value=mock_resp):
-            with patch.object(client, "_resolve_agent_id", return_value="agt_abc"):
-                events = list(client.create_and_stream_run("my-agent", "Hello"))
+        events = list(client._parse_sse_stream(mock_resp))
 
         assert len(events) == 1
         assert events[0].data["content"] == "hello"
 
-    def test_skips_malformed_json(self):
-        """Client skips events with invalid JSON data."""
-        from superserve.cli.platform.client import PlatformClient
-
+    def test_handles_malformed_json(self):
+        """Client wraps malformed JSON in a raw field."""
         client = PlatformClient(base_url="https://test.api.com")
 
         chunks = [
             "event: message.delta\ndata: {invalid json}\n\n",
             'event: message.delta\ndata: {"content": "valid"}\n\n',
         ]
-        mock_resp = self._make_sse_response(chunks, {"X-Run-ID": "run_123"})
+        mock_resp = self._make_sse_response(chunks)
 
-        with patch.object(client, "_request", return_value=mock_resp):
-            with patch.object(client, "_resolve_agent_id", return_value="agt_abc"):
-                events = list(client.create_and_stream_run("my-agent", "Hello"))
+        events = list(client._parse_sse_stream(mock_resp))
 
-        # Malformed JSON now returns {"raw": ...} instead of being skipped
         assert len(events) == 2
+        assert "raw" in events[0].data
         assert events[1].data["content"] == "valid"
-
-    def test_extracts_run_id_from_header(self):
-        """Client extracts run ID from X-Run-ID response header."""
-        from superserve.cli.platform.client import PlatformClient
-
-        client = PlatformClient(base_url="https://test.api.com")
-
-        mock_resp = self._make_sse_response([], {"X-Run-ID": "run_my-run-id"})
-
-        with patch.object(client, "_request", return_value=mock_resp):
-            with patch.object(client, "_resolve_agent_id", return_value="agt_abc"):
-                list(client.create_and_stream_run("my-agent", "Hello"))
-
-        assert client._current_stream_run_id == "run_my-run-id"
-
-    def test_no_session_id_omitted_from_payload(self):
-        """Client omits session_id from payload when not provided."""
-        from superserve.cli.platform.client import PlatformClient
-
-        client = PlatformClient(base_url="https://test.api.com")
-
-        mock_resp = self._make_sse_response([])
-
-        with patch.object(client, "_request", return_value=mock_resp) as mock_req:
-            with patch.object(client, "_resolve_agent_id", return_value="agt_abc"):
-                list(client.create_and_stream_run("my-agent", "Hello"))
-
-        mock_req.assert_called_once_with(
-            "POST",
-            "/runs/stream",
-            json_data={"agent_id": "agt_abc", "prompt": "Hello"},
-            stream=True,
-        )
 
 
 # ==================== Unit Tests: Runs Subcommands ====================
