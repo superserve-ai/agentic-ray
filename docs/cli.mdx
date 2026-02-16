@@ -1,0 +1,207 @@
+---
+title: "CLI Reference"
+description: "Every superserve command"
+---
+
+## Authentication
+
+<AccordionGroup>
+  <Accordion title="superserve login" icon="right-to-bracket">
+    ```bash
+    superserve login [--api-key KEY]
+    ```
+
+    Opens your browser for authentication. Use `--api-key` for non-interactive environments like CI/CD.
+
+    Credentials are stored at `~/.superserve/credentials.json`.
+  </Accordion>
+
+  <Accordion title="superserve logout" icon="right-from-bracket">
+    ```bash
+    superserve logout
+    ```
+
+    Clears stored credentials.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Project setup
+
+<AccordionGroup>
+  <Accordion title="superserve init" icon="folder-plus">
+    ```bash
+    superserve init [--name NAME]
+    ```
+
+    Creates `superserve.yaml` in the current directory. Defaults the agent name to the directory name.
+
+    ### superserve.yaml
+
+    ```yaml
+    name: my-agent          # Required. Lowercase, alphanumeric, hyphens.
+    command: python main.py  # Required. Command to start your agent.
+
+    # Optional: exclude from deploy package
+    ignore:
+      - data/
+      - notebooks/
+    ```
+
+    <Note>
+      **Always excluded:** `__pycache__`, `.git`, `.venv`, `venv`, `node_modules`, `.mypy_cache`, `.pytest_cache`, `.ruff_cache`, `dist`, `build`, `*.egg-info`, `.env*`
+    </Note>
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Deployment
+
+<AccordionGroup>
+  <Accordion title="superserve deploy" icon="cloud-arrow-up">
+    ```bash
+    superserve deploy [--dir PATH] [--json]
+    ```
+
+    Packages your project, uploads it, and installs dependencies.
+
+    | Flag | Description |
+    |------|-------------|
+    | `--dir PATH` | Project directory (default: `.`) |
+    | `--json` | Output agent object as JSON |
+
+    Dependencies are auto-detected from `requirements.txt` or `pyproject.toml`. The CLI polls for installation status (up to 5 minutes).
+
+    Deploying the same agent name updates the existing agent.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Running agents
+
+<AccordionGroup>
+  <Accordion title="superserve run" icon="play" defaultOpen>
+    ```bash
+    superserve run AGENT [PROMPT] [--single] [--json]
+    ```
+
+    | Flag | Description |
+    |------|-------------|
+    | `--single` | Exit after one response |
+    | `--json` | Output raw SSE events as JSON |
+
+    **Interactive mode** — omit the prompt to start a conversation:
+
+    ```bash
+    superserve run my-agent
+    You> Hello
+    ...
+    You> exit
+    ```
+
+    **Single-turn** — pass a prompt inline:
+
+    ```bash
+    superserve run my-agent "Hello" --single
+    ```
+
+    Type `exit` or press `Ctrl+C` to quit interactive mode.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Agent management
+
+<AccordionGroup>
+  <Accordion title="superserve agents list" icon="list">
+    ```bash
+    superserve agents list [--json]
+    ```
+
+    Lists all your deployed agents.
+  </Accordion>
+
+  <Accordion title="superserve agents get" icon="circle-info">
+    ```bash
+    superserve agents get NAME [--json]
+    ```
+
+    Shows details for a specific agent.
+  </Accordion>
+
+  <Accordion title="superserve agents delete" icon="trash">
+    ```bash
+    superserve agents delete NAME [--yes]
+    ```
+
+    Deletes an agent and all its data. Use `--yes` to skip confirmation.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Sessions
+
+Sessions are created automatically by `superserve run`.
+
+<AccordionGroup>
+  <Accordion title="superserve sessions list" icon="list">
+    ```bash
+    superserve sessions list [--agent NAME] [--status STATUS] [--json]
+    ```
+
+    Status values: `active`, `idle`, `completed`, `failed`.
+  </Accordion>
+
+  <Accordion title="superserve sessions get" icon="circle-info">
+    ```bash
+    superserve sessions get SESSION_ID [--json]
+    ```
+
+    Accepts short ID prefixes (e.g., `7c9e66`).
+  </Accordion>
+
+  <Accordion title="superserve sessions end" icon="stop">
+    ```bash
+    superserve sessions end SESSION_ID
+    ```
+
+    Ends an active session.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Secrets
+
+Encrypted environment variables injected into your agent at runtime.
+
+<AccordionGroup>
+  <Accordion title="superserve secrets set" icon="lock">
+    ```bash
+    superserve secrets set AGENT KEY=VALUE [KEY=VALUE ...]
+    ```
+
+    Merges with existing secrets. Set multiple keys in one command.
+  </Accordion>
+
+  <Accordion title="superserve secrets list" icon="key">
+    ```bash
+    superserve secrets list AGENT
+    ```
+
+    Shows key names only — values are never returned.
+  </Accordion>
+
+  <Accordion title="superserve secrets delete" icon="trash">
+    ```bash
+    superserve secrets delete AGENT KEY [--yes]
+    ```
+
+    Removes a secret. Use `--yes` to skip confirmation.
+  </Accordion>
+</AccordionGroup>

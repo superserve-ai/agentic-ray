@@ -1,50 +1,77 @@
 ---
-title: "Introduction"
-description: "Distribute agentic workloads on Ray"
+title: "The agent deployment platform"
+description: "You build agents locally. Superserve deploys them to the cloud."
 ---
 
-## Why use Superserve?
-Superserve connects any agent framework (Langchain, Pydantic AI, and more) to Ray's distributed compute, 
-letting you run parallel tool calls across clusters, mix tools from different frameworks, and execute AI-generated code in isolated sandboxes.
+Deploy AI agents with one command. Get managed infrastructure, encrypted secrets, real-time streaming, and multi-turn conversations — without managing servers.
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+```bash
+pip install superserve
+```
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Deploy your first agent in 5 minutes
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli">
+    Every command, flag, and option
+  </Card>
+</CardGroup>
+
+---
 
 ## How it works
 
-<Columns cols={2}>
-  <Card
-    title="CLI"
-    icon="terminal"
-    href="https://pypi.org/project/superserve/"
-  >
-    Use command line to generate production-ready agents in seconds
+<Steps>
+  <Step title="Write your agent" icon="code">
+    Build your agent locally using the [Claude Agent SDK](https://docs.anthropic.com/en/docs/agents-and-tools/claude-agent-sdk). Any Python script that reads a prompt and writes a response.
+  </Step>
+  <Step title="Deploy" icon="cloud-arrow-up">
+    One command packages your code, uploads it, and installs dependencies.
+    ```bash
+    superserve deploy
+    ```
+  </Step>
+  <Step title="Run from anywhere" icon="play">
+    Interactive conversations or single-turn prompts — from your terminal or any API client.
+    ```bash
+    superserve run my-agent "Summarize this document"
+    ```
+  </Step>
+</Steps>
+
+---
+
+## What you get
+
+<CardGroup cols={2}>
+  <Card title="One-command deploys" icon="rocket">
+    `superserve deploy` packages your code, detects dependencies, and makes your agent available in seconds.
   </Card>
-  <Card
-    title="Framework Agnostic"
-    icon="plug"
-    href="/frameworks/build-from-scratch"
-  >
-    Use tools from different frameworks together (Langchain, Pydantic AI)
+  <Card title="Multi-turn conversations" icon="messages">
+    `superserve run` gives you an interactive session with full conversation history.
   </Card>
-    <Card
-    title="Batch tool"
-    icon="tasks"
-    href="/tools/native/batch"
-  >
-    Give LLMs a batch tool to distribute ANY tool calls across a cluster asynchronously
+  <Card title="Encrypted secrets" icon="lock">
+    API keys stored securely, injected at runtime. Values are never exposed.
   </Card>
-  <Card
-    title="Code Sandboxes"
-    icon="code"
-    href="/tools/native/sandbox"
-  >
-    Run AI-generated code safely in isolated sandbox environments
+  <Card title="Real-time streaming" icon="bolt">
+    See your agent's response as it's generated over SSE.
   </Card>
-</Columns>
+</CardGroup>
+
+---
+
+## Built for Claude Agent SDK
+
+Superserve is designed to deploy agents built with the [Claude Agent SDK](https://docs.anthropic.com/en/docs/agents-and-tools/claude-agent-sdk).
+
+Your `superserve.yaml` specifies the name and start command:
+
+```yaml
+name: my-agent
+command: python main.py
+```
+
+<Tip>
+  That's it. No framework boilerplate, no infrastructure config. Just your agent code and a two-line YAML.
+</Tip>

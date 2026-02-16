@@ -1,72 +1,106 @@
 ---
 title: "Quickstart"
-description: "Get your first distributed agent running in minutes"
+description: "Deploy an agent in 5 minutes"
 ---
 
 <Info>
-  **Prerequisites**:
-  - Python 3.12 or higher
-  - Docker (optional, for code sandbox features)
+  **Prerequisites:** Python 3.12+ and a [Superserve account](https://console.superserve.ai).
 </Info>
 
-## Get started in four steps
-
 <Steps>
-<Step title="Install Superserve">
+  <Step title="Install the CLI">
+    ```bash
+    pip install superserve
+    ```
+  </Step>
 
-```bash
-pip install superserve
-```
+  <Step title="Log in">
+    ```bash
+    superserve login
+    ```
+    Opens your browser to authenticate. Credentials are saved locally at `~/.superserve/credentials.json`.
+  </Step>
 
-For sandbox support (code execution):
-```bash
-pip install superserve[sandbox]
-```
+  <Step title="Initialize your project">
+    ```bash
+    cd my-agent
+    superserve init
+    ```
 
-</Step>
+    This creates `superserve.yaml` in your project directory:
 
-<Step title="Create a project">
+    ```yaml
+    name: my-agent
+    command: python main.py
+    ```
 
-```bash
-superserve init my_project
-cd my_project
-```
+    Set `command` to whatever starts your agent.
+  </Step>
 
-This generates a project structure with:
-- `agents/` - Directory for your agent code
-- `pyproject.toml` - Project dependencies
-- `.env.example` - Template for environment variables (copy to `.env`)
+  <Step title="Deploy">
+    ```bash
+    superserve deploy
+    ```
 
-</Step>
+    ```
+    ✓ Packaging project... (4 KB)
+    ✓ Uploading to Superserve...
+    ✓ Installing dependencies... (12s)
 
-<Step title="Create an agent">
+    Deployed 'my-agent' in 15s
 
-```bash
-superserve create-agent my_agent
-```
+    superserve run my-agent "your prompt here"
+    ```
 
-Available frameworks: `python` (default), `langchain`, `pydantic` (more coming soon)
+    Dependencies are auto-detected from `requirements.txt` or `pyproject.toml`.
+  </Step>
 
-See the [framework guides](/frameworks/pydantic) for framework-specific implementations.
+  <Step title="Set your API keys">
+    ```bash
+    superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
+    ```
+    <Tip>
+      Secrets are encrypted and injected as environment variables at runtime. You can set multiple keys at once.
+    </Tip>
+  </Step>
 
-This creates `agents/my_agent/agent.py` with a template you can customize.
+  <Step title="Run it">
+    Single prompt:
 
-</Step>
+    ```bash
+    superserve run my-agent "What is the capital of France?"
+    ```
 
-<Step title="Run and test">
+    ```
+    The capital of France is Paris.
 
-Start the server:
-```bash
-superserve up
-```
+    Completed in 1.2s (150 input / 25 output tokens)
+    ```
 
-Test your agent:
-```bash
-curl -X POST http://localhost:8000/agents/my_agent/ \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Hello!"}'
-```
+    Or start an interactive session:
 
-</Step>
+    ```bash
+    superserve run my-agent
+    ```
+
+    ```
+    You> Hello, what can you help me with?
+    I can help you with a variety of tasks...
+
+    You> exit
+    ```
+  </Step>
 </Steps>
 
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="CLI Reference" icon="terminal" href="/cli">
+    All commands, flags, and options
+  </Card>
+  <Card title="GitHub" icon="github" href="https://github.com/superserve-ai/superserve">
+    Source code and examples
+  </Card>
+</CardGroup>
