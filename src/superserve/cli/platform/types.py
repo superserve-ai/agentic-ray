@@ -183,7 +183,7 @@ class SessionResponse(BaseModel):
     message_count: int = 0
     total_input_tokens: int = 0
     total_output_tokens: int = 0
-    idle_timeout_seconds: int = 1800
+    idle_timeout_seconds: int = 2592000
     created_at: str
     updated_at: str
     last_activity_at: str
