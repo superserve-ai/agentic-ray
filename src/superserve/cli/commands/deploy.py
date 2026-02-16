@@ -1,12 +1,10 @@
 """CLI command for deploying agents."""
 
 import io
-import itertools
 import json
 import sys
 import tarfile
 import tempfile
-import threading
 import time
 from pathlib import Path
 
@@ -14,6 +12,7 @@ import click
 import yaml
 
 from ..platform.client import PlatformAPIError, PlatformClient
+from ..utils import Spinner, format_elapsed
 from . import SUPERSERVE_YAML
 
 # Directories and patterns excluded from the tarball
@@ -31,42 +30,6 @@ EXCLUDE_DIRS = {
 }
 
 EXCLUDE_FILE_PREFIXES = (".env",)
-
-# Braille spinner frames
-_SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-
-
-class _Status:
-    """Inline status spinner that overwrites the current line."""
-
-    def __init__(self, message: str):
-        self._message = message
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
-
-    def start(self) -> "_Status":
-        self._thread = threading.Thread(target=self._spin, daemon=True)
-        self._thread.start()
-        return self
-
-    def _spin(self) -> None:
-        frames = itertools.cycle(_SPINNER)
-        while not self._stop.is_set():
-            frame = next(frames)
-            click.echo(f"\r  {frame} {self._message}", nl=False, err=True)
-            self._stop.wait(0.08)
-
-    def done(self, symbol: str = "\u2713", suffix: str = "") -> None:
-        self._stop.set()
-        if self._thread:
-            self._thread.join()
-        text = f"\r  {symbol} {self._message}"
-        if suffix:
-            text += f" {suffix}"
-        click.echo(text, err=True)
-
-    def fail(self, suffix: str = "") -> None:
-        self.done(symbol="\u2717", suffix=suffix)
 
 
 def _should_exclude(
@@ -151,15 +114,6 @@ def _format_size(size_bytes: int) -> str:
     return f"{size_bytes / 1024:.0f} KB"
 
 
-def _format_elapsed(seconds: float) -> str:
-    """Format elapsed seconds as human-readable duration."""
-    if seconds < 60:
-        return f"{seconds:.0f}s"
-    minutes = int(seconds // 60)
-    secs = int(seconds % 60)
-    return f"{minutes}m {secs}s"
-
-
 def _write_temp_tarball(tarball_bytes: bytes) -> str:
     """Write tarball bytes to a temporary file and return the path."""
     with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
@@ -214,12 +168,13 @@ def deploy(project_dir: str, as_json: bool):
     deploy_start = time.time()
 
     # ── Package ──
-    status = _Status("Packaging project...").start()
+    status = Spinner(indent=2)
+    status.start("Packaging project...")
     tarball_bytes = _make_tarball(project_path, user_ignores)
     status.done(suffix=f"({_format_size(len(tarball_bytes))})")
 
     # ── Upload ──
-    status = _Status("Uploading to Superserve...").start()
+    status.start("Uploading to Superserve...")
     tarball_path = _write_temp_tarball(tarball_bytes)
 
     try:
@@ -245,7 +200,7 @@ def deploy(project_dir: str, as_json: bool):
 
     # ── Dependencies ──
     if agent.deps_status == "installing":
-        status = _Status("Installing dependencies...").start()
+        status.start("Installing dependencies...")
         poll_interval = 3
         max_wait = 300
         elapsed = 0
@@ -264,7 +219,7 @@ def deploy(project_dir: str, as_json: bool):
                 sys.exit(1)
 
             if agent.deps_status == "ready":
-                deps_time = _format_elapsed(time.time() - deps_start)
+                deps_time = format_elapsed(time.time() - deps_start)
                 status.done(suffix=f"({deps_time})")
                 break
             elif agent.deps_status == "failed":
@@ -286,7 +241,7 @@ def deploy(project_dir: str, as_json: bool):
             sys.exit(1)
 
     # ── Done ──
-    total_time = _format_elapsed(time.time() - deploy_start)
+    total_time = format_elapsed(time.time() - deploy_start)
     click.echo()
     click.echo(f"  Deployed '{agent.name}' in {total_time}")
     click.echo()

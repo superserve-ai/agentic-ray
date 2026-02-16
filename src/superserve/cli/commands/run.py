@@ -7,21 +7,35 @@ import sys
 import click
 
 from ..platform.client import PlatformAPIError, PlatformClient
-from ..utils import format_duration, sanitize_terminal_output
+from ..utils import Spinner, format_duration, sanitize_terminal_output
 
 
-def _stream_events(event_iter, as_json: bool) -> int:
+def _stream_events(event_iter, as_json: bool, spinner: Spinner | None = None) -> int:
     """Stream SSE events to terminal. Returns 0 on success, non-zero on failure."""
     for event in event_iter:
         if as_json:
             click.echo(json.dumps({"type": event.type, "data": event.data}))
             continue
 
-        if event.type == "message.delta":
+        if event.type == "status":
+            if spinner:
+                msg = event.data.get("message", "")
+                if msg:
+                    spinner.update(msg)
+
+        elif event.type == "run.started":
+            if spinner:
+                spinner.update("Thinking...")
+
+        elif event.type == "message.delta":
+            if spinner:
+                spinner.stop()
             content = event.data.get("content", "")
             click.echo(sanitize_terminal_output(content), nl=False)
 
         elif event.type == "tool.start":
+            if spinner:
+                spinner.stop()
             tool = event.data.get("tool", "unknown")
             tool_input = event.data.get("input", {})
             input_str = sanitize_terminal_output(str(tool_input))
@@ -33,18 +47,28 @@ def _stream_events(event_iter, as_json: bool) -> int:
         elif event.type == "tool.end":
             duration = event.data.get("duration_ms", 0)
             click.echo(f" ({format_duration(duration)})", err=True)
+            if spinner:
+                spinner.start("Thinking...")
 
         elif event.type == "run.completed":
+            if spinner:
+                spinner.stop()
             usage = event.data.get("usage", {})
             duration = event.data.get("duration_ms", 0)
             input_tokens = usage.get("input_tokens", 0)
             output_tokens = usage.get("output_tokens", 0)
             click.echo()  # Newline after content
-            click.echo(
-                f"\nCompleted in {format_duration(duration)} "
-                f"({input_tokens:,} input / {output_tokens:,} output tokens)",
-                err=True,
-            )
+            if input_tokens or output_tokens:
+                click.echo(
+                    f"\nCompleted in {format_duration(duration)} "
+                    f"({input_tokens:,} input / {output_tokens:,} output tokens)",
+                    err=True,
+                )
+            else:
+                click.echo(
+                    f"\nCompleted in {format_duration(duration)}",
+                    err=True,
+                )
             if event.data.get("max_turns_reached"):
                 msg = sanitize_terminal_output(
                     event.data.get("max_turns_message", "Max turns reached.")
@@ -53,16 +77,23 @@ def _stream_events(event_iter, as_json: bool) -> int:
             return 0
 
         elif event.type == "run.failed":
+            if spinner:
+                spinner.stop()
             error = event.data.get("error", {})
             message = sanitize_terminal_output(error.get("message", "Unknown error"))
             click.echo(f"\nError: {message}", err=True)
             return 1
 
         elif event.type == "run.cancelled":
+            if spinner:
+                spinner.stop()
             click.echo("\nRun was cancelled.", err=True)
             return 130
 
-    return 0
+    if spinner:
+        spinner.stop()
+    click.echo("\nWarning: Stream ended unexpectedly.", err=True)
+    return 1
 
 
 @click.command("run")
@@ -86,8 +117,11 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
         superserve run my-agent "Hello" --single
     """
     client = PlatformClient()
+    spinner: Spinner | None = None
 
     def handle_interrupt(signum, frame):
+        if spinner:
+            spinner.stop()
         click.echo("\nCancelled.", err=True)
         sys.exit(130)
 
@@ -102,16 +136,19 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
             return
 
     interactive = not single and not as_json and sys.stdin.isatty()
+    use_spinner = not as_json and sys.stderr.isatty()
 
     try:
-        if not as_json:
-            click.echo("Creating session...", err=True)
+        if use_spinner:
+            spinner = Spinner(show_elapsed=True)
+            spinner.start("Connecting...")
         session_data = client.create_session(agent)
         session_id = session_data["id"]
 
         exit_code = _stream_events(
             client.stream_session_message(session_id, prompt),
             as_json,
+            spinner,
         )
         if exit_code:
             sys.exit(exit_code)
@@ -129,9 +166,13 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
             if not next_prompt.strip() or next_prompt.strip().lower() == "exit":
                 break
 
+            if spinner:
+                spinner.start("Thinking...")
+
             exit_code = _stream_events(
                 client.stream_session_message(session_id, next_prompt),
                 as_json,
+                spinner,
             )
             if exit_code:
                 sys.exit(exit_code)
@@ -144,3 +185,6 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
         else:
             click.echo(f"Error: {e.message}", err=True)
         sys.exit(1)
+    finally:
+        if spinner:
+            spinner.stop()
