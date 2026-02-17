@@ -1,46 +1,20 @@
 # {{PROJECT_NAME}}
 
-Built with [Agentic Ray](https://github.com/superserve-labs/agentic-ray).
+Built with [Superserve](https://github.com/superserve-ai/superserve).
 
 ## Quick Start
 
-1. **Install:**
+1. **Deploy:**
    ```bash
-   pip install superserve
+   superserve deploy
    ```
 
-2. **Create a new project:**
+2. **Set secrets:**
    ```bash
-   superserve init my_project
-   cd my_project
+   superserve secrets set {{PROJECT_NAME}} KEY=VALUE
    ```
 
-3. **Set up environment:**
+3. **Run:**
    ```bash
-   cp .env.example .env
-   # Edit .env with your API keys
+   superserve run {{PROJECT_NAME}}
    ```
-
-4. **Create an agent:**
-   ```bash
-   superserve create-agent my_agent
-   ```
-
-5. **Run your agent:**
-   ```bash
-   superserve up
-   ```
-
-## API Endpoints
-
-After running `superserve up`, your agents are available at:
-
-- **POST** `/agents/{agent_name}/` - Call your agent
-
-### Example Request
-
-```bash
-curl -X POST http://localhost:8000/agents/my_agent/ \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Hello!"}'
-```

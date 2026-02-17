@@ -1,1 +1,1 @@
-"""CLI templates for agentic-ray."""
+"""CLI templates for superserve."""

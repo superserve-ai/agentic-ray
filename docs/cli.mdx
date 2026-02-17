@@ -131,19 +131,20 @@ Each run creates a session and provisions a sandbox with your code, secrets, and
     | `--single` | Exit after one response |
     | `--json` | Output raw SSE events as JSON |
 
-    ```bash
-    superserve run my-agent
-    You> What is the capital of France?
-    The capital of France is Paris.
+    ```
+    $ superserve run my-agent
+
+    You > What is the capital of France?
+
+    Agent > The capital of France is Paris.
 
     Completed in 1.2s
 
-    You> And what's its population?
-    Paris has approximately 2.1 million people in the city proper.
+    You > And what's its population?
+
+    Agent > Paris has approximately 2.1 million people in the city proper.
 
     Completed in 0.8s
-
-    You>
     ```
 
     **Single-turn:**

@@ -25,16 +25,8 @@ Repository = "https://github.com/superserve-ai/superserve"
 [project.scripts]
 superserve = "superserve.cli:main"
 
-[project.optional-dependencies]
-sandbox = [
-    "docker>=7.0.0",
-    "ray[serve]",
-    "openai>=1.0.0",
-]
-
 [dependency-groups]
 dev = [
-    "black>=25.9.0",
     "mypy>=1.18.2",
     "pydantic>=2.0.0",
     "pre-commit>=4.3.0",
@@ -67,36 +59,16 @@ select = [
     "UP",  # pyupgrade
 ]
 ignore = [
-    "E501",  # line too long (handled by black)
+    "E501",  # line too long
     "B008",  # do not perform function calls in argument defaults
     "C901",  # too complex
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # unused imports in __init__.py
-"examples/analyzer/token_efficient_agent/agent.py" = ["E402"]  # imports after sys.path modification
-
-[tool.black]
-line-length = 88
-target-version = ["py312"]
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
 
 [tool.mypy]
 python_version = "3.12"
-exclude = ["src/superserve/sandbox/"]
 plugins = ["pydantic.mypy"]
 warn_return_any = true
 warn_unused_configs = true
@@ -112,8 +84,6 @@ strict_equality = true
 
 [[tool.mypy.overrides]]
 module = [
-    "docker.*",
-    "ray.*",
     "requests.*",
 ]
 ignore_missing_imports = true

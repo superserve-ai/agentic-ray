@@ -15,4 +15,4 @@ repos:
         types: [python]
         args: [src/superserve]
         pass_filenames: false
-        exclude: ^(examples/|cli/templates/)
+        exclude: ^(cli/templates/)

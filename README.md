@@ -66,12 +66,17 @@ superserve run my-agent
 ```
 
 ```
-You> What is the capital of France?
-The capital of France is Paris.
+You > What is the capital of France?
+
+Agent > The capital of France is Paris.
 
 Completed in 1.2s
 
-You>
+You > And what's its population?
+
+Agent > Paris has approximately 2.1 million people in the city proper.
+
+Completed in 0.8s
 ```
 
 ## CLI Reference

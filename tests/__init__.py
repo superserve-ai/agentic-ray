@@ -1,1 +1,1 @@
-"""Tests for agentic-ray."""
+"""Tests for superserve."""
