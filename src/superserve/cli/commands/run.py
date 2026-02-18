@@ -12,6 +12,7 @@ from ..utils import Spinner, format_duration, sanitize_terminal_output
 
 def _stream_events(event_iter, as_json: bool, spinner: Spinner | None = None) -> int:
     """Stream SSE events to terminal. Returns 0 on success, non-zero on failure."""
+    agent_prefix_shown = False
     for event in event_iter:
         if as_json:
             click.echo(json.dumps({"type": event.type, "data": event.data}))
@@ -29,6 +30,9 @@ def _stream_events(event_iter, as_json: bool, spinner: Spinner | None = None) ->
         elif event.type == "message.delta":
             if spinner:
                 spinner.stop()
+            if not agent_prefix_shown:
+                click.echo("Agent> ", nl=False)
+                agent_prefix_shown = True
             content = event.data.get("content", "")
             click.echo(sanitize_terminal_output(content), nl=False)
 
@@ -127,9 +131,17 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
     interactive = not single and not as_json and sys.stdin.isatty()
     use_spinner = not as_json and sys.stderr.isatty()
 
-    # Pre-flight: check required secrets are set
+    # Pre-flight: check deployment status and required secrets
     try:
         agent_info = client.get_agent(agent)
+        if agent_info.deps_status == "installing":
+            click.echo("Agent is still deploying. Please wait and try again.", err=True)
+            sys.exit(1)
+        if agent_info.deps_status == "failed":
+            click.echo(
+                "Agent deployment failed. Run 'superserve deploy' to retry.", err=True
+            )
+            sys.exit(1)
         if agent_info.required_secrets:
             missing = [
                 s

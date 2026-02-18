@@ -8,6 +8,18 @@ import click
 from ..platform.client import PlatformAPIError, PlatformClient
 from ..utils import format_timestamp, sanitize_terminal_output
 
+_STATUS_LABELS = {
+    "none": "Ready",
+    "ready": "Ready",
+    "installing": "Deploying",
+    "failed": "Failed",
+}
+
+
+def _agent_status(deps_status: str) -> str:
+    """Map internal deps_status to user-facing label."""
+    return _STATUS_LABELS.get(deps_status, deps_status)
+
 
 def _handle_agent_error(e: PlatformAPIError, name: str | None = None) -> None:
     """Print a user-friendly error for agent operations and exit."""
@@ -46,13 +58,14 @@ def list_agents(as_json: bool):
         click.echo("No agents found. Deploy one with: superserve deploy")
         return
 
-    click.echo(f"{'NAME':<25} {'ID':<40} {'CREATED':<20}")
-    click.echo("-" * 85)
+    click.echo(f"{'NAME':<25} {'ID':<40} {'STATUS':<12} {'CREATED':<20}")
+    click.echo("-" * 97)
 
     for agent in agent_list:
         created = format_timestamp(agent.created_at, short=True)
         name = sanitize_terminal_output(agent.name)
-        click.echo(f"{name:<25} {agent.id:<40} {created:<20}")
+        agent_status = _agent_status(agent.deps_status)
+        click.echo(f"{name:<25} {agent.id:<40} {agent_status:<12} {created:<20}")
 
 
 @agents.command("get")
@@ -74,6 +87,7 @@ def get_agent(name: str, as_json: bool):
     click.echo(f"ID:       {agent.id}")
     click.echo(f"Name:     {sanitize_terminal_output(agent.name)}")
     click.echo(f"Command:  {sanitize_terminal_output(agent.command or '(none)')}")
+    click.echo(f"Status:   {_agent_status(agent.deps_status)}")
     click.echo(f"Created:  {format_timestamp(agent.created_at)}")
     click.echo(f"Updated:  {format_timestamp(agent.updated_at)}")
 
@@ -83,12 +97,18 @@ def get_agent(name: str, as_json: bool):
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
 def delete_agent(name: str, yes: bool):
     """Delete a hosted agent."""
+    client = PlatformClient()
+
+    # Verify agent exists before asking for confirmation
+    try:
+        client.get_agent(name)
+    except PlatformAPIError as e:
+        _handle_agent_error(e, name)
+
     if not yes:
         if not click.confirm(f"Delete agent '{name}'?"):
             click.echo("Cancelled")
             return
-
-    client = PlatformClient()
 
     try:
         client.delete_agent(name)
