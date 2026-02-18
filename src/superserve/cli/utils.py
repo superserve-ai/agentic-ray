@@ -7,6 +7,39 @@ import time
 from datetime import datetime
 
 
+def format_relative_time(ts: str) -> str:
+    """Format ISO timestamp as relative time (e.g., '5m ago', 'Yesterday').
+
+    Args:
+        ts: ISO 8601 timestamp string.
+
+    Returns:
+        Human-readable relative time string.
+    """
+    if not ts:
+        return ""
+    try:
+        utc = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        now = datetime.now(utc.tzinfo)
+        delta = now - utc
+        seconds = int(delta.total_seconds())
+
+        if seconds < 60:
+            return "Just now"
+        if seconds < 3600:
+            return f"{seconds // 60}m ago"
+        if seconds < 86400:
+            return f"{seconds // 3600}h ago"
+        if seconds < 172800:
+            return "Yesterday"
+        if seconds < 604800:
+            return f"{seconds // 86400}d ago"
+        local = utc.astimezone()
+        return local.strftime("%b %d")
+    except ValueError:
+        return ts[:16]
+
+
 def format_timestamp(ts: str, short: bool = False) -> str:
     """Format ISO timestamp to readable local time.
 
