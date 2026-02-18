@@ -65,7 +65,9 @@ def list_agents(as_json: bool):
         created = format_timestamp(agent.created_at, short=True)
         name = sanitize_terminal_output(agent.name)
         agent_status = _agent_status(agent.deps_status)
-        click.echo(f"{name:<25} {sanitize_terminal_output(agent.id):<40} {sanitize_terminal_output(agent_status):<12} {created:<20}")
+        click.echo(
+            f"{name:<25} {sanitize_terminal_output(agent.id):<40} {sanitize_terminal_output(agent_status):<12} {created:<20}"
+        )
 
 
 @agents.command("get")
@@ -87,7 +89,9 @@ def get_agent(name: str, as_json: bool):
     click.echo(f"ID:       {agent.id}")
     click.echo(f"Name:     {sanitize_terminal_output(agent.name)}")
     click.echo(f"Command:  {sanitize_terminal_output(agent.command or '(none)')}")
-    click.echo(f"Status:   {sanitize_terminal_output(_agent_status(agent.deps_status))}")
+    click.echo(
+        f"Status:   {sanitize_terminal_output(_agent_status(agent.deps_status))}"
+    )
     click.echo(f"Created:  {format_timestamp(agent.created_at)}")
     click.echo(f"Updated:  {format_timestamp(agent.updated_at)}")
 
