@@ -46,7 +46,7 @@ async function streamEvents(
         spinner?.stop()
         const durationMs = event.data.duration_ms ?? 0
         console.log()
-        console.error(`\nCompleted in ${formatDuration(durationMs)}`)
+        log.success(`Completed in ${formatDuration(durationMs)}`)
         if (event.data.max_turns_reached) {
           const msg = sanitizeTerminalOutput(
             event.data.max_turns_message ?? "Max turns reached.",
