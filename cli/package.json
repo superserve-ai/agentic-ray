@@ -1,0 +1,30 @@
+{
+  "name": "superserve",
+  "version": "1.0.0",
+  "description": "Superserve CLI - Production infrastructure for agentic workloads",
+  "type": "module",
+  "bin": {
+    "superserve": "src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun src/index.ts",
+    "build": "bun run scripts/build.ts",
+    "lint": "bunx biome check .",
+    "lint:fix": "bunx biome check --write .",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "boxen": "^8.0.1",
+    "cli-table3": "^0.6.5",
+    "commander": "^14.0.3",
+    "js-yaml": "^4.1.0",
+    "picocolors": "^1.1.1",
+    "posthog-node": "^5.24.17"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.3",
+    "@types/bun": "^1.2.4",
+    "@types/js-yaml": "^4.0.9"
+  },
+  "license": "MIT"
+}
