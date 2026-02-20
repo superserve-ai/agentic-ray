@@ -12,7 +12,7 @@
   <p><strong>Deploy AI agents to sandboxed cloud containers. One command, no infrastructure config.</strong></p>
 
   [![Docs](https://img.shields.io/badge/Docs-latest-blue)](https://docs.superserve.ai/)
-  [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/superserve-ai/superserve/blob/main/LICENSE)
+  [![License](https://img.shields.io/badge/License-OCVSAL_1.0-blue.svg)](https://github.com/superserve-ai/superserve/blob/main/LICENSE)
   [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://python.org)
   [![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white)](https://discord.gg/utftfhSK)
 
@@ -107,7 +107,7 @@ Contributions are welcome! See [CONTRIBUTING.md](https://github.com/superserve-a
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](https://github.com/superserve-ai/superserve/blob/main/LICENSE) file for details.
+This project is licensed under the Open Core Ventures Source Available License (OCVSAL) 1.0 - see the [LICENSE](https://github.com/superserve-ai/superserve/blob/main/LICENSE) file for details.
 
 ---
 

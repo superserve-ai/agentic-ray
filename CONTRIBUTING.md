@@ -109,4 +109,4 @@ Feel free to open an issue for any questions or reach out to the maintainers.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the Apache License 2.0.
+By contributing, you agree that your contributions will be licensed under the Open Core Ventures Source Available License (OCVSAL) 1.0.
