@@ -549,6 +549,19 @@ class PlatformClient:
         resp = self._request("POST", f"/sessions/{session_id}/end")
         return cast(dict[str, Any], resp.json())
 
+    def resume_session(self, session_id: str) -> dict[str, Any]:
+        """Resume an idle, completed, or failed session.
+
+        Args:
+            session_id: Session ID or short prefix.
+
+        Returns:
+            Updated session data dictionary.
+        """
+        session_id = self._resolve_session_id(session_id)
+        resp = self._request("POST", f"/sessions/{session_id}/resume")
+        return cast(dict[str, Any], resp.json())
+
     def stream_session_message(
         self, session_id: str, prompt: str
     ) -> Iterator[RunEvent]:

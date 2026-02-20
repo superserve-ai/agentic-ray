@@ -202,19 +202,31 @@ List, inspect, and delete your deployed agents.
 
 ## Sessions
 
-A session tracks a single conversation with your agent. Sessions are created automatically by `superserve run` and persist message history across turns.
+A session tracks a single conversation with your agent. Sessions are created automatically by `superserve run` and persist message history and workspace files across turns. You can resume any previous session to pick up where you left off.
 
 <AccordionGroup>
   <Accordion title="superserve sessions list" icon="list">
     ```bash
-    superserve sessions list [--agent NAME] [--status STATUS] [--json]
+    superserve sessions list [AGENT] [--status STATUS] [--json]
     ```
 
     ```
-    ID             AGENT                STATUS       MSGS   CREATED
-    ------------------------------------------------------------------------
-    a1b2c3d4e5f6   my-agent             active       12     Feb 16 10:30
-    f6e5d4c3b2a1   research-agent       completed    8      Feb 15 14:20
+    ID             AGENT              TITLE                    STATUS       MSGS   LAST ACTIVE
+    ------------------------------------------------------------------------------------------
+    a1b2c3d4e5f6   my-agent           What is the capital...   idle         12     2h ago
+    f6e5d4c3b2a1   research-agent     Fix the login bug        completed    8      Yesterday
+    ```
+
+    Filter by agent name to get a wider title column:
+
+    ```bash
+    superserve sessions list my-agent
+    ```
+
+    ```
+    ID             TITLE                            STATUS       MSGS   LAST ACTIVE
+    -------------------------------------------------------------------------------
+    a1b2c3d4e5f6   What is the capital of France    idle         12     2h ago
     ```
   </Accordion>
 
@@ -225,13 +237,34 @@ A session tracks a single conversation with your agent. Sessions are created aut
 
     ```
     Session: ses_a1b2c3d4-e5f6-7890-abcd-ef1234567890
+      Title:    What is the capital of France
       Agent:    my-agent (agt_7c9e66a1b2d3)
-      Status:   active
+      Status:   idle
       Messages: 12
-      Created:  2025-02-16 10:30:00
+      Created:  2026-02-16 10:30:00
+      Active:   2h ago (2026-02-16 12:15:00)
     ```
 
     Accepts short ID prefixes (e.g., `a1b2c3`).
+  </Accordion>
+
+  <Accordion title="superserve sessions resume" icon="rotate-right">
+    ```bash
+    superserve sessions resume SESSION_ID
+    ```
+
+    Resume a previous session. Works with idle, completed, or failed sessions. Your workspace files are restored automatically.
+
+    ```
+    $ superserve sessions resume a1b2c3
+    Resumed: "What is the capital of France" (my-agent)
+
+    You> And what's its population?
+
+    Agent> Paris has approximately 2.1 million people in the city proper.
+
+    Completed in 0.8s
+    ```
   </Accordion>
 
   <Accordion title="superserve sessions end" icon="stop">
@@ -239,6 +272,6 @@ A session tracks a single conversation with your agent. Sessions are created aut
     superserve sessions end SESSION_ID
     ```
 
-    Ends an active session.
+    Ends an active session. The workspace files are preserved and the session can be resumed later.
   </Accordion>
 </AccordionGroup>
