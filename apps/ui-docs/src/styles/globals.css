@@ -1,0 +1,21 @@
+@import "@superserve/ui/styles";
+@source "../../../../packages/ui/src";
+
+:root {
+  --sans-font: "Inter", system-ui, -apple-system, sans-serif;
+  --mono-font: "Geist Mono", ui-monospace, monospace;
+  --display-font: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a3a3a3;
+}

@@ -1,0 +1,30 @@
+{
+  "name": "@superserve/ui-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "bunx biome check .",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@superserve/ui": "workspace:*",
+    "@tailwindcss/vite": "^4.2.1",
+    "lucide-react": "^0.575.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router": "^7",
+    "shiki": "^3",
+    "tailwindcss": "^4.2.1"
+  },
+  "devDependencies": {
+    "@superserve/biome-config": "workspace:*",
+    "@superserve/typescript-config": "workspace:*",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.1.4",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1"
+  }
+}
