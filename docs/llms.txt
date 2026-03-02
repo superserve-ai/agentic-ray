@@ -5,7 +5,7 @@
 ## Docs
 
 - [Introduction](https://docs.superserve.ai/introduction): What Superserve is — isolated Firecracker microVMs, persistent /workspace filesystem, credential proxy, audit trail, zero-config deployment, and supported frameworks.
-- [Quickstart](https://docs.superserve.ai/quickstart): Deploy an agent in 2 minutes — install the CLI, write a Python or TypeScript agent, deploy, set API keys, and run a conversation.
+- [Quickstart](https://docs.superserve.ai/quickstart): Deploy your first agent — install the CLI, write a Python or TypeScript agent, deploy, set API keys, and run a conversation.
 - [Deployment](https://docs.superserve.ai/zero-config): How deployment works — supported languages (Python, TypeScript), stdio and HTTP server modes, automatic dependency detection, project structure, and optional configuration.
 - [Sessions](https://docs.superserve.ai/sessions): How sessions work — multi-turn conversations, resuming previous sessions, session lifecycle, and programmatic session management.
 - [SDK](https://docs.superserve.ai/sdk): TypeScript client and React hooks — run(), stream(), session management, agent listing, useAgent hook, configuration, and error handling.
