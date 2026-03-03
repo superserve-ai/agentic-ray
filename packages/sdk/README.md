@@ -11,7 +11,7 @@ bun add superserve
 ## Usage
 
 ```typescript
-import Superserve from "superserve"
+import Superserve from "@superserve/sdk"
 
 const client = new Superserve({ apiKey: "your-api-key" })
 ```
@@ -47,7 +47,7 @@ await session.end()
 ### React
 
 ```tsx
-import { SuperserveProvider, useAgent } from "superserve/react"
+import { SuperserveProvider, useAgent } from "@superserve/sdk/react"
 
 function App() {
   return (
@@ -63,7 +63,7 @@ function Chat() {
   return (
     <div>
       {messages.map((msg) => (
-        <p key={msg.id}>{msg.text}</p>
+        <p key={msg.id}>{msg.content}</p>
       ))}
       <button onClick={() => sendMessage("Hello!")}>Send</button>
     </div>

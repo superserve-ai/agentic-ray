@@ -6,11 +6,11 @@ description: "TypeScript client and React hooks for deployed agents"
 Build applications on top of your deployed agents. The SDK handles streaming, sessions, and error handling.
 
 ```bash
-npm install superserve
+npm install @superserve/sdk
 ```
 
 ```typescript
-import Superserve from "superserve"
+import Superserve from "@superserve/sdk"
 
 const client = new Superserve({ apiKey: "your-api-key" })
 ```
@@ -31,8 +31,8 @@ const result = await client.run("code-reviewer", {
 })
 
 console.log(result.text)
-console.log(result.duration)    // 3.8
-console.log(result.toolCalls)   // [{ name: "read_file", input: {...}, output: "..." }]
+console.log(result.duration)    // 3800
+console.log(result.toolCalls)   // [{ name: "read_file", input: {...}, duration: 120 }]
 ```
 
 **RunResult:**
@@ -41,8 +41,9 @@ console.log(result.toolCalls)   // [{ name: "read_file", input: {...}, output: "
 |-------|------|-------------|
 | `text` | `string` | Full response |
 | `toolCalls` | `ToolCall[]` | Tools invoked during the run |
-| `duration` | `number` | Seconds |
-| `finishReason` | `string` | `"completed"` or `"failed"` |
+| `duration` | `number` | Milliseconds |
+| `finishReason` | `string` | `"completed"`, `"failed"`, or `"cancelled"` |
+| `maxTurnsReached` | `boolean` | Whether the agent hit its maximum turn limit |
 
 ---
 
@@ -55,8 +56,8 @@ const stream = client.stream("code-reviewer", {
   message: "Refactor the database connection pool",
   onText: (text) => process.stdout.write(text),
   onToolStart: (tool) => console.log(`→ ${tool.name}`),
-  onToolEnd: (tool) => console.log(`✓ ${tool.name}`),
-  onFinish: (result) => console.log(`\nDone in ${result.duration}s`),
+  onToolEnd: (tool) => console.log(`✓ done in ${tool.duration}ms`),
+  onFinish: (result) => console.log(`\nDone in ${result.duration}ms`),
 })
 
 await stream.result
@@ -131,11 +132,11 @@ const agent = await client.agents.get("code-reviewer")
 Build chat interfaces with `useAgent`. Manages messages, streaming, and sessions automatically.
 
 ```bash
-npm install superserve react
+npm install @superserve/sdk react
 ```
 
 ```tsx
-import { SuperserveProvider, useAgent } from "superserve/react"
+import { SuperserveProvider, useAgent } from "@superserve/sdk/react"
 
 function App() {
   return (
@@ -154,7 +155,7 @@ function Chat() {
     <div>
       {messages.map((msg) => (
         <div key={msg.id}>
-          <strong>{msg.role}:</strong> {msg.text}
+          <strong>{msg.role}:</strong> {msg.content}
         </div>
       ))}
 
@@ -178,7 +179,11 @@ function Chat() {
 | Option | Type | Description |
 |--------|------|-------------|
 | `agent` | `string` | Agent name or ID |
-| `sessionId` | `string?` | Resume an existing session |
+| `apiKey` | `string?` | API key (can also be provided via `SuperserveProvider`) |
+| `baseUrl` | `string?` | Base URL for the Superserve API |
+| `initialMessages` | `Message[]?` | Initial messages to populate the chat |
+| `onFinish` | `(message: Message) => void` | Called when the agent finishes responding |
+| `onError` | `(error: Error) => void` | Called on errors |
 
 **useAgent return:**
 
@@ -186,9 +191,11 @@ function Chat() {
 |-------|------|-------------|
 | `messages` | `Message[]` | All messages |
 | `sendMessage` | `(text: string) => void` | Send a message |
+| `status` | `AgentStatus` | `"ready"`, `"streaming"`, or `"error"` |
 | `isStreaming` | `boolean` | Response in progress |
 | `error` | `Error \| null` | Last error |
-| `sessionId` | `string \| null` | Current session ID |
+| `stop` | `() => void` | Stop the current stream |
+| `reset` | `() => void` | Clear all messages and end the session |
 
 ---
 
@@ -205,7 +212,7 @@ const client = new Superserve({
 ## Errors
 
 ```typescript
-import { AuthenticationError, NotFoundError, SuperserveError } from "superserve"
+import { APIError, SuperserveError } from "@superserve/sdk"
 
 try {
   await client.run("my-agent", { message: "Hello" })
