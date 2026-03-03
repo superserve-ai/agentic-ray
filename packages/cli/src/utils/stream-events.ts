@@ -4,12 +4,59 @@ import { log } from "./logger"
 import { sanitizeTerminalOutput } from "./sanitize"
 import type { Spinner } from "./spinner"
 
+/**
+ * Writes to stdout, flushing line-by-line when stdout is a pipe (non-TTY).
+ *
+ * When stdout is a pipe (e.g. in CI), the OS uses block buffering which means
+ * small writes don't appear until the buffer fills (~64KB) or the process exits.
+ * This helper buffers content locally and flushes complete lines via console.log()
+ * which is guaranteed to flush. In TTY mode, it writes directly for real-time
+ * character-by-character streaming.
+ */
+function createLineWriter() {
+  const isTTY = process.stdout.isTTY
+  let lineBuffer = ""
+
+  return {
+    write(text: string): void {
+      if (isTTY) {
+        process.stdout.write(text)
+        return
+      }
+
+      lineBuffer += text
+      // Flush all complete lines
+      let newlineIdx = lineBuffer.indexOf("\n")
+      while (newlineIdx !== -1) {
+        const line = lineBuffer.slice(0, newlineIdx)
+        console.log(line)
+        lineBuffer = lineBuffer.slice(newlineIdx + 1)
+        newlineIdx = lineBuffer.indexOf("\n")
+      }
+    },
+
+    /** Flush any remaining partial line */
+    flush(): void {
+      if (!isTTY && lineBuffer) {
+        console.log(lineBuffer)
+        lineBuffer = ""
+      }
+    },
+
+    get hasContent(): boolean {
+      if (isTTY) return false
+      return lineBuffer.length > 0
+    },
+  }
+}
+
 export async function streamEvents(
   events: AsyncIterableIterator<RunEvent>,
   spinner: Spinner | null,
 ): Promise<number> {
   let agentPrefixShown = false
   let contentOnCurrentLine = false
+  const writer = createLineWriter()
 
   for await (const event of events) {
     switch (event.type) {
@@ -20,18 +67,19 @@ export async function streamEvents(
       case "message.delta": {
         spinner?.stop()
         if (!agentPrefixShown) {
-          process.stdout.write("Agent> ")
+          writer.write("Agent> ")
           agentPrefixShown = true
         }
         const content = sanitizeTerminalOutput(event.data.content ?? "")
-        process.stdout.write(content)
+        writer.write(content)
         contentOnCurrentLine = !content.endsWith("\n")
         break
       }
       case "tool.start": {
         spinner?.stop()
+        writer.flush()
         if (contentOnCurrentLine) {
-          process.stdout.write("\n")
+          writer.write("\n")
           contentOnCurrentLine = false
         }
         const tool = event.data.tool ?? "unknown"
@@ -52,6 +100,7 @@ export async function streamEvents(
       }
       case "run.completed": {
         spinner?.stop()
+        writer.flush()
         const durationMs = event.data.duration_ms ?? 0
         console.log()
         log.success(`Completed in ${formatDuration(durationMs)}`)
@@ -65,6 +114,7 @@ export async function streamEvents(
       }
       case "run.failed": {
         spinner?.stop()
+        writer.flush()
         const error = event.data.error
         const message = error?.message
           ? sanitizeTerminalOutput(error.message)
@@ -80,12 +130,14 @@ export async function streamEvents(
       }
       case "run.cancelled": {
         spinner?.stop()
+        writer.flush()
         console.error("\nRun was cancelled.")
         return 130
       }
     }
   }
 
+  writer.flush()
   return 1
 }
 
