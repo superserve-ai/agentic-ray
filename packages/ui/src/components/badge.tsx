@@ -39,11 +39,7 @@ function Badge({
       )}
       {...props}
     >
-      {dot && (
-        <span
-          className={cn("h-1.5 w-1.5", dotColorClasses[variant])}
-        />
-      )}
+      {dot && <span className={cn("h-1.5 w-1.5", dotColorClasses[variant])} />}
       {children}
     </span>
   )
