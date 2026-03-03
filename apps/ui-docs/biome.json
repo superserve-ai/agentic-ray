@@ -1,0 +1,3 @@
+{
+  "extends": ["@superserve/biome-config/biome.json"]
+}
