@@ -46,7 +46,7 @@ superserve deploy                            # Uses superserve.yaml
 |------|-------------|
 | `ENTRYPOINT` | Script to run (e.g. `agent.py`, `src/main.ts`). Without this, reads `superserve.yaml`. |
 | `--name`, `-n` | Agent name (default: directory name) |
-| `--port`, `-p` | HTTP proxy mode — forward to this port instead of using stdio |
+| `--port`, `-p` | HTTP proxy mode - forward to this port instead of using stdio |
 | `--dir` | Project directory (default: `.`) |
 | `--yes`, `-y` | Skip confirmation when redeploying |
 | `--json` | Output as JSON |
@@ -65,7 +65,7 @@ superserve deploy                            # Uses superserve.yaml
 
 ## `superserve init`
 
-Generate a `superserve.yaml` config file. Only needed if you want to customize beyond what zero-config provides.
+Generate a `superserve.yaml` config file. Only needed if you want to customize the defaults.
 
 ```bash
 superserve init [--name NAME]
@@ -83,7 +83,9 @@ command: python main.py
 #   - __pycache__
 ```
 
-If `.env.example` exists, secrets are auto-detected.
+<Tip>
+  If `.env.example` exists, secrets are auto-detected.
+</Tip>
 
 ---
 
@@ -149,6 +151,12 @@ superserve agents get NAME [--json]
 superserve agents delete NAME [--yes]
 ```
 
+| Status | Description |
+|--------|-------------|
+| `Ready` | Deployed and available |
+| `Deploying` | Installing dependencies |
+| `Failed` | Dependency install failed |
+
 ---
 
 ## `superserve sessions`
@@ -167,7 +175,9 @@ superserve sessions resume SESSION_ID
 superserve sessions end SESSION_ID
 ```
 
-Session IDs accept short prefixes — `a1b2` matches `a1b2c3d4-e5f6-...`.
+<Tip>
+  Session IDs accept short prefixes - `a1b2` matches `a1b2c3d4-e5f6-...`.
+</Tip>
 
 | Status | Description |
 |--------|-------------|

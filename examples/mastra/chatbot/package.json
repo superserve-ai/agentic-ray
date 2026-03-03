@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@mastra/core": "latest"
+  }
+}

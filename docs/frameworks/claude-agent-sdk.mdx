@@ -4,7 +4,7 @@ description: "Deploy a Claude agent with tool use and conversation memory"
 icon: /images/claude-agent-sdk.svg
 ---
 
-The [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk) gives you tool use, conversation memory via `session_id`, and streaming out of the box. Combined with Superserve's durable workspace, the agent retains full context across turns and restarts — files it creates persist, and conversation history survives sandbox restarts.
+The [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/overview) gives you tool use, conversation memory, and streaming out of the box. Combined with Superserve's durable workspace, the agent retains full context across turns — files it creates persist, and conversation history survives sandbox restarts.
 
 ```python agent.py
 import asyncio
@@ -14,6 +14,7 @@ options = ClaudeAgentOptions(
     model="sonnet",
     system_prompt="You are a helpful assistant.",
     permission_mode="bypassPermissions",
+    continue_conversation=True,
 )
 
 async def main():
@@ -23,7 +24,7 @@ async def main():
                 user_input = input()
             except EOFError:
                 break
-            await client.query(prompt=user_input, session_id="chat")
+            await client.query(prompt=user_input)
             async for msg in client.receive_response():
                 for block in getattr(msg, "content", []):
                     if isinstance(block, TextBlock):
@@ -43,7 +44,7 @@ superserve run my-agent
 ```
 
 <Tip>
-  The `session_id` parameter enables Claude's built-in conversation memory. Combined with Superserve's workspace persistence, the agent has full context even after the sandbox restarts.
+  The `continue_conversation` option enables conversation memory across turns. Combined with Superserve's workspace persistence, the agent has full context even after the sandbox restarts.
 </Tip>
 
 ---

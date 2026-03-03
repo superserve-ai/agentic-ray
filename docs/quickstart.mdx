@@ -1,6 +1,6 @@
 ---
 title: "Quickstart"
-description: "Deploy an agent in 2 minutes"
+description: "Deploy your first agent"
 ---
 
 <Info>
@@ -16,7 +16,7 @@ superserve login
 
 ## Write an agent
 
-Any script that reads input and prints output works. Pick your language:
+Any script that reads input and prints output works. Pick your language, or start from one of our [examples](https://github.com/superserve-ai/superserve/tree/main/examples).
 
 <CodeGroup>
 
@@ -28,13 +28,14 @@ options = ClaudeAgentOptions(
     model="sonnet",
     system_prompt="You are a senior software engineer. Be direct and specific.",
     permission_mode="bypassPermissions",
+    continue_conversation=True,
 )
 
 async def main():
     async with ClaudeSDKClient(options=options) as client:
         while True:
             user_input = input()
-            await client.query(prompt=user_input, session_id="chat")
+            await client.query(prompt=user_input)
             async for msg in client.receive_response():
                 for block in getattr(msg, "content", []):
                     if isinstance(block, TextBlock):
@@ -44,15 +45,14 @@ asyncio.run(main())
 ```
 
 ```typescript agent.ts
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { createInterface } from "readline";
+import { Agent } from "@mastra/core/agent"
+import { createInterface } from "readline"
 
 const agent = new Agent({
   name: "engineer",
   instructions: "You are a senior software engineer. Be direct and specific.",
-  model: openai("gpt-4o"),
-});
+  model: "openai/gpt-4o",
+})
 
 const rl = createInterface({ input: process.stdin });
 rl.on("line", async (line) => {
@@ -63,7 +63,7 @@ rl.on("line", async (line) => {
 
 </CodeGroup>
 
-This is the same script you'd run locally with `python agent.py` or `npx tsx agent.ts`. Nothing has been added to make it deployable.
+This is the same script you'd run locally with `python agent.py` or `npx tsx agent.ts`. No changes needed for deployment.
 
 ## Deploy
 

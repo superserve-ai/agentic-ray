@@ -1,7 +1,9 @@
 ---
 title: "Introduction"
-description: "Workspaces for agents"
+description: "Deploy AI agents to isolated, persistent sandboxes"
 ---
+
+Superserve is the deployment platform for AI agents. Deploy Python and TypeScript agents to isolated, persistent sandboxes with one command.
 
 ## Agents need more than a sandbox
 
@@ -32,9 +34,9 @@ Building this yourself means stitching together containers, proxies, secret mana
   </Card>
 </CardGroup>
 
-## Zero-config deployment
+## Deploy in one command
 
-Deploy with one command. No Dockerfile, no server code, no config files.
+No Dockerfile, no server code, no config files.
 
 <CodeGroup>
 
@@ -48,7 +50,7 @@ superserve deploy agent.ts
 
 </CodeGroup>
 
-The same script you run locally runs in production. Superserve detects your dependencies, builds the sandbox, and serves your agent over a streaming API. Cold starts take ~400ms.
+The same script you run locally runs in production. Superserve detects your dependencies, builds the sandbox, and serves your agent over a streaming API.
 
 ## Any framework
 
@@ -80,7 +82,7 @@ Superserve works with any agent framework - or no framework at all.
 
 <CardGroup cols={2}>
   <Card title="Quickstart" icon="bolt" href="/quickstart">
-    Deploy an agent in 2 minutes
+    Deploy your first agent
   </Card>
   <Card title="Deploy" icon="wand-magic-sparkles" href="/zero-config">
     Supported languages, dependency detection, configuration

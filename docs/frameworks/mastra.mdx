@@ -8,13 +8,12 @@ icon: /images/mastra.svg
 
 ```typescript agent.ts
 import { Agent } from "@mastra/core/agent"
-import { openai } from "@ai-sdk/openai"
 import { createInterface } from "readline"
 
 const agent = new Agent({
   name: "assistant",
   instructions: "You are a helpful assistant.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4o",
 })
 
 const rl = createInterface({ input: process.stdin })
@@ -27,8 +26,7 @@ rl.on("line", async (line) => {
 ```json package.json
 {
   "dependencies": {
-    "@mastra/core": "latest",
-    "@ai-sdk/openai": "latest"
+    "@mastra/core": "latest"
   }
 }
 ```

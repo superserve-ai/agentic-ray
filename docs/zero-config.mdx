@@ -1,6 +1,6 @@
 ---
 title: "Deployment"
-description: "Deploy Python and TypeScript agents without config files or code changes"
+description: "Deploy agents with zero changes"
 ---
 
 ```bash
@@ -18,9 +18,9 @@ Your script runs as-is in the cloud. No Dockerfile, no server code, no config fi
 | TypeScript | `.ts`, `.tsx` | Node.js 20 via `tsx` |
 | JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs` | Node.js 20 |
 
-## How your agent talks to users
+## How it works
 
-Your agent needs to do one thing: read input and write output. Superserve handles the rest: sessions, streaming, multi-turn state, and sandbox lifecycle.
+Your agent reads input and writes output. Superserve handles sessions, streaming, and sandbox lifecycle.
 
 ### Stdio mode (default)
 
@@ -174,7 +174,7 @@ ignore:
 4. **Persistent state**: The `/workspace` filesystem survives across turns, restarts, and sessions. Resume a conversation days later with every file and the full history intact.
 5. **Live**: Your agent is ready. Run it with `superserve run` or call it via the [SDK](/sdk).
 
-The first deploy takes 10-30 seconds (mostly dependency installation). Redeployments with unchanged dependencies take under 5 seconds.
+The first deploy can take up to a few minutes due to dependency installation. Redeployments with unchanged dependencies are near-instant.
 
 ---
 

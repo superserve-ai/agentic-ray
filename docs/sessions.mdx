@@ -3,7 +3,7 @@ title: "Sessions"
 description: "Persistent conversations that survive restarts"
 ---
 
-Every `superserve run` creates a session — an isolated sandbox running your agent, with its own filesystem and process state. Sessions persist after the conversation ends. Come back hours or days later and resume where you left off.
+Every `superserve run` creates a session - an isolated sandbox running your agent, with its own filesystem and process state. Sessions persist after the conversation ends. Come back hours or days later and resume where you left off.
 
 ## Resume a conversation
 
@@ -36,16 +36,14 @@ The agent remembers the full conversation. Files it created or modified are stil
 
 Sessions use two layers of persistence:
 
-1. **Workspace filesystem** — Superserve persists the sandbox's `/workspace` directory. Files your agent reads, writes, or modifies survive across turns and restarts.
+1. **Workspace filesystem** - Superserve persists the sandbox's `/workspace` directory. Files your agent reads, writes, or modifies survive across turns and restarts.
 
-2. **Conversation memory** — If your agent uses the Claude Agent SDK with `session_id`, Claude maintains conversation history on disk. Combined with workspace persistence, the agent has full context even after the sandbox restarts.
+2. **Conversation memory** - Make sure your agent supports multi-turn conversations so it remembers context across messages. Most frameworks handle this automatically when configured correctly.
 
 ```python
-# Pass session_id to enable conversation memory
-await client.query(prompt=user_input, session_id="chat")
+# Claude Agent SDK — continue_conversation enables conversation memory
+options = ClaudeAgentOptions(..., continue_conversation=True)
 ```
-
-One parameter. Memory works even when the underlying sandbox instance changes.
 
 ## Session lifecycle
 
@@ -53,8 +51,8 @@ One parameter. Memory works even when the underlying sandbox instance changes.
 |--------|---------|------------|
 | `active` | Processing a message right now | No |
 | `idle` | Waiting for the next message | Yes |
-| `completed` | Ended by user | Yes — fresh sandbox, same workspace |
-| `failed` | Crashed or timed out | Yes — fresh sandbox, same workspace |
+| `completed` | Ended by user | Yes - fresh sandbox, same workspace |
+| `failed` | Crashed or timed out | Yes - fresh sandbox, same workspace |
 
 ```bash
 # View details
@@ -80,4 +78,4 @@ const r2 = await session.run("Add rate limiting to the login endpoint")
 await session.end()
 ```
 
-The session maintains context between `run()` and `stream()` calls — the agent remembers previous messages and the workspace retains all files.
+The session maintains context between `run()` and `stream()` calls - the agent remembers previous messages and the workspace retains all files.
