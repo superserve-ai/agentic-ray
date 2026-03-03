@@ -7,17 +7,18 @@ icon: /images/langchain.svg
 [LangChain](https://python.langchain.com/) provides chains, agents, and retrieval pipelines for building complex LLM applications. Any LangChain agent that reads input and prints output deploys to Superserve with no changes.
 
 ```python agent.py
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
 
 llm = ChatOpenAI(model="gpt-4o")
+system = SystemMessage(content="You are a helpful assistant.")
 
 while True:
     try:
         user_input = input()
     except EOFError:
         break
-    response = llm.invoke([HumanMessage(content=user_input)])
+    response = llm.invoke([system, HumanMessage(content=user_input)])
     print(response.content)
 ```
 

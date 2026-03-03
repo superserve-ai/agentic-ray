@@ -41,8 +41,8 @@ Sessions use two layers of persistence:
 2. **Conversation memory** - Make sure your agent supports multi-turn conversations so it remembers context across messages. Most frameworks handle this automatically when configured correctly.
 
 ```python
-# Claude Agent SDK — session_id enables conversation memory
-await client.query(prompt=user_input, session_id="chat")
+# Claude Agent SDK — continue_conversation enables conversation memory
+options = ClaudeAgentOptions(..., continue_conversation=True)
 ```
 
 ## Session lifecycle

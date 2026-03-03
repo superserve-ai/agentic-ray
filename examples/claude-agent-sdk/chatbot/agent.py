@@ -10,6 +10,7 @@ options = ClaudeAgentOptions(
     model="sonnet",
     system_prompt="You are a helpful assistant.",
     permission_mode="bypassPermissions",
+    continue_conversation=True,
 )
 
 
@@ -20,7 +21,7 @@ async def main():
                 user_input = input()
             except EOFError:
                 break
-            await client.query(prompt=user_input, session_id="chat")
+            await client.query(prompt=user_input)
             async for msg in client.receive_response():
                 for block in getattr(msg, "content", []):
                     if isinstance(block, TextBlock):
