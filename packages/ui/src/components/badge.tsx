@@ -41,7 +41,7 @@ function Badge({
     >
       {dot && (
         <span
-          className={cn("h-1.5 w-1.5 rounded-full", dotColorClasses[variant])}
+          className={cn("h-1.5 w-1.5", dotColorClasses[variant])}
         />
       )}
       {children}
