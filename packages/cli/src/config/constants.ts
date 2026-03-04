@@ -6,6 +6,8 @@ export const PLATFORM_API_URL =
   process.env.SUPERSERVE_API_URL ?? "https://api.superserve.ai"
 export const DASHBOARD_URL =
   process.env.SUPERSERVE_DASHBOARD_URL ?? "https://console.superserve.ai"
+export const SUPABASE_URL =
+  process.env.SUPERSERVE_SUPABASE_URL ?? "https://rifhalqzxgskwajjgipj.supabase.co"
 
 export const SUPERSERVE_CONFIG_DIR = join(homedir(), ".superserve")
 

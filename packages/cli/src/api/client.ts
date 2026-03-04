@@ -1,4 +1,4 @@
-import { getCredentials } from "../config/auth"
+import { getValidCredentials } from "../config/auth"
 import {
   DEFAULT_TIMEOUT,
   PLATFORM_API_URL,
@@ -27,14 +27,14 @@ export function createClient(
   const agentNameCache = new Map<string, string>()
   let cachedToken: string | null = null
 
-  function getHeaders(authenticated = true): Record<string, string> {
+  async function getHeaders(authenticated = true): Promise<Record<string, string>> {
     const headers: Record<string, string> = {
       "User-Agent": USER_AGENT,
       "Content-Type": "application/json",
     }
     if (authenticated) {
       if (!cachedToken) {
-        const creds = getCredentials()
+        const creds = await getValidCredentials()
         if (!creds) {
           throw new PlatformAPIError(
             401,
@@ -73,7 +73,7 @@ export function createClient(
       url += `?${searchParams.toString()}`
     }
 
-    const headers = getHeaders(authenticated)
+    const headers = await getHeaders(authenticated)
 
     // Remove Content-Type for FormData (browser sets it with boundary)
     if (formData) {
