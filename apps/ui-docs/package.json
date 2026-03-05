@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --port 3003",
     "build": "tsc -b && vite build",
     "lint": "bunx biome check .",
     "typecheck": "tsc -b"
