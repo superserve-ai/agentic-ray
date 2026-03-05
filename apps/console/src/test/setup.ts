@@ -15,6 +15,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// Stub environment variables used by auth and supabase clients
+process.env.NEXT_PUBLIC_ENABLE_DEV_AUTH = "true";
+
 // Stub environment variables used by supabase clients
 process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-anon-key";

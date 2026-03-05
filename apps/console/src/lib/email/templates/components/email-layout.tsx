@@ -50,7 +50,7 @@ export const EmailLayout = ({ preview, children }: EmailLayoutProps) => (
           </Text>
           <Text style={footerSubtext}>
             If you have any questions, we're happy to help. Contact{" "}
-            <Link style={footerSubtextLink}>support@superserve.ai</Link>
+            <Link href="mailto:support@superserve.ai" style={footerSubtextLink}>support@superserve.ai</Link>
           </Text>
         </Section>
       </Container>

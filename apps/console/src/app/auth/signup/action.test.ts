@@ -41,6 +41,33 @@ describe("signUpWithEmail", () => {
     mockSlack.mockReset().mockResolvedValue(undefined);
   });
 
+  it("returns error for invalid email", async () => {
+    const result = await signUpWithEmail("not-an-email", "password123", "Test User");
+    expect(result).toEqual({
+      success: false,
+      error: "Invalid email address.",
+    });
+    expect(mockGenerateLink).not.toHaveBeenCalled();
+  });
+
+  it("returns error for short password", async () => {
+    const result = await signUpWithEmail("user@test.com", "short", "Test User");
+    expect(result).toEqual({
+      success: false,
+      error: "Password must be at least 8 characters.",
+    });
+    expect(mockGenerateLink).not.toHaveBeenCalled();
+  });
+
+  it("returns error for empty name", async () => {
+    const result = await signUpWithEmail("user@test.com", "password123", "");
+    expect(result).toEqual({
+      success: false,
+      error: "Name is required.",
+    });
+    expect(mockGenerateLink).not.toHaveBeenCalled();
+  });
+
   it("returns success and sends confirmation email on valid signup", async () => {
     mockGenerateLink.mockResolvedValue({
       data: { properties: { hashed_token: "abc123" } },

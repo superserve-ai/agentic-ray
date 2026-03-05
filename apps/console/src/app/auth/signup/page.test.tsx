@@ -21,6 +21,13 @@ vi.mock("@superserve/ui", () => ({
   ),
 }));
 
+vi.mock("@/components/icons", () => ({
+  GoogleIcon: () => <span>GoogleIcon</span>,
+  Spinner: ({ className }: { className?: string }) => (
+    <div className={className}>spinner</div>
+  ),
+}));
+
 const mockSignInWithOAuth = vi.fn();
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
@@ -71,7 +78,7 @@ describe("SignUpPage", () => {
     expect(screen.getByPlaceholderText("Confirm Password")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign Up" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Continue with Google" }),
+      screen.getByRole("button", { name: /Continue with Google/ }),
     ).toBeInTheDocument();
   });
 
@@ -92,12 +99,12 @@ describe("SignUpPage", () => {
 
     await user.type(screen.getByPlaceholderText("Full Name"), "Test User");
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com");
-    await user.type(screen.getByPlaceholderText("Password"), "12345");
-    await user.type(screen.getByPlaceholderText("Confirm Password"), "12345");
+    await user.type(screen.getByPlaceholderText("Password"), "1234567");
+    await user.type(screen.getByPlaceholderText("Confirm Password"), "1234567");
     await user.click(screen.getByRole("button", { name: "Sign Up" }));
 
     expect(mockAddToast).toHaveBeenCalledWith(
-      "Password must be at least 6 characters.",
+      "Password must be at least 8 characters.",
       "error",
     );
   });
@@ -193,7 +200,7 @@ describe("SignUpPage", () => {
     render(<SignUpPage />);
 
     await user.click(
-      screen.getByRole("button", { name: "Continue with Google" }),
+      screen.getByRole("button", { name: /Continue with Google/ }),
     );
 
     await waitFor(() => {

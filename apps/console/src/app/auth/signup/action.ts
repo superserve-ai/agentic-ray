@@ -1,16 +1,28 @@
 "use server";
 
+import { z } from "zod";
 import { sendEmail } from "@/lib/email/send";
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation";
 import { WelcomeEmail } from "@/lib/email/templates/welcome";
 import { notifySlackOfNewUser } from "@/app/auth/signin/action";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+const signUpSchema = z.object({
+  email: z.string().email("Invalid email address."),
+  password: z.string().min(8, "Password must be at least 8 characters."),
+  fullName: z.string().min(1, "Name is required.").max(200),
+});
+
 export const signUpWithEmail = async (
   email: string,
   password: string,
   fullName: string,
 ) => {
+  const parsed = signUpSchema.safeParse({ email, password, fullName });
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message };
+  }
+
   try {
     const supabase = createAdminClient();
 
@@ -20,10 +32,10 @@ export const signUpWithEmail = async (
 
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "signup",
-      email,
-      password,
+      email: parsed.data.email,
+      password: parsed.data.password,
       options: {
-        data: { full_name: fullName },
+        data: { full_name: parsed.data.fullName },
         redirectTo,
       },
     });
@@ -46,12 +58,12 @@ export const signUpWithEmail = async (
     const confirmationUrl = `${redirectTo}?token_hash=${tokenHash}&type=signup`;
 
     await sendEmail({
-      to: email,
+      to: parsed.data.email,
       subject: "Confirm your Superserve account",
       react: ConfirmationEmail({ confirmationUrl }),
     });
 
-    notifySlackOfNewUser(email, fullName, "email").catch(() => {});
+    notifySlackOfNewUser(parsed.data.email, parsed.data.fullName, "email").catch(() => {});
 
     return { success: true };
   } catch (err) {
@@ -77,4 +89,3 @@ export const sendWelcomeEmail = async (email: string, name: string) => {
     console.error("Error sending welcome email:", error);
   }
 };
-

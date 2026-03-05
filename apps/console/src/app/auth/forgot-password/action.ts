@@ -1,10 +1,20 @@
 "use server";
 
+import { z } from "zod";
 import { sendEmail } from "@/lib/email/send";
 import { PasswordResetEmail } from "@/lib/email/templates/password-reset";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+const resetSchema = z.object({
+  email: z.string().email(),
+});
+
 export const sendPasswordResetEmail = async (email: string) => {
+  const parsed = resetSchema.safeParse({ email });
+  if (!parsed.success) {
+    return { success: true }; // Always return success to prevent email enumeration
+  }
+
   try {
     const supabase = createAdminClient();
 
@@ -14,7 +24,7 @@ export const sendPasswordResetEmail = async (email: string) => {
 
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "recovery",
-      email,
+      email: parsed.data.email,
       options: { redirectTo },
     });
 
@@ -28,9 +38,9 @@ export const sendPasswordResetEmail = async (email: string) => {
     resetUrlObj.searchParams.set("type", "recovery");
 
     await sendEmail({
-      to: email,
+      to: parsed.data.email,
       subject: "Reset your Superserve password",
-      react: PasswordResetEmail({ email, resetUrl: resetUrlObj.toString() }),
+      react: PasswordResetEmail({ email: parsed.data.email, resetUrl: resetUrlObj.toString() }),
     });
 
     return { success: true };

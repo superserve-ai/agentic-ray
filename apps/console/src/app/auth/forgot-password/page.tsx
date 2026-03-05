@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { Suspense, useState } from "react";
 import { Button, Input, useToast } from "@superserve/ui";
+import { Spinner } from "@/components/icons";
 import { sendPasswordResetEmail } from "./action";
 
-const authInputClass =
+const AUTH_INPUT_CLASS =
   "h-auto px-4 py-3.5 bg-surface text-foreground border-border focus:ring-0 focus:border-primary";
 
 function ForgotPasswordContent() {
@@ -76,16 +77,14 @@ function ForgotPasswordContent() {
                     placeholder="Email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className={authInputClass}
+                    className={AUTH_INPUT_CLASS}
                   />
                   <Button
                     type="submit"
                     disabled={isLoading}
                     className="w-full h-auto py-3.5 bg-primary text-white hover:bg-primary-hover duration-300"
                   >
-                    {isLoading ? (
-                      <div className="h-5 w-5 animate-spin border-2 border-white border-t-transparent rounded-full" />
-                    ) : null}
+                    {isLoading ? <Spinner /> : null}
                     {isLoading ? "Sending..." : "Send Reset Link"}
                   </Button>
                 </form>

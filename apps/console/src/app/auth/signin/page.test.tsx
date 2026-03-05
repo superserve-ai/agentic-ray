@@ -47,6 +47,18 @@ const mockGetSession = vi.fn();
 const mockGetUser = vi.fn();
 const mockSignOut = vi.fn();
 
+vi.mock("@/components/icons", () => ({
+  GoogleIcon: () => <span>GoogleIcon</span>,
+  Spinner: ({ className }: { className?: string }) => (
+    <div className={className}>spinner</div>
+  ),
+}));
+
+vi.mock("@/lib/auth-helpers", () => ({
+  DEV_AUTH_ENABLED: false,
+  devSignIn: vi.fn(),
+}));
+
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     auth: {
@@ -90,7 +102,7 @@ describe("SignInPage", () => {
     expect(screen.getByPlaceholderText("Password")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign In" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Continue with Google" }),
+      screen.getByRole("button", { name: /Continue with Google/ }),
     ).toBeInTheDocument();
   });
 
@@ -194,7 +206,7 @@ describe("SignInPage", () => {
     render(<SignInPage />);
 
     await user.click(
-      screen.getByRole("button", { name: "Continue with Google" }),
+      screen.getByRole("button", { name: /Continue with Google/ }),
     );
 
     await waitFor(() => {

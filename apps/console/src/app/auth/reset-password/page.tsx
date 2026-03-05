@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Suspense, useState } from "react";
 import { Button, Input, useToast } from "@superserve/ui";
+import { Spinner } from "@/components/icons";
 import { createClient } from "@/lib/supabase/client";
 
-const authInputClass =
+const AUTH_INPUT_CLASS =
   "h-auto px-4 py-3.5 bg-surface text-foreground border-border focus:ring-0 focus:border-primary";
 
 function ResetPasswordContent() {
@@ -25,8 +26,8 @@ function ResetPasswordContent() {
       addToast("Please enter a new password.", "error");
       return;
     }
-    if (password.length < 6) {
-      addToast("Password must be at least 6 characters.", "error");
+    if (password.length < 8) {
+      addToast("Password must be at least 8 characters.", "error");
       return;
     }
     if (password !== confirmPassword) {
@@ -74,7 +75,7 @@ function ResetPasswordContent() {
                 placeholder="New Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className={authInputClass}
+                className={AUTH_INPUT_CLASS}
                 suffix={
                   <button
                     type="button"
@@ -94,7 +95,7 @@ function ResetPasswordContent() {
                 placeholder="Confirm New Password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className={authInputClass}
+                className={AUTH_INPUT_CLASS}
                 suffix={
                   <button
                     type="button"
@@ -116,9 +117,7 @@ function ResetPasswordContent() {
                 disabled={isLoading}
                 className="w-full h-auto py-3.5 bg-primary text-white hover:bg-primary-hover duration-300"
               >
-                {isLoading ? (
-                  <div className="h-5 w-5 animate-spin border-2 border-white border-t-transparent rounded-full" />
-                ) : null}
+                {isLoading ? <Spinner /> : null}
                 {isLoading ? "Updating..." : "Update Password"}
               </Button>
             </form>
