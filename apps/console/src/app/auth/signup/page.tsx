@@ -24,7 +24,9 @@ function SignUpContent() {
   const supabase = createClient();
   const { addToast } = useToast();
   const searchParams = useSearchParams();
-  const nextUrl = searchParams.get("next") || "/";
+  const rawNext = searchParams.get("next") || "/";
+  // Only allow relative paths to prevent open redirect
+  const nextUrl = rawNext.startsWith("/") ? rawNext : "/";
 
   useEffect(() => {
     if (searchParams.get("error") === "link_expired") {
@@ -48,13 +50,7 @@ function SignUpContent() {
     }
     setIsLoading(true);
     try {
-      const redirectTo = `${window.location.origin}/auth/callback`;
-      const result = await signUpWithEmail(
-        email,
-        password,
-        fullName,
-        redirectTo,
-      );
+      const result = await signUpWithEmail(email, password, fullName);
       if (!result.success) {
         addToast(result.error || "Error creating account.", "error");
         return;

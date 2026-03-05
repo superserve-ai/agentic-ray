@@ -27,9 +27,9 @@ vi.mock("@/lib/email/templates/welcome", () => ({
     `WelcomeEmail:${props.name}`,
 }));
 
-const mockSlack = vi.fn();
-vi.mock("@/lib/slack/send-to-webhook", () => ({
-  default: (...args: unknown[]) => mockSlack(...args),
+const mockSlack = vi.fn().mockResolvedValue(undefined);
+vi.mock("@/app/auth/signin/action", () => ({
+  notifySlackOfNewUser: (...args: unknown[]) => mockSlack(...args),
 }));
 
 import { signUpWithEmail } from "./action";
@@ -38,7 +38,7 @@ describe("signUpWithEmail", () => {
   beforeEach(() => {
     mockGenerateLink.mockReset();
     mockSendEmail.mockReset();
-    mockSlack.mockReset();
+    mockSlack.mockReset().mockResolvedValue(undefined);
   });
 
   it("returns success and sends confirmation email on valid signup", async () => {
@@ -52,7 +52,6 @@ describe("signUpWithEmail", () => {
       "user@test.com",
       "password123",
       "Test User",
-      "https://app.test.com/auth/callback",
     );
 
     expect(result).toEqual({ success: true });
@@ -62,7 +61,7 @@ describe("signUpWithEmail", () => {
       password: "password123",
       options: {
         data: { full_name: "Test User" },
-        redirectTo: "https://app.test.com/auth/callback",
+        redirectTo: expect.stringContaining("/auth/callback"),
       },
     });
     expect(mockSendEmail).toHaveBeenCalledWith(
@@ -83,7 +82,6 @@ describe("signUpWithEmail", () => {
       "existing@test.com",
       "password123",
       "Test User",
-      "https://app.test.com/auth/callback",
     );
 
     expect(result).toEqual({
@@ -103,7 +101,6 @@ describe("signUpWithEmail", () => {
       "user@test.com",
       "password123",
       "Test User",
-      "https://app.test.com/auth/callback",
     );
 
     expect(result).toEqual({
@@ -122,7 +119,6 @@ describe("signUpWithEmail", () => {
       "user@test.com",
       "password123",
       "Test User",
-      "https://app.test.com/auth/callback",
     );
 
     expect(result).toEqual({
@@ -138,7 +134,6 @@ describe("signUpWithEmail", () => {
       "user@test.com",
       "password123",
       "Test User",
-      "https://app.test.com/auth/callback",
     );
 
     expect(result).toEqual({
@@ -159,7 +154,6 @@ describe("signUpWithEmail", () => {
       "user@test.com",
       "password123",
       "Test User",
-      "https://app.test.com/auth/callback",
     );
 
     // Slack is called fire-and-forget via .catch(), give it a tick

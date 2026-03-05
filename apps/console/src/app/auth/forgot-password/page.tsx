@@ -22,8 +22,7 @@ function ForgotPasswordContent() {
     }
     setIsLoading(true);
     try {
-      const redirectTo = `${window.location.origin}/auth/callback?next=/auth/reset-password`;
-      await sendPasswordResetEmail(email, redirectTo);
+      await sendPasswordResetEmail(email);
       setEmailSent(true);
     } catch (err) {
       console.error("Reset password error:", err);

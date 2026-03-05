@@ -4,12 +4,13 @@ import { sendEmail } from "@/lib/email/send";
 import { PasswordResetEmail } from "@/lib/email/templates/password-reset";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const sendPasswordResetEmail = async (
-  email: string,
-  redirectTo: string,
-) => {
+export const sendPasswordResetEmail = async (email: string) => {
   try {
     const supabase = createAdminClient();
+
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai";
+    const redirectTo = `${appUrl}/auth/callback?next=/auth/reset-password`;
 
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "recovery",

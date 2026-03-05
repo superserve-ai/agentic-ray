@@ -5,16 +5,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Button, Input, useToast } from "@superserve/ui";
+import { DEV_AUTH_ENABLED, devSignIn } from "@/lib/auth-helpers";
 import { createClient } from "@/lib/supabase/client";
 
 const authInputClass =
   "h-auto px-4 py-3.5 bg-surface text-foreground border-border focus:ring-0 focus:border-primary";
-
-const DEV_AUTH_ENABLED = process.env.NEXT_PUBLIC_ENABLE_DEV_AUTH === "true";
-const DEV_EMAIL =
-  process.env.NEXT_PUBLIC_DEV_AUTH_EMAIL || "dev@superserve.local";
-const DEV_PASSWORD =
-  process.env.NEXT_PUBLIC_DEV_AUTH_PASSWORD || "dev-password-123";
 
 function GoogleIcon() {
   return (
@@ -57,7 +52,9 @@ function SignInContent() {
   const supabase = createClient();
   const { addToast } = useToast();
 
-  const nextUrl = searchParams.get("next") || "/";
+  const rawNext = searchParams.get("next") || "/";
+  // Only allow relative paths to prevent open redirect
+  const nextUrl = rawNext.startsWith("/") ? rawNext : "/";
 
   useEffect(() => {
     const checkUser = async () => {
@@ -77,10 +74,6 @@ function SignInContent() {
           } = await supabase.auth.getUser();
           if (userError || !user) {
             await supabase.auth.signOut();
-            return;
-          }
-          if (nextUrl && nextUrl.startsWith("http")) {
-            window.location.href = nextUrl;
             return;
           }
           router.push(nextUrl && nextUrl !== "/" ? nextUrl : "/");
@@ -154,40 +147,9 @@ function SignInContent() {
     if (!DEV_AUTH_ENABLED) return;
     setIsDevLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: DEV_EMAIL,
-        password: DEV_PASSWORD,
-      });
-      if (error) {
-        if (error.message.includes("Invalid login credentials")) {
-          const { error: signUpError } = await supabase.auth.signUp({
-            email: DEV_EMAIL,
-            password: DEV_PASSWORD,
-            options: { data: { full_name: "Dev User" } },
-          });
-          if (signUpError) {
-            console.error("Dev sign up error:", signUpError);
-            addToast("Dev auth failed. Check console.", "error");
-            return;
-          }
-          const { error: signInError } =
-            await supabase.auth.signInWithPassword({
-              email: DEV_EMAIL,
-              password: DEV_PASSWORD,
-            });
-          if (signInError) {
-            console.error("Dev sign in error:", signInError);
-            addToast("Dev auth failed. Check console.", "error");
-            return;
-          }
-        } else {
-          console.error("Dev sign in error:", error);
-          addToast("Dev auth failed. Check console.", "error");
-          return;
-        }
-      }
-      if (nextUrl && nextUrl.startsWith("http")) {
-        window.location.href = nextUrl;
+      const result = await devSignIn();
+      if (!result.success) {
+        addToast(result.error || "Dev auth failed.", "error");
         return;
       }
       router.push(nextUrl && nextUrl !== "/" ? nextUrl : "/");
