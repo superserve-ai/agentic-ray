@@ -19,6 +19,12 @@ const client = new Superserve({ apiKey: "your-api-key" })
   Get an API key from the [Superserve dashboard](https://console.superserve.ai) or via `superserve login`.
 </Info>
 
+### Platform support
+
+- **Node.js** 18+ (uses native `fetch` and `ReadableStream`)
+- **React** 18+ (optional - only needed for `@superserve/sdk/react`)
+- Ships as both **ESM** and **CJS** - works with `import` and `require`
+
 ---
 
 ## Run
@@ -35,6 +41,15 @@ console.log(result.duration)    // 3800
 console.log(result.toolCalls)   // [{ name: "read_file", input: {...}, duration: 120 }]
 ```
 
+You can reuse an existing session instead of creating a new one:
+
+```typescript
+const result = await client.run("code-reviewer", {
+  message: "Now fix the issues you found",
+  sessionId: "ses_abc123",
+})
+```
+
 **RunResult:**
 
 | Field | Type | Description |
@@ -44,6 +59,14 @@ console.log(result.toolCalls)   // [{ name: "read_file", input: {...}, duration:
 | `duration` | `number` | Milliseconds |
 | `finishReason` | `string` | `"completed"`, `"failed"`, or `"cancelled"` |
 | `maxTurnsReached` | `boolean` | Whether the agent hit its maximum turn limit |
+
+**RunOptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `message` | `string` | The message to send (required) |
+| `sessionId` | `string?` | Reuse an existing session instead of creating a new one |
+| `idleTimeout` | `number?` | Session idle timeout in seconds |
 
 ---
 
@@ -55,15 +78,15 @@ Stream tokens as they arrive.
 const stream = client.stream("code-reviewer", {
   message: "Refactor the database connection pool",
   onText: (text) => process.stdout.write(text),
-  onToolStart: (tool) => console.log(`→ ${tool.name}`),
-  onToolEnd: (tool) => console.log(`✓ done in ${tool.duration}ms`),
+  onToolStart: (tool) => console.log(`-> ${tool.name}`),
+  onToolEnd: (tool) => console.log(`done in ${tool.duration}ms`),
   onFinish: (result) => console.log(`\nDone in ${result.duration}ms`),
 })
 
 await stream.result
 ```
 
-Or iterate directly:
+Or iterate over text chunks:
 
 ```typescript
 const stream = client.stream("code-reviewer", {
@@ -75,6 +98,46 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
+### Raw event iteration
+
+The stream is an `AsyncIterable<StreamEvent>`. You can iterate over all events directly for full control:
+
+```typescript
+const stream = client.stream("code-reviewer", {
+  message: "Analyze this codebase",
+})
+
+for await (const event of stream) {
+  switch (event.type) {
+    case "text":
+      process.stdout.write(event.content)
+      break
+    case "tool-start":
+      console.log(`Using tool: ${event.name}`)
+      break
+    case "tool-end":
+      console.log(`Tool finished in ${event.duration}ms`)
+      break
+    case "run-completed":
+      console.log(`Run completed in ${event.duration}ms`)
+      break
+    case "run-failed":
+      console.error(`Run failed: ${event.error}`)
+      break
+  }
+}
+```
+
+**StreamEvent types:**
+
+| Type | Fields | Description |
+|------|--------|-------------|
+| `TextEvent` | `content: string` | A chunk of text from the agent |
+| `ToolStartEvent` | `name: string`, `input: unknown` | Agent started using a tool |
+| `ToolEndEvent` | `duration: number` | Tool execution completed |
+| `RunCompletedEvent` | `duration: number`, `maxTurnsReached: boolean` | Run finished successfully |
+| `RunFailedEvent` | `error: string` | Run failed |
+
 **AgentStream:**
 
 | Property | Type | Description |
@@ -83,6 +146,10 @@ for await (const chunk of stream.textStream) {
 | `result` | `Promise<RunResult>` | Resolves on completion |
 | `abort()` | `() => void` | Cancel the stream |
 
+<Note>
+  `AgentStream` can only be iterated once. If you access `stream.result` without iterating first, the stream is consumed automatically in the background.
+</Note>
+
 ---
 
 ## Sessions
@@ -90,7 +157,10 @@ for await (const chunk of stream.textStream) {
 Multi-turn conversations. The agent's workspace and memory persist between messages.
 
 ```typescript
-const session = await client.createSession("code-reviewer")
+const session = await client.createSession("code-reviewer", {
+  title: "Auth module review",
+  idleTimeout: 3600, // 1 hour, in seconds
+})
 
 const r1 = await session.run("What files handle authentication?")
 // "Authentication is handled in src/auth.ts and src/middleware/auth.ts..."
@@ -106,14 +176,49 @@ for await (const chunk of r3.textStream) {
 await session.end()
 ```
 
+Session streaming also supports callbacks:
+
+```typescript
+const stream = session.stream("Refactor the auth module", {
+  onText: (text) => process.stdout.write(text),
+  onToolStart: (tool) => console.log(`-> ${tool.name}`),
+  onToolEnd: (tool) => console.log(`done in ${tool.duration}ms`),
+  onFinish: (result) => console.log(`\nDone in ${result.duration}ms`),
+  onError: (err) => console.error(err),
+})
+
+await stream.result
+```
+
+**SessionOptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | `string?` | A label for the session (shown in `superserve sessions list`) |
+| `idleTimeout` | `number?` | Idle timeout in seconds before the session is cleaned up |
+
 **Session:**
 
-| Method | Type | Description |
-|--------|------|-------------|
+| Property / Method | Type | Description |
+|-------------------|------|-------------|
 | `id` | `string` | Session ID |
+| `agentId` | `string` | The agent's ID |
+| `info` | `SessionInfo` | Full session metadata |
 | `run(message)` | `Promise<RunResult>` | Send and wait |
-| `stream(message)` | `AgentStream` | Send and stream |
+| `stream(message, options?)` | `AgentStream` | Send and stream (accepts callback options) |
 | `end()` | `Promise<void>` | End the session |
+
+**SessionInfo:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Session ID |
+| `agentId` | `string` | Agent ID |
+| `agentName` | `string?` | Agent name |
+| `status` | `string` | `"active"`, `"idle"`, `"completed"`, or `"failed"` |
+| `title` | `string?` | Session title |
+| `messageCount` | `number` | Number of messages in the session |
+| `createdAt` | `string` | ISO 8601 timestamp |
 
 ---
 
@@ -122,8 +227,21 @@ await session.end()
 ```typescript
 const agents = await client.agents.list()
 const agent = await client.agents.get("code-reviewer")
-// { id: "agt_7c9e...", name: "code-reviewer", command: "python agent.py" }
 ```
+
+**Agent:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Agent ID (e.g. `agt_7c9e...`) |
+| `name` | `string` | Agent name |
+| `command` | `string \| null` | Start command (e.g. `python agent.py`) |
+| `depsStatus` | `string` | Dependency installation status |
+| `depsError` | `string \| null` | Dependency error message, if any |
+| `requiredSecrets` | `string[]` | Secrets the agent needs |
+| `environmentKeys` | `string[]` | Environment variables configured |
+| `createdAt` | `string` | ISO 8601 timestamp |
+| `updatedAt` | `string` | ISO 8601 timestamp |
 
 ---
 
@@ -147,8 +265,10 @@ function App() {
 }
 
 function Chat() {
-  const { messages, sendMessage, isStreaming } = useAgent({
+  const { messages, sendMessage, isStreaming, stop } = useAgent({
     agent: "code-reviewer",
+    onFinish: (msg) => console.log("Agent responded:", msg.content),
+    onError: (err) => console.error("Error:", err),
   })
 
   return (
@@ -159,7 +279,7 @@ function Chat() {
         </div>
       ))}
 
-      {isStreaming && <p>Thinking...</p>}
+      {isStreaming && <button onClick={stop}>Stop</button>}
 
       <form onSubmit={(e) => {
         e.preventDefault()
@@ -197,6 +317,20 @@ function Chat() {
 | `stop` | `() => void` | Stop the current stream |
 | `reset` | `() => void` | Clear all messages and end the session |
 
+**Message:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Unique message ID |
+| `role` | `"user" \| "assistant"` | Who sent the message |
+| `content` | `string` | Message text |
+| `toolCalls` | `ToolCall[]?` | Tools the agent used (assistant messages only) |
+| `createdAt` | `Date` | When the message was created |
+
+<Note>
+  The hook creates the client and session lazily on the first `sendMessage` call. Calling `sendMessage` while a response is streaming is a no-op - the message is silently ignored. Calling `reset()` ends the underlying session and clears all messages.
+</Note>
+
 ---
 
 ## Configuration
@@ -209,7 +343,11 @@ const client = new Superserve({
 })
 ```
 
+---
+
 ## Errors
+
+All errors extend `SuperserveError`. Network failures and API errors throw `APIError` with a status code.
 
 ```typescript
 import { APIError, SuperserveError } from "@superserve/sdk"
@@ -217,8 +355,68 @@ import { APIError, SuperserveError } from "@superserve/sdk"
 try {
   await client.run("my-agent", { message: "Hello" })
 } catch (e) {
-  if (e instanceof AuthenticationError) { /* bad API key */ }
-  if (e instanceof NotFoundError) { /* agent doesn't exist */ }
-  if (e instanceof SuperserveError) { console.error(e.status, e.message) }
+  if (e instanceof APIError) {
+    console.error(e.status)   // HTTP status code (401, 404, 500, etc.)
+    console.error(e.message)  // Error message from the API
+    console.error(e.details)  // Field-level error details, if any
+  }
+
+  if (e instanceof SuperserveError) {
+    // Covers APIError and other SDK errors (e.g. aborted requests)
+    console.error(e.message)
+  }
 }
+```
+
+**Error classes:**
+
+| Class | Description |
+|-------|-------------|
+| `SuperserveError` | Base error class for all SDK errors |
+| `APIError` | HTTP error from the API. Has `status`, `message`, and `details` properties |
+
+Common `APIError` status codes:
+
+| Status | Meaning |
+|--------|---------|
+| `401` | Invalid or missing API key |
+| `404` | Agent or session not found |
+| `422` | Invalid request (check `details` for field-level info) |
+| `0` | Network failure or request timeout |
+
+---
+
+## TypeScript types
+
+All public types are exported from `@superserve/sdk`:
+
+```typescript
+import type {
+  SuperserveOptions,
+  RunOptions,
+  StreamOptions,
+  SessionOptions,
+  RunResult,
+  ToolCall,
+  StreamEvent,
+  TextEvent,
+  ToolStartEvent,
+  ToolEndEvent,
+  RunCompletedEvent,
+  RunFailedEvent,
+  Agent,
+  SessionInfo,
+} from "@superserve/sdk"
+```
+
+React types are exported from `@superserve/sdk/react`:
+
+```typescript
+import type {
+  Message,
+  AgentStatus,
+  UseAgentOptions,
+  UseAgentReturn,
+  SuperserveProviderProps,
+} from "@superserve/sdk/react"
 ```
