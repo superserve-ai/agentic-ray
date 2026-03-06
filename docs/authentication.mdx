@@ -1,0 +1,60 @@
+---
+title: "Authentication"
+description: "Log in to Superserve from the CLI"
+---
+
+Superserve uses the [OAuth 2.0 Device Authorization Grant](https://datatracker.ietf.org/doc/html/rfc8628) for CLI authentication. No passwords are entered in the terminal - you authorize in your browser.
+
+## Log in via browser
+
+```bash
+superserve login
+```
+
+The CLI will:
+1. Display a short confirmation code
+2. Open `console.superserve.ai/device` in your browser
+3. Wait for you to authorize
+
+Once you approve in the browser, the CLI is authenticated. Credentials are stored locally at `~/.superserve/auth.json` with owner-only permissions (`0600`).
+
+## Log in with an API key
+
+For CI/CD pipelines or environments without a browser, use an API key directly:
+
+```bash
+superserve login --api-key your-api-key
+```
+
+API keys can be generated from the [Superserve Console](https://console.superserve.ai).
+
+## Log out
+
+```bash
+superserve logout
+```
+
+This removes `~/.superserve/auth.json`.
+
+## How it works
+
+<Steps>
+  <Step title="CLI requests a device code">
+    The CLI calls the Superserve API and receives a short user code and a verification URL.
+  </Step>
+  <Step title="Browser opens">
+    The CLI opens `console.superserve.ai/device` in your browser with the code pre-filled.
+  </Step>
+  <Step title="You authorize">
+    Log in (if needed) and click **Authorize Device** to approve the CLI.
+  </Step>
+  <Step title="CLI receives a token">
+    The CLI polls the API until you authorize, then saves the access token to `~/.superserve/auth.json`.
+  </Step>
+</Steps>
+
+The device code expires after 15 minutes. If you don't authorize in time, run `superserve login` again.
+
+<Tip>
+  Already logged in? The CLI checks your existing credentials before starting the device flow. If your token is still valid, you won't be prompted again.
+</Tip>
