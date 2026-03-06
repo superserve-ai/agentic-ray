@@ -4,7 +4,9 @@ description: "Deploy a LangChain agent with chains and retrieval"
 icon: /images/langchain.svg
 ---
 
-[LangChain](https://python.langchain.com/) provides chains, agents, and retrieval pipelines for building complex LLM applications. Any LangChain agent that reads input and prints output deploys to Superserve with no changes.
+LangChain ([Python](https://python.langchain.com/), [TypeScript](https://js.langchain.com/)) provides chains, agents, and retrieval pipelines for building complex LLM applications. Any LangChain agent that reads input and prints output deploys to Superserve with no changes.
+
+<CodeGroup>
 
 ```python agent.py
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -22,16 +24,48 @@ while True:
     print(response.content)
 ```
 
+```typescript agent.ts
+import { HumanMessage, SystemMessage } from "@langchain/core/messages"
+import { ChatOpenAI } from "@langchain/openai"
+import { createInterface } from "readline"
+
+const llm = new ChatOpenAI({ model: "gpt-4o" })
+const system = new SystemMessage("You are a helpful assistant.")
+
+const rl = createInterface({ input: process.stdin })
+rl.on("line", async (line) => {
+  const response = await llm.invoke([system, new HumanMessage(line)])
+  console.log(response.content)
+})
+```
+
+</CodeGroup>
+
+<CodeGroup>
+
 ```txt requirements.txt
 langchain-openai
 ```
 
+```json package.json
+{
+  "dependencies": {
+    "@langchain/core": "latest",
+    "@langchain/openai": "latest"
+  }
+}
+```
+
+</CodeGroup>
+
 ```bash
-superserve deploy agent.py
+superserve deploy agent.py     # or agent.ts
 superserve secrets set my-agent OPENAI_API_KEY=sk-...
 superserve run my-agent
 ```
 
 ---
+
+See the full example in [Python](https://github.com/superserve-ai/superserve/tree/main/examples/python/langchain/chatbot) or [TypeScript](https://github.com/superserve-ai/superserve/tree/main/examples/typescript/langchain/chatbot).
 
 Integrate deployed agents into your apps using the [Superserve SDK](/sdk).

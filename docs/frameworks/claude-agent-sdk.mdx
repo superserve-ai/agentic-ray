@@ -6,6 +6,8 @@ icon: /images/claude-agent-sdk.svg
 
 The [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/overview) gives you tool use, conversation memory, and streaming out of the box. Combined with Superserve's durable workspace, the agent retains full context across turns — files it creates persist, and conversation history survives sandbox restarts.
 
+<CodeGroup>
+
 ```python agent.py
 import asyncio
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, TextBlock
@@ -33,12 +35,47 @@ async def main():
 asyncio.run(main())
 ```
 
+```typescript agent.ts
+import { query } from "@anthropic-ai/claude-agent-sdk"
+import { createInterface } from "readline"
+
+const rl = createInterface({ input: process.stdin })
+rl.on("line", async (line) => {
+  for await (const message of query({
+    prompt: line,
+    options: {
+      model: "claude-sonnet-4-5",
+      systemPrompt: "You are a helpful assistant.",
+      continue: true,
+    },
+  })) {
+    if ("result" in message) {
+      console.log(message.result)
+    }
+  }
+})
+```
+
+</CodeGroup>
+
+<CodeGroup>
+
 ```txt requirements.txt
 claude-agent-sdk
 ```
 
+```json package.json
+{
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "latest"
+  }
+}
+```
+
+</CodeGroup>
+
 ```bash
-superserve deploy agent.py
+superserve deploy agent.py     # or agent.ts
 superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
 superserve run my-agent
 ```
@@ -48,5 +85,7 @@ superserve run my-agent
 </Tip>
 
 ---
+
+See the full example in [Python](https://github.com/superserve-ai/superserve/tree/main/examples/python/claude-agent-sdk/chatbot) or [TypeScript](https://github.com/superserve-ai/superserve/tree/main/examples/typescript/claude-agent-sdk/chatbot).
 
 Integrate deployed agents into your apps using the [Superserve SDK](/sdk).

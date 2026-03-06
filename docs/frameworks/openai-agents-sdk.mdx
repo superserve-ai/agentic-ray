@@ -6,6 +6,8 @@ icon: /images/openai.svg
 
 The [OpenAI Agents SDK](https://developers.openai.com/api/docs/guides/agents-sdk) provides a lightweight framework for building agents with tool use, handoffs between agents, and input/output guardrails.
 
+<CodeGroup>
+
 ```python agent.py
 from agents import Agent, Runner
 
@@ -23,16 +25,48 @@ while True:
     print(result.final_output)
 ```
 
+```typescript agent.ts
+import { Agent, run } from "@openai/agents"
+import { createInterface } from "readline"
+
+const agent = new Agent({
+  name: "assistant",
+  instructions: "You are a helpful assistant.",
+})
+
+const rl = createInterface({ input: process.stdin })
+rl.on("line", async (line) => {
+  const result = await run(agent, line)
+  console.log(result.finalOutput)
+})
+```
+
+</CodeGroup>
+
+<CodeGroup>
+
 ```txt requirements.txt
 openai-agents
 ```
 
+```json package.json
+{
+  "dependencies": {
+    "@openai/agents": "latest"
+  }
+}
+```
+
+</CodeGroup>
+
 ```bash
-superserve deploy agent.py
+superserve deploy agent.py     # or agent.ts
 superserve secrets set my-agent OPENAI_API_KEY=sk-...
 superserve run my-agent
 ```
 
 ---
+
+See the full example in [Python](https://github.com/superserve-ai/superserve/tree/main/examples/python/openai-agents-sdk/chatbot) or [TypeScript](https://github.com/superserve-ai/superserve/tree/main/examples/typescript/openai-agents-sdk/chatbot).
 
 Integrate deployed agents into your apps using the [Superserve SDK](/sdk).
