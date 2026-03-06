@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@openai/agents": "latest"
+  }
+}
