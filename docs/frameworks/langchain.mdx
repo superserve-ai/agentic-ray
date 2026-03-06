@@ -64,6 +64,10 @@ superserve secrets set my-agent OPENAI_API_KEY=sk-...
 superserve run my-agent
 ```
 
+<Tip>
+  This example is stateless - each message is independent. For multi-turn memory, add `ChatMessageHistory` to maintain conversation context across turns. See the [LangChain memory docs](https://python.langchain.com/docs/concepts/memory/).
+</Tip>
+
 ---
 
 See the full example in [Python](https://github.com/superserve-ai/superserve/tree/main/examples/python/langchain/chatbot) or [TypeScript](https://github.com/superserve-ai/superserve/tree/main/examples/typescript/langchain/chatbot).

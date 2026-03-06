@@ -65,6 +65,10 @@ superserve secrets set my-agent OPENAI_API_KEY=sk-...
 superserve run my-agent
 ```
 
+<Tip>
+  `Runner.run_sync` blocks until the full response is ready. For token-by-token streaming, use `Runner.run_streamed` instead - see the [OpenAI Agents SDK streaming docs](https://openai.github.io/openai-agents-js/).
+</Tip>
+
 ---
 
 See the full example in [Python](https://github.com/superserve-ai/superserve/tree/main/examples/python/openai-agents-sdk/chatbot) or [TypeScript](https://github.com/superserve-ai/superserve/tree/main/examples/typescript/openai-agents-sdk/chatbot).

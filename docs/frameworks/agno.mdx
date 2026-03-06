@@ -35,6 +35,10 @@ superserve secrets set my-agent OPENAI_API_KEY=sk-...
 superserve run my-agent
 ```
 
+<Tip>
+  Agno is model-agnostic - swap `OpenAIChat` for `AnthropicChat`, `GroqChat`, or other providers without changing your agent logic. See the [Agno models docs](https://docs.agno.com/models/introduction).
+</Tip>
+
 ---
 
 See the full [Python example](https://github.com/superserve-ai/superserve/tree/main/examples/python/agno/chatbot).
