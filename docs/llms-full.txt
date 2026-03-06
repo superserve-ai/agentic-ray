@@ -16,9 +16,9 @@ Without that:
 
 Superserve gives every agent a governed workspace:
 
-- Isolated by default: Every session runs in its own Firecracker microVM with a dedicated kernel. The agent gets full root access to execute code, install packages, and make HTTP requests — nothing leaks into another session.
-- Nothing disappears: The /workspace filesystem survives across turns, restarts, and days. Pick up a session hours or weeks later — every file and conversation is exactly where the agent left it.
-- Credentials stay hidden: A credential proxy injects API keys at the network level. The agent makes authenticated requests without ever seeing the credentials — they never appear in context, logs, or tool outputs.
+- Isolated by default: Every session runs in its own Firecracker microVM with a dedicated kernel. The agent gets full root access to execute code, install packages, and make HTTP requests - nothing leaks into another session.
+- Nothing disappears: The /workspace filesystem survives across turns, restarts, and days. Pick up a session hours or weeks later - every file and conversation is exactly where the agent left it.
+- Credentials stay hidden: A credential proxy injects API keys at the network level. The agent makes authenticated requests without ever seeing the credentials - they never appear in context, logs, or tool outputs.
 - Full audit trail: Every tool call, file write, and HTTP request the agent makes is logged and queryable. Get a full execution timeline for each session, not just the chat transcript.
 
 Deploy in one command. No Dockerfile, no server code, no config files.
@@ -30,7 +30,7 @@ superserve deploy agent.ts     # TypeScript
 
 The same script you run locally runs in production. Superserve detects your dependencies, builds the sandbox, and serves your agent over a streaming API.
 
-Superserve works with any agent framework — or no framework at all: Claude Agent SDK, OpenAI Agents SDK, LangChain, LangGraph, Mastra, Pydantic AI, Agno, or plain stdin/stdout.
+Superserve works with any agent framework - or no framework at all: Claude Agent SDK, OpenAI Agents SDK, LangChain, LangGraph, Mastra, Pydantic AI, Agno, or plain stdin/stdout.
 
 ---
 
@@ -47,7 +47,7 @@ superserve login
 
 ## Write an agent
 
-Any script that reads input and prints output works.
+Any script that reads input and prints output works. Pick your language, or start from one of our examples in Python (https://github.com/superserve-ai/superserve/tree/main/examples/python) or TypeScript (https://github.com/superserve-ai/superserve/tree/main/examples/typescript).
 
 Python example using Claude Agent SDK:
 
@@ -59,13 +59,14 @@ options = ClaudeAgentOptions(
     model="sonnet",
     system_prompt="You are a senior software engineer. Be direct and specific.",
     permission_mode="bypassPermissions",
+    continue_conversation=True,
 )
 
 async def main():
     async with ClaudeSDKClient(options=options) as client:
         while True:
             user_input = input()
-            await client.query(prompt=user_input, session_id="chat")
+            await client.query(prompt=user_input)
             async for msg in client.receive_response():
                 for block in getattr(msg, "content", []):
                     if isinstance(block, TextBlock):
@@ -242,7 +243,7 @@ Run `superserve init` to generate a superserve.yaml with sensible defaults.
 
 # Sessions
 
-Every `superserve run` creates a session — an isolated sandbox running your agent, with its own filesystem and process state. Sessions persist after the conversation ends. Come back hours or days later and resume where you left off.
+Every `superserve run` creates a session - an isolated sandbox running your agent, with its own filesystem and process state. Sessions persist after the conversation ends. Come back hours or days later and resume where you left off.
 
 ## Resume a conversation
 
@@ -255,12 +256,14 @@ The agent remembers the full conversation. Files it created or modified are stil
 
 ## How persistence works
 
-1. Workspace filesystem — Superserve persists the sandbox's /workspace directory. Files your agent reads, writes, or modifies survive across turns and restarts.
-2. Conversation memory — Make sure your agent supports multi-turn conversations so it remembers context across messages. Most frameworks handle this automatically when configured correctly.
+Sessions use two layers of persistence:
+
+1. Workspace filesystem - Superserve persists the sandbox's /workspace directory. Files your agent reads, writes, or modifies survive across turns and restarts.
+2. Conversation memory - Make sure your agent supports multi-turn conversations so it remembers context across messages. Most frameworks handle this automatically when configured correctly.
 
 ```python
-# Claude Agent SDK — session_id enables conversation memory
-await client.query(prompt=user_input, session_id="chat")
+# Claude Agent SDK - continue_conversation enables conversation memory
+options = ClaudeAgentOptions(..., continue_conversation=True)
 ```
 
 ## Session lifecycle
@@ -269,13 +272,49 @@ await client.query(prompt=user_input, session_id="chat")
 |--------|---------|------------|
 | active | Processing a message right now | No |
 | idle | Waiting for the next message | Yes |
-| completed | Ended by user | Yes — fresh sandbox, same workspace |
-| failed | Crashed or timed out | Yes — fresh sandbox, same workspace |
+| completed | Ended by user | Yes - fresh sandbox, same workspace |
+| failed | Crashed or timed out | Yes - fresh sandbox, same workspace |
+
+When you resume a completed or failed session, Superserve creates a fresh sandbox but restores the /workspace filesystem. The agent process restarts, but all files are intact.
 
 ```bash
 superserve sessions get a1b2
 superserve sessions end a1b2
 ```
+
+## Idle timeout
+
+Sessions expire after 30 days of inactivity by default. The timeout resets each time a message is sent.
+
+You can configure the timeout when creating a session via the SDK:
+
+```typescript
+const session = await client.createSession("my-agent", {
+  idleTimeout: 3600, // 1 hour, in seconds
+})
+```
+
+## Session titles
+
+Give sessions a title to find them later:
+
+```typescript
+const session = await client.createSession("my-agent", {
+  title: "Review auth module",
+})
+```
+
+Titles appear in `superserve sessions list` output.
+
+## Short ID prefixes
+
+Session IDs are long UUIDs, but you can use any unique prefix:
+
+```bash
+superserve sessions resume a1b2    # matches ses_a1b2c3d4-e5f6-...
+```
+
+If the prefix matches multiple sessions, you'll get an error asking you to be more specific.
 
 ## Sessions in the SDK
 
@@ -295,16 +334,151 @@ The session maintains context between run() and stream() calls.
 
 ---
 
+# Authentication
+
+Superserve uses the OAuth 2.0 Device Authorization Grant (RFC 8628) for CLI authentication. No passwords are entered in the terminal - you authorize in your browser.
+
+## Log in via browser
+
+```bash
+superserve login
+```
+
+The CLI will:
+1. Display a short confirmation code
+2. Open console.superserve.ai/device in your browser
+3. Wait for you to authorize
+
+Once you approve in the browser, the CLI is authenticated. Credentials are stored locally at ~/.superserve/auth.json with owner-only permissions (0600).
+
+## Log in with an API key
+
+For CI/CD pipelines or environments without a browser, use an API key directly:
+
+```bash
+superserve login --api-key your-api-key
+```
+
+API keys can be generated from the Superserve Console (https://console.superserve.ai).
+
+## Log out
+
+```bash
+superserve logout
+```
+
+This removes ~/.superserve/auth.json.
+
+## How it works
+
+1. CLI requests a device code from the Superserve API
+2. CLI opens your browser to console.superserve.ai/device with the code
+3. You log in and approve the CLI
+4. CLI polls until authorized, then saves the token locally
+
+The device code expires after 15 minutes. If you don't authorize in time, run `superserve login` again.
+
+---
+
+# Troubleshooting
+
+## Agent doesn't respond
+
+Cause: API keys not set. The agent starts but can't reach the model provider.
+
+Fix: Set the required secret for your agent:
+
+```bash
+superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
+# or
+superserve secrets set my-agent OPENAI_API_KEY=sk-...
+```
+
+Verify secrets are set:
+
+```bash
+superserve secrets list my-agent
+```
+
+## Agent doesn't respond (keys are set)
+
+Cause: The agent isn't reading from stdin or writing to stdout correctly.
+
+Fix: Make sure your agent follows the stdin/stdout pattern:
+
+```python
+while True:
+    user_input = input()       # reads from stdin
+    print("response here")     # writes to stdout
+```
+
+```typescript
+import { createInterface } from "readline"
+const rl = createInterface({ input: process.stdin })
+rl.on("line", (line) => {
+  console.log("response here")
+})
+```
+
+Common mistakes:
+- Using sys.stderr or console.error() instead of stdout
+- Forgetting to flush output (Python: print() flushes by default, but sys.stdout.write() doesn't)
+- Agent exits before reading input
+
+## Response arrives all at once instead of streaming
+
+Cause: Your agent buffers the entire response before printing.
+
+Fix: Print each chunk as it arrives, not after the full response is assembled:
+
+```python
+# Good - prints chunks as they stream
+for chunk in stream_response():
+    print(chunk, end="", flush=True)
+```
+
+Superserve streams stdout to the client in real time.
+
+## Agent takes too long to respond
+
+Possible causes:
+- Large model context - reduce system prompt size or conversation history
+- Slow model - try a faster model (e.g., claude-haiku-4-5 or gpt-4o-mini)
+- Tool execution - code execution and HTTP requests add latency
+
+Debug with single-shot mode:
+
+```bash
+superserve run my-agent "Hello" --single
+```
+
+## Dependencies fail to install
+
+Cause: Large or slow-to-install packages timing out during sandbox setup.
+
+Fix:
+- Keep requirements.txt or package.json minimal
+- Avoid large unused packages (torch, tensorflow)
+- Pin versions to avoid resolution delays
+
+Dependencies are cached across deploys. The first deploy is the slowest.
+
+## Still stuck?
+
+Reach out at engineering@superserve.ai or open an issue on GitHub (https://github.com/superserve-ai/superserve/issues).
+
+---
+
 # SDK
 
 TypeScript client and React hooks for deployed agents.
 
 ```bash
-npm install superserve
+npm install @superserve/sdk
 ```
 
 ```typescript
-import Superserve from "superserve"
+import Superserve from "@superserve/sdk"
 const client = new Superserve({ apiKey: "your-api-key" })
 ```
 
@@ -322,7 +496,7 @@ console.log(result.duration)
 console.log(result.toolCalls)
 ```
 
-RunResult fields: text (string), toolCalls (ToolCall[]), duration (number), finishReason (string).
+RunResult fields: text (string), toolCalls (ToolCall[]), duration (number), finishReason (string), maxTurnsReached (boolean).
 
 ## Stream
 
@@ -333,8 +507,8 @@ const stream = client.stream("code-reviewer", {
   message: "Refactor the database connection pool",
   onText: (text) => process.stdout.write(text),
   onToolStart: (tool) => console.log(`→ ${tool.name}`),
-  onToolEnd: (tool) => console.log(`✓ ${tool.name}`),
-  onFinish: (result) => console.log(`\nDone in ${result.duration}s`),
+  onToolEnd: (tool) => console.log(`✓ done in ${tool.duration}ms`),
+  onFinish: (result) => console.log(`\nDone in ${result.duration}ms`),
 })
 
 await stream.result
@@ -383,11 +557,11 @@ const agent = await client.agents.get("code-reviewer")
 Build chat interfaces with useAgent. Manages messages, streaming, and sessions automatically.
 
 ```bash
-npm install superserve react
+npm install @superserve/sdk react
 ```
 
 ```tsx
-import { SuperserveProvider, useAgent } from "superserve/react"
+import { SuperserveProvider, useAgent } from "@superserve/sdk/react"
 
 function App() {
   return (
@@ -406,7 +580,7 @@ function Chat() {
     <div>
       {messages.map((msg) => (
         <div key={msg.id}>
-          <strong>{msg.role}:</strong> {msg.text}
+          <strong>{msg.role}:</strong> {msg.content}
         </div>
       ))}
       {isStreaming && <p>Thinking...</p>}
@@ -423,8 +597,9 @@ function Chat() {
 }
 ```
 
-useAgent options: agent (string), sessionId (string?).
-useAgent return: messages (Message[]), sendMessage ((text: string) => void), isStreaming (boolean), error (Error | null), sessionId (string | null).
+useAgent options: agent (string), apiKey (string?), baseUrl (string?), initialMessages (Message[]?), onFinish ((message) => void), onError ((error) => void).
+
+useAgent return: messages (Message[]), sendMessage ((text: string) => void), status (AgentStatus), isStreaming (boolean), error (Error | null), stop (() => void), reset (() => void).
 
 ## Configuration
 
@@ -439,7 +614,7 @@ const client = new Superserve({
 ## Errors
 
 ```typescript
-import { AuthenticationError, NotFoundError, SuperserveError } from "superserve"
+import { APIError, SuperserveError } from "@superserve/sdk"
 
 try {
   await client.run("my-agent", { message: "Hello" })
@@ -460,7 +635,7 @@ curl -fsSL https://superserve.ai/install | sh
 
 ## superserve login
 
-Authenticate via browser. Credentials stored at ~/.superserve/credentials.json.
+Authenticate via browser. Credentials stored at ~/.superserve/auth.json.
 
 ```bash
 superserve login
@@ -531,7 +706,7 @@ superserve sessions resume SESSION_ID
 superserve sessions end SESSION_ID
 ```
 
-Session IDs accept short prefixes — a1b2 matches a1b2c3d4-e5f6-...
+Session IDs accept short prefixes - a1b2 matches a1b2c3d4-e5f6-...
 
 ---
 
@@ -539,7 +714,9 @@ Session IDs accept short prefixes — a1b2 matches a1b2c3d4-e5f6-...
 
 Deploy a Claude agent with tool use and conversation memory.
 
-The Claude Agent SDK gives you tool use, conversation memory via session_id, and streaming out of the box.
+The Claude Agent SDK gives you tool use, conversation memory, and streaming out of the box.
+
+Python:
 
 ```python
 import asyncio
@@ -549,6 +726,7 @@ options = ClaudeAgentOptions(
     model="sonnet",
     system_prompt="You are a helpful assistant.",
     permission_mode="bypassPermissions",
+    continue_conversation=True,
 )
 
 async def main():
@@ -558,7 +736,7 @@ async def main():
                 user_input = input()
             except EOFError:
                 break
-            await client.query(prompt=user_input, session_id="chat")
+            await client.query(prompt=user_input)
             async for msg in client.receive_response():
                 for block in getattr(msg, "content", []):
                     if isinstance(block, TextBlock):
@@ -567,13 +745,39 @@ async def main():
 asyncio.run(main())
 ```
 
+TypeScript:
+
+```typescript
+import { query } from "@anthropic-ai/claude-agent-sdk"
+import { createInterface } from "readline"
+
+const rl = createInterface({ input: process.stdin })
+rl.on("line", async (line) => {
+  for await (const message of query({
+    prompt: line,
+    options: {
+      model: "claude-sonnet-4-5",
+      systemPrompt: "You are a helpful assistant.",
+      continue: true,
+    },
+  })) {
+    if ("result" in message) {
+      console.log(message.result)
+    }
+  }
+})
+```
+
 requirements.txt: claude-agent-sdk
+package.json: { "dependencies": { "@anthropic-ai/claude-agent-sdk": "latest" } }
 
 ```bash
-superserve deploy agent.py
+superserve deploy agent.py     # or agent.ts
 superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
 superserve run my-agent
 ```
+
+The `continue_conversation` option (Python) or `continue` option (TypeScript) enables conversation memory across turns.
 
 ---
 
@@ -582,6 +786,8 @@ superserve run my-agent
 Deploy an OpenAI agent with handoffs and guardrails.
 
 The OpenAI Agents SDK provides a lightweight framework for building agents with tool use, handoffs between agents, and input/output guardrails.
+
+Python:
 
 ```python
 from agents import Agent, Runner
@@ -600,13 +806,34 @@ while True:
     print(result.final_output)
 ```
 
+TypeScript:
+
+```typescript
+import { Agent, run } from "@openai/agents"
+import { createInterface } from "readline"
+
+const agent = new Agent({
+  name: "assistant",
+  instructions: "You are a helpful assistant.",
+})
+
+const rl = createInterface({ input: process.stdin })
+rl.on("line", async (line) => {
+  const result = await run(agent, line)
+  console.log(result.finalOutput)
+})
+```
+
 requirements.txt: openai-agents
+package.json: { "dependencies": { "@openai/agents": "latest" } }
 
 ```bash
-superserve deploy agent.py
+superserve deploy agent.py     # or agent.ts
 superserve secrets set my-agent OPENAI_API_KEY=sk-...
 superserve run my-agent
 ```
+
+Runner.run_sync blocks until the full response is ready. For streaming, use Runner.run_streamed.
 
 ---
 
@@ -614,30 +841,53 @@ superserve run my-agent
 
 Deploy a LangChain agent with chains and retrieval.
 
-LangChain provides chains, agents, and retrieval pipelines for building complex LLM applications.
+LangChain (Python and TypeScript) provides chains, agents, and retrieval pipelines for building complex LLM applications.
+
+Python:
 
 ```python
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
 
 llm = ChatOpenAI(model="gpt-4o")
+system = SystemMessage(content="You are a helpful assistant.")
 
 while True:
     try:
         user_input = input()
     except EOFError:
         break
-    response = llm.invoke([HumanMessage(content=user_input)])
+    response = llm.invoke([system, HumanMessage(content=user_input)])
     print(response.content)
 ```
 
+TypeScript:
+
+```typescript
+import { HumanMessage, SystemMessage } from "@langchain/core/messages"
+import { ChatOpenAI } from "@langchain/openai"
+import { createInterface } from "readline"
+
+const llm = new ChatOpenAI({ model: "gpt-4o" })
+const system = new SystemMessage("You are a helpful assistant.")
+
+const rl = createInterface({ input: process.stdin })
+rl.on("line", async (line) => {
+  const response = await llm.invoke([system, new HumanMessage(line)])
+  console.log(response.content)
+})
+```
+
 requirements.txt: langchain-openai
+package.json: { "dependencies": { "@langchain/core": "latest", "@langchain/openai": "latest" } }
 
 ```bash
-superserve deploy agent.py
+superserve deploy agent.py     # or agent.ts
 superserve secrets set my-agent OPENAI_API_KEY=sk-...
 superserve run my-agent
 ```
+
+This example is stateless. For multi-turn memory, add ChatMessageHistory.
 
 ---
 
@@ -669,6 +919,8 @@ superserve secrets set my-agent OPENAI_API_KEY=sk-...
 superserve run my-agent
 ```
 
+Pydantic AI's result_type parameter lets you get structured, validated JSON instead of plain text.
+
 ---
 
 # Framework: Agno
@@ -681,7 +933,10 @@ Agno is a lightweight, model-agnostic Python framework for building agents.
 from agno.agent import Agent
 from agno.models.openai import OpenAIChat
 
-agent = Agent(model=OpenAIChat(id="gpt-4o"))
+agent = Agent(
+    model=OpenAIChat(id="gpt-4o"),
+    instructions="You are a helpful assistant.",
+)
 
 while True:
     try:
@@ -699,6 +954,8 @@ superserve deploy agent.py
 superserve secrets set my-agent OPENAI_API_KEY=sk-...
 superserve run my-agent
 ```
+
+Agno is model-agnostic - swap OpenAIChat for AnthropicChat, GroqChat, or other providers without changing your agent logic.
 
 ---
 
@@ -733,4 +990,4 @@ superserve secrets set my-agent OPENAI_API_KEY=sk-...
 superserve run my-agent
 ```
 
-TypeScript agents are run with npx tsx automatically — no build step needed.
+TypeScript agents are run with npx tsx automatically - no build step needed.

@@ -4,20 +4,22 @@
 
 ## Docs
 
-- [Introduction](https://docs.superserve.ai/introduction): What Superserve is — isolated Firecracker microVMs, persistent /workspace filesystem, credential proxy, audit trail, zero-config deployment, and supported frameworks.
-- [Quickstart](https://docs.superserve.ai/quickstart): Deploy your first agent — install the CLI, write a Python or TypeScript agent, deploy, set API keys, and run a conversation.
-- [Deployment](https://docs.superserve.ai/zero-config): How deployment works — supported languages (Python, TypeScript), stdio and HTTP server modes, automatic dependency detection, project structure, and optional configuration.
-- [Sessions](https://docs.superserve.ai/sessions): How sessions work — multi-turn conversations, resuming previous sessions, session lifecycle, and programmatic session management.
-- [SDK](https://docs.superserve.ai/sdk): TypeScript client and React hooks — run(), stream(), session management, agent listing, useAgent hook, configuration, and error handling.
-- [CLI](https://docs.superserve.ai/cli): All commands and flags — login, deploy, init, run, secrets, agents, and sessions.
+- [Introduction](https://docs.superserve.ai/introduction): What Superserve is - isolated Firecracker microVMs, persistent /workspace filesystem, credential proxy, audit trail, zero-config deployment, and supported frameworks.
+- [Quickstart](https://docs.superserve.ai/quickstart): Deploy your first agent - install the CLI, write a Python or TypeScript agent, deploy, set API keys, and run a conversation.
+- [Deployment](https://docs.superserve.ai/zero-config): How deployment works - supported languages (Python, TypeScript), stdio and HTTP server modes, automatic dependency detection, project structure, and optional configuration.
+- [Sessions](https://docs.superserve.ai/sessions): How sessions work - multi-turn conversations, resuming previous sessions, idle timeout, session titles, session lifecycle, and programmatic session management.
+- [Authentication](https://docs.superserve.ai/authentication): How to log in - OAuth 2.0 device flow, API key authentication for CI/CD, credential storage, and logout.
+- [Troubleshooting](https://docs.superserve.ai/troubleshooting): Common issues - agent not responding, missing API keys, response not streaming, slow responses, and dependency installation failures.
+- [SDK](https://docs.superserve.ai/sdk): TypeScript client and React hooks - run(), stream(), session management, agent listing, useAgent hook, configuration, and error handling.
+- [CLI](https://docs.superserve.ai/cli): All commands and flags - login, deploy, init, run, secrets, agents, and sessions.
 
 ## Frameworks
 
-Superserve works with any agent framework. Your agent reads from stdin and writes to stdout — no SDK or wrapper required.
+Superserve works with any agent framework. Your agent reads from stdin and writes to stdout - no SDK or wrapper required.
 
-- [Claude Agent SDK](https://docs.superserve.ai/frameworks/claude-agent-sdk): Deploy a Claude agent with tool use and conversation memory.
-- [OpenAI Agents SDK](https://docs.superserve.ai/frameworks/openai-agents-sdk): Deploy an OpenAI agent with handoffs and guardrails.
-- [LangChain](https://docs.superserve.ai/frameworks/langchain): Deploy a LangChain agent with chains and retrieval.
-- [Pydantic AI](https://docs.superserve.ai/frameworks/pydantic-ai): Deploy a type-safe agent with structured outputs.
+- [Claude Agent SDK](https://docs.superserve.ai/frameworks/claude-agent-sdk): Deploy a Claude agent with tool use and conversation memory. Python and TypeScript examples.
+- [OpenAI Agents SDK](https://docs.superserve.ai/frameworks/openai-agents-sdk): Deploy an OpenAI agent with handoffs and guardrails. Python and TypeScript examples.
+- [LangChain](https://docs.superserve.ai/frameworks/langchain): Deploy a LangChain agent with chains and retrieval. Python and TypeScript examples.
+- [Pydantic AI](https://docs.superserve.ai/frameworks/pydantic-ai): Deploy a type-safe agent with structured outputs. Python example.
 - [Agno](https://docs.superserve.ai/frameworks/agno): Deploy a lightweight Python agent.
-- [Mastra](https://docs.superserve.ai/frameworks/mastra): Deploy a TypeScript-first agent with AI SDK.
+- [Mastra](https://docs.superserve.ai/frameworks/mastra): Deploy a TypeScript-first agent with AI SDK. TypeScript example.
