@@ -14,12 +14,12 @@ const PUBLIC_ROUTES = [
 ];
 
 export async function middleware(request: NextRequest) {
-  const { supabase, response } = createMiddlewareClient(request);
-  if (!supabase) return response;
+  const client = createMiddlewareClient(request);
+  if (!client.supabase) return client.response;
 
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await client.supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
   const isPublicRoute = matchesRoute(pathname, PUBLIC_ROUTES);
@@ -31,7 +31,7 @@ export async function middleware(request: NextRequest) {
     return Response.redirect(signinUrl);
   }
 
-  return response;
+  return client.response;
 }
 
 export const config = {

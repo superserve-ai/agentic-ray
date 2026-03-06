@@ -2,7 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
 export function matchesRoute(pathname: string, routes: string[]): boolean {
-  return routes.some((route) => pathname.startsWith(route));
+  return routes.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
 }
 
 export function createMiddlewareClient(request: NextRequest) {
@@ -12,7 +14,7 @@ export function createMiddlewareClient(request: NextRequest) {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !anonKey) {
-    return { supabase: null, response };
+    return { supabase: null, get response() { return response; } };
   }
 
   const cookieDomain = process.env.NEXT_PUBLIC_COOKIE_DOMAIN;
@@ -35,5 +37,5 @@ export function createMiddlewareClient(request: NextRequest) {
     },
   });
 
-  return { supabase, response };
+  return { supabase, get response() { return response; } };
 }

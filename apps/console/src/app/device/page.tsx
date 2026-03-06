@@ -76,7 +76,7 @@ function DevicePageContent() {
     try {
       const supabase = createBrowserClient();
       const callbackUrl = new URL("/auth/callback", window.location.origin);
-      callbackUrl.searchParams.set("next", `/device?code=${userCode}`);
+      callbackUrl.searchParams.set("next", `/device?code=${encodeURIComponent(userCode ?? "")}`);
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",

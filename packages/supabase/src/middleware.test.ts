@@ -17,7 +17,7 @@ vi.mock("next/server", () => ({
 import { createMiddlewareClient, matchesRoute } from "./middleware";
 
 describe("matchesRoute", () => {
-  it("returns true when pathname starts with a route", () => {
+  it("returns true for exact match", () => {
     expect(matchesRoute("/auth/signin", ["/auth/signin", "/auth/signup"])).toBe(
       true,
     );
@@ -33,6 +33,10 @@ describe("matchesRoute", () => {
     expect(matchesRoute("/dashboard", ["/auth/signin", "/auth/signup"])).toBe(
       false,
     );
+  });
+
+  it("does not false-positive on prefix overlap", () => {
+    expect(matchesRoute("/authentication", ["/auth"])).toBe(false);
   });
 });
 
@@ -69,5 +73,24 @@ describe("createMiddlewareClient", () => {
       "test-key",
       expect.objectContaining({ cookies: expect.any(Object) }),
     );
+  });
+
+  it("response getter returns fresh response after setAll", () => {
+    const firstResponse = { cookies: { set: vi.fn() } };
+    const secondResponse = { cookies: { set: vi.fn() } };
+    mockNextResponse.next
+      .mockReturnValueOnce(firstResponse)
+      .mockReturnValueOnce(secondResponse);
+
+    const mockRequest = { cookies: { getAll: vi.fn(), set: vi.fn() } };
+    const result = createMiddlewareClient(mockRequest as never);
+
+    // Simulate setAll being called (triggers response reassignment)
+    const cookieConfig = mockCreateServerClient.mock.calls[0][2];
+    cookieConfig.cookies.setAll([
+      { name: "token", value: "abc", options: {} },
+    ]);
+
+    expect(result.response).toBe(secondResponse);
   });
 });

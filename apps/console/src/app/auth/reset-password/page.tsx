@@ -39,7 +39,8 @@ function ResetPasswordContent() {
       const supabase = createBrowserClient();
       const { error } = await supabase.auth.updateUser({ password });
       if (error) {
-        addToast(error.message, "error");
+        console.error("Reset password error:", error.message);
+        addToast("Failed to update password. Please try again.", "error");
         return;
       }
       addToast("Password updated successfully.", "success");
