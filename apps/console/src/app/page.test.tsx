@@ -22,6 +22,7 @@ vi.mock("next/link", () => ({
 const mockAddToast = vi.fn();
 vi.mock("@superserve/ui", () => ({
   useToast: () => ({ addToast: mockAddToast }),
+  cn: (...args: unknown[]) => args.filter(Boolean).join(" "),
   Button: (props: React.JSX.IntrinsicElements["button"]) => (
     <button {...props} />
   ),
@@ -49,6 +50,17 @@ vi.mock("@superserve/ui", () => ({
     variant?: string;
     className?: string;
   }) => <div role="alert">{children}</div>,
+  Card: ({
+    children,
+    ...props
+  }: React.JSX.IntrinsicElements["div"]) => <div {...props}>{children}</div>,
+  Badge: ({
+    children,
+  }: {
+    children: React.ReactNode;
+    variant?: string;
+    dot?: boolean;
+  }) => <span>{children}</span>,
 }));
 
 const mockGetUser = vi.fn();
@@ -104,6 +116,84 @@ describe("DashboardPage", () => {
     });
   });
 
+  function mockFromWithNoAgents(earlyAccessData: { id: string } | null = null) {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "agents") {
+        return {
+          select: () => ({
+            eq: () => ({
+              limit: () => Promise.resolve({ data: [] }),
+            }),
+          }),
+        };
+      }
+      return {
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () => Promise.resolve({ data: earlyAccessData }),
+          }),
+        }),
+      };
+    });
+  }
+
+  it("redirects to playground when user has agents", async () => {
+    const originalLocation = window.location;
+    const assignMock = vi.fn();
+    Object.defineProperty(window, "location", {
+      value: { ...originalLocation, href: originalLocation.href },
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(window.location, "href", {
+      set: assignMock,
+      configurable: true,
+    });
+
+    mockGetUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-123",
+          email: "test@test.com",
+          user_metadata: { full_name: "Test User" },
+        },
+      },
+    });
+    mockFrom.mockImplementation((table: string) => {
+      if (table === "agents") {
+        return {
+          select: () => ({
+            eq: () => ({
+              limit: () =>
+                Promise.resolve({ data: [{ id: "agt_abc123" }] }),
+            }),
+          }),
+        };
+      }
+      return {
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () => Promise.resolve({ data: null }),
+          }),
+        }),
+      };
+    });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(assignMock).toHaveBeenCalledWith(
+        "https://playground.superserve.ai",
+      );
+    });
+
+    Object.defineProperty(window, "location", {
+      value: originalLocation,
+      writable: true,
+      configurable: true,
+    });
+  });
+
   it("renders CLI instructions and request access link for authenticated user", async () => {
     mockGetUser.mockResolvedValue({
       data: {
@@ -114,13 +204,7 @@ describe("DashboardPage", () => {
         },
       },
     });
-    mockFrom.mockReturnValue({
-      select: () => ({
-        eq: () => ({
-          maybeSingle: () => Promise.resolve({ data: null }),
-        }),
-      }),
-    });
+    mockFromWithNoAgents();
 
     render(<DashboardPage />);
 
@@ -141,13 +225,7 @@ describe("DashboardPage", () => {
         },
       },
     });
-    mockFrom.mockReturnValue({
-      select: () => ({
-        eq: () => ({
-          maybeSingle: () => Promise.resolve({ data: null }),
-        }),
-      }),
-    });
+    mockFromWithNoAgents();
 
     render(<DashboardPage />);
 
@@ -180,13 +258,7 @@ describe("DashboardPage", () => {
         },
       },
     });
-    mockFrom.mockReturnValue({
-      select: () => ({
-        eq: () => ({
-          maybeSingle: () => Promise.resolve({ data: { id: "req-1" } }),
-        }),
-      }),
-    });
+    mockFromWithNoAgents({ id: "req-1" });
 
     render(<DashboardPage />);
 
