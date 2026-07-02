@@ -3,6 +3,7 @@
 import { cn, TooltipProvider } from "@superserve/ui"
 
 import { CommandPalette } from "@/components/command-palette"
+import { QuotaWarningBanner } from "@/components/quota/quota-warning-banner"
 import { Sidebar } from "@/components/sidebar/sidebar"
 import {
   SidebarProvider,
