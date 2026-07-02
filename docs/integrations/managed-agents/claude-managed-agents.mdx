@@ -501,7 +501,7 @@ The orchestrator reads `superserve.sandbox_id` from `work.data.metadata` and con
 ## What you get
 
 - **Firecracker microVM isolation.** Each session runs in its own lightweight VM - not a shared container. Process tree, filesystem, and network namespace are fully isolated. A compromised sandbox cannot affect others.
-- **Fast startup (<50ms).** Sandboxes are ready instantly. No image pull, no package install, no boot sequence at session time.
+- **Fast startup (`<50ms`).** Sandboxes are ready instantly. No image pull, no package install, no boot sequence at session time.
 - **Pause and resume.** Checkpoint the full sandbox state between turns. Resume picks up exactly where it left off - running processes, open files, in-memory state. Pay for compute only when the agent is actively working.
 - **Per-sandbox network isolation.** Each sandbox gets its own network namespace with CIDR and domain-based egress filtering. Lock the agent down to `api.anthropic.com` only, or open access to specific internal services.
 - **The sandbox is yours.** Beyond running the agent's tools, you control the full VM. Pre-install packages in the template, mount data via the files API, stream command output for observability. The tool runner is one process in a VM you own.
