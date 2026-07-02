@@ -5,9 +5,37 @@ import crypto from "node:crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createServerClient } from "@/lib/supabase/server"
 
-function generateRawKey(): string {
+// Region codes embedded in new API keys (ss_live_<region>_...). Must stay in
+// sync with the team_home_region_valid CHECK constraint in the control-plane
+// schema. The region segment lets the API edge route a request to the team's
+// home cell from the key string alone — no directory lookup. Legacy keys
+// without a region segment keep working: the control plane hashes the whole
+// string, so the format is opaque to auth.
+const REGION_CODES = new Set(["use", "usw"])
+const DEFAULT_REGION = "use"
+
+function generateRawKey(region: string): string {
   const bytes = crypto.randomBytes(24)
-  return `ss_live_${bytes.toString("base64url")}`
+  return `ss_live_${region}_${bytes.toString("base64url")}`
+}
+
+/**
+ * A team's home region determines which cell serves its API traffic; new keys
+ * carry it as a routing hint. Falls back to the default region if the
+ * home_region migration hasn't been applied yet or the value is unknown, so
+ * key creation never breaks on schema skew.
+ */
+async function getTeamHomeRegion(teamId: string): Promise<string> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("team")
+    .select("home_region")
+    .eq("id", teamId)
+    .single()
+  if (error || !data?.home_region || !REGION_CODES.has(data.home_region)) {
+    return DEFAULT_REGION
+  }
+  return data.home_region as string
 }
 
 function hashKey(key: string): string {
@@ -121,9 +149,13 @@ export async function createApiKeyAction(name: string) {
 
   const teamId = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
 
-  const rawKey = generateRawKey()
+  const region = await getTeamHomeRegion(teamId)
+  const rawKey = generateRawKey(region)
   const keyHash = hashKey(rawKey)
-  const keyPrefix = `ss_live_${rawKey.slice(8, 16)}...`
+  // ss_live_<region>_ plus the first 8 random chars, e.g. "ss_live_use_AbCdEfGh..."
+  // Sliced relative to the region length so a future region code of a
+  // different length still shows exactly 8 random chars.
+  const keyPrefix = `${rawKey.slice(0, `ss_live_${region}_`.length + 8)}...`
 
   const admin = createAdminClient()
   const { data, error } = await admin
