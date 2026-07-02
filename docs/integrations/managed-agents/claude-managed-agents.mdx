@@ -363,7 +363,7 @@ Keep `ANTHROPIC_ENVIRONMENT_KEY` on the orchestrator host only. The orchestrator
 </Warning>
 
 <Tip>
-To reduce costs, pause sandboxes that sit idle between turns. Superserve's `pause()` checkpoints the full VM state - memory, processes, and filesystem - at zero compute cost. The next work item for that session calls `resume()` and picks up exactly where it left off, in under a second.
+To reduce costs, pause sandboxes that sit idle between turns. Superserve's `pause()` checkpoints the full VM state - memory, processes, and filesystem - at zero compute cost. The next work item for that session calls `resume()` and picks up exactly where it left off, in under 50ms.
 </Tip>
 
 ## Start a session
