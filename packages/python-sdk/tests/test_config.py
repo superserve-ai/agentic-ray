@@ -9,6 +9,7 @@ from superserve._config import (
     MAX_PREVIEW_PORT,
     MIN_PREVIEW_PORT,
     _derive_sandbox_host,
+    _region_from_api_key,
     data_plane_target,
     preview_url,
     resolve_config,
@@ -53,6 +54,80 @@ class TestResolveConfig:
         monkeypatch.delenv("SUPERSERVE_BASE_URL", raising=False)
         cfg = resolve_config()
         assert cfg.base_url == DEFAULT_BASE_URL
+
+
+class TestRegionDerivation:
+    @pytest.fixture(autouse=True)
+    def _no_base_url_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("SUPERSERVE_BASE_URL", raising=False)
+
+    def test_known_region_key_resolves_mapped_endpoints(self) -> None:
+        cfg = resolve_config(api_key="ss_live_use_abc123")
+        assert cfg.base_url == "https://api.superserve.ai"
+        assert cfg.sandbox_host == "sandbox.superserve.ai"
+
+    def test_unknown_region_falls_back_to_default(self) -> None:
+        # `usw` won't enter the known-regions map until its DNS is live.
+        cfg = resolve_config(api_key="ss_live_usw_abc123")
+        assert cfg.base_url == DEFAULT_BASE_URL
+        assert cfg.sandbox_host == DEFAULT_SANDBOX_HOST
+
+    def test_legacy_key_uses_default(self) -> None:
+        cfg = resolve_config(api_key="ss_live_a1B2c3D4")
+        assert cfg.base_url == DEFAULT_BASE_URL
+        assert cfg.sandbox_host == DEFAULT_SANDBOX_HOST
+
+    def test_legacy_key_with_underscore_collision_uses_default(self) -> None:
+        # Legacy base64url random parts may contain `_`, so this key parses
+        # as region "abc123" — not in the map, so defaults win, which is
+        # correct for all legacy keys (they are all us-east).
+        cfg = resolve_config(api_key="ss_live_abc123_def456")
+        assert cfg.base_url == DEFAULT_BASE_URL
+        assert cfg.sandbox_host == DEFAULT_SANDBOX_HOST
+
+    def test_explicit_base_url_beats_region(self) -> None:
+        cfg = resolve_config(
+            api_key="ss_live_use_abc123", base_url="https://arg.example.com"
+        )
+        assert cfg.base_url == "https://arg.example.com"
+        assert cfg.sandbox_host == DEFAULT_SANDBOX_HOST
+
+    def test_env_base_url_beats_region(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SUPERSERVE_BASE_URL", "https://env.example.com")
+        cfg = resolve_config(api_key="ss_live_use_abc123")
+        assert cfg.base_url == "https://env.example.com"
+
+
+class TestRegionFromApiKey:
+    @pytest.mark.parametrize(
+        ("key", "region"),
+        [
+            ("ss_live_use_abc123", "use"),
+            ("ss_live_usw_abc123", "usw"),
+            ("ss_live_a_b", "a"),
+            ("ss_live_" + "a" * 17 + "_rest", "a" * 17),
+        ],
+    )
+    def test_extracts_valid_region_tokens(self, key: str, region: str) -> None:
+        assert _region_from_api_key(key) == region
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "ss_live_a1B2c3D4",  # legacy: no second segment
+            "ss_live_USE_abc",  # uppercase is not a region token
+            "ss_live_us-e_abc",  # non-alphanumeric
+            "ss_live_" + "a" * 18 + "_rest",  # too long
+            "ss_live_use_",  # nothing after the region
+            "ss_live__abc",  # empty region
+            "ss_test_use_abc",  # wrong prefix
+            "ss_live_",
+            "",
+            "not a key",
+        ],
+    )
+    def test_returns_none_for_legacy_or_weird_keys(self, key: str) -> None:
+        assert _region_from_api_key(key) is None
 
 
 class TestDeriveSandboxHost:

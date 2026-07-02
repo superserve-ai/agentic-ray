@@ -10,6 +10,37 @@ import { AuthenticationError, ValidationError } from "./errors.js"
 const DEFAULT_BASE_URL = "https://api.superserve.ai"
 const DEFAULT_SANDBOX_HOST = "sandbox.superserve.ai"
 
+/**
+ * Known Superserve regions, keyed by the region token embedded in API keys
+ * (`ss_live_<region>_<random>`).
+ *
+ * Only regions whose DNS is live may be listed here: the SDK must never
+ * construct a hostname before that region's endpoints exist. `usw` will be
+ * added once `https://api-usw.superserve.ai` / `usw-sandbox.superserve.ai`
+ * are up.
+ *
+ * Legacy keys (`ss_live_<random>`, whose base64url random part may itself
+ * contain `_`) can coincidentally parse as having a region segment. That is
+ * harmless by design: any token not in this map falls back to the defaults,
+ * which is correct for every legacy key (they are all us-east).
+ */
+const KNOWN_REGIONS: ReadonlyMap<
+  string,
+  { baseUrl: string; sandboxHost: string }
+> = new Map([
+  [
+    "use",
+    {
+      baseUrl: "https://api.superserve.ai",
+      sandboxHost: "sandbox.superserve.ai",
+    },
+  ],
+])
+
+// Region token in `ss_live_<region>_<random>`: 1-17 lowercase alphanumeric
+// chars, followed by at least one more character of key material.
+const REGION_KEY_RE = /^ss_live_([a-z0-9]{1,17})_./
+
 export interface ResolvedConfig {
   apiKey: string
   baseUrl: string
@@ -20,6 +51,9 @@ export interface ResolvedConfig {
  * Resolve connection config from explicit options + environment variables.
  *
  * Priority: explicit option > SUPERSERVE_API_KEY / SUPERSERVE_BASE_URL env vars.
+ * Base URL priority continues: region derived from the API key via
+ * `KNOWN_REGIONS` > `DEFAULT_BASE_URL`. The sandbox host follows the same
+ * source (derived from the override URL, or taken from the region map).
  * Throws if no API key can be resolved.
  */
 export function resolveConfig(opts?: {
@@ -32,10 +66,38 @@ export function resolveConfig(opts?: {
       "Missing API key. Pass `apiKey` or set the SUPERSERVE_API_KEY environment variable.",
     )
   }
-  const baseUrl =
-    opts?.baseUrl ?? process.env.SUPERSERVE_BASE_URL ?? DEFAULT_BASE_URL
-  const sandboxHost = deriveSandboxHost(baseUrl)
-  return { apiKey, baseUrl, sandboxHost }
+  const overrideUrl = opts?.baseUrl ?? process.env.SUPERSERVE_BASE_URL
+  if (overrideUrl !== undefined) {
+    return {
+      apiKey,
+      baseUrl: overrideUrl,
+      sandboxHost: deriveSandboxHost(overrideUrl),
+    }
+  }
+  const region = regionFromApiKey(apiKey)
+  const endpoints = region !== undefined ? KNOWN_REGIONS.get(region) : undefined
+  if (endpoints !== undefined) {
+    return {
+      apiKey,
+      baseUrl: endpoints.baseUrl,
+      sandboxHost: endpoints.sandboxHost,
+    }
+  }
+  return {
+    apiKey,
+    baseUrl: DEFAULT_BASE_URL,
+    sandboxHost: DEFAULT_SANDBOX_HOST,
+  }
+}
+
+/**
+ * Extract the candidate region token from an API key, if any.
+ *
+ * Returns `undefined` for legacy keys and anything else that doesn't match
+ * `ss_live_<region>_<random>`. Never throws on weird keys.
+ */
+function regionFromApiKey(apiKey: string): string | undefined {
+  return REGION_KEY_RE.exec(apiKey)?.[1]
 }
 
 // Sandbox hosts where the proxy supports shared-host routing.

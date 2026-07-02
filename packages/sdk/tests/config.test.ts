@@ -88,6 +88,66 @@ describe("resolveConfig", () => {
     })
     expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")
   })
+
+  it("derives endpoints from a known region key", () => {
+    const cfg = resolveConfig({ apiKey: "ss_live_use_abc123" })
+    expect(cfg.baseUrl).toBe("https://api.superserve.ai")
+    expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")
+  })
+
+  it("falls back to defaults for an unknown region", () => {
+    // `usw` won't enter the known-regions map until its DNS is live.
+    const cfg = resolveConfig({ apiKey: "ss_live_usw_abc123" })
+    expect(cfg.baseUrl).toBe("https://api.superserve.ai")
+    expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")
+  })
+
+  it("falls back to defaults for legacy keys", () => {
+    const cfg = resolveConfig({ apiKey: "ss_live_a1B2c3D4" })
+    expect(cfg.baseUrl).toBe("https://api.superserve.ai")
+    expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")
+  })
+
+  it("falls back to defaults for a legacy key whose `_` mimics a region", () => {
+    // Legacy base64url random parts may contain `_`, so this parses as
+    // region "abc123" — not in the map, so defaults win, which is correct
+    // for all legacy keys (they are all us-east).
+    const cfg = resolveConfig({ apiKey: "ss_live_abc123_def456" })
+    expect(cfg.baseUrl).toBe("https://api.superserve.ai")
+    expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")
+  })
+
+  it("never resolves a region from prototype members or weird keys", () => {
+    for (const apiKey of [
+      "ss_live_constructor_x",
+      "ss_live_USE_abc", // uppercase is not a region token
+      "ss_live_us-e_abc", // non-alphanumeric
+      `ss_live_${"a".repeat(18)}_rest`, // too long
+      "ss_live_use_", // nothing after the region
+      "ss_live__abc", // empty region
+      "ss_live_",
+      "not a key",
+    ]) {
+      const cfg = resolveConfig({ apiKey })
+      expect(cfg.baseUrl).toBe("https://api.superserve.ai")
+      expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")
+    }
+  })
+
+  it("uses explicit baseUrl over region derivation", () => {
+    const cfg = resolveConfig({
+      apiKey: "ss_live_use_abc123",
+      baseUrl: "https://explicit.example.com",
+    })
+    expect(cfg.baseUrl).toBe("https://explicit.example.com")
+    expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")
+  })
+
+  it("uses SUPERSERVE_BASE_URL env var over region derivation", () => {
+    vi.stubEnv("SUPERSERVE_BASE_URL", "https://env.example.com")
+    const cfg = resolveConfig({ apiKey: "ss_live_use_abc123" })
+    expect(cfg.baseUrl).toBe("https://env.example.com")
+  })
 })
 
 describe("dataPlaneTarget", () => {
