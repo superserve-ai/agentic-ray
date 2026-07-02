@@ -14,10 +14,12 @@ const DEFAULT_SANDBOX_HOST = "sandbox.superserve.ai"
  * Known Superserve regions, keyed by the region token embedded in API keys
  * (`ss_live_<region>_<random>`).
  *
- * Only regions whose DNS is live may be listed here: the SDK must never
- * construct a hostname before that region's endpoints exist. `usw` will be
- * added once `https://api-usw.superserve.ai` / `usw-sandbox.superserve.ai`
- * are up.
+ * A region may be listed here only once its endpoints ACTUALLY SERVE THE
+ * API — DNS resolving is not the bar: superserve.ai has a catch-all
+ * wildcard, so every derived hostname resolves and answers with a
+ * valid-TLS 404 from the wrong infrastructure. Verify with a live /health
+ * check, not dig. `usw` will be added once `https://api-usw.superserve.ai`
+ * / `usw-sandbox.superserve.ai` serve their cell.
  *
  * Legacy keys (`ss_live_<random>`, whose base64url random part may itself
  * contain `_`) can coincidentally parse as having a region segment. That is
