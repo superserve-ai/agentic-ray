@@ -30,11 +30,19 @@ describe("DateRangeFilter", () => {
 
     render(<DateRangeFilter value={null} onChange={onChange} />)
 
+    // Days 1 and 2 of the current month are always in the calendar's initial
+    // view; deriving them keeps the test from expiring with the calendar
+    // month (hardcoded June dates broke when July started).
+    const start = new Date()
+    start.setDate(2)
+    const end = new Date()
+    end.setDate(1)
+
     await user.click(
       screen.getByRole("button", { name: "Select a custom date range" }),
     )
-    await user.click(screen.getByRole("button", { name: "Tue Jun 02 2026" }))
-    await user.click(screen.getByRole("button", { name: "Mon Jun 01 2026" }))
+    await user.click(screen.getByRole("button", { name: start.toDateString() }))
+    await user.click(screen.getByRole("button", { name: end.toDateString() }))
     await user.click(screen.getByRole("button", { name: "Apply" }))
 
     expect(onChange).not.toHaveBeenCalled()
