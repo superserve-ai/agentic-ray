@@ -7,6 +7,7 @@ import {
   ImpersonationStateProvider,
 } from "@/components/admin/impersonation-context"
 import { CommandPalette } from "@/components/command-palette"
+import { QuotaWarningBanner } from "@/components/quota/quota-warning-banner"
 import { Sidebar } from "@/components/sidebar/sidebar"
 import {
   SidebarProvider,
@@ -42,7 +43,10 @@ function DashboardContent({
             isCollapsed ? "ml-16" : "ml-64",
           )}
         >
-          {children}
+          <QuotaWarningBanner />
+          {/* Owns the height left after the banner so full-height (h-full) pages
+              measure the remaining space instead of overflowing the clipped main. */}
+          <div className="flex min-h-0 flex-1 flex-col">{children}</div>
         </main>
       </div>
     </div>
