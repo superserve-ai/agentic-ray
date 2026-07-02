@@ -83,3 +83,8 @@ export const templateKeys = {
   build: (templateId: string, buildId: string) =>
     [...templateKeys.builds(templateId), buildId] as const,
 }
+
+export const quotaKeys = {
+  all: ["quota"] as const,
+  usage: () => [...quotaKeys.all, "usage"] as const,
+}
