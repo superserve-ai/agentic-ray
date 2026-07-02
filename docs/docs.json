@@ -227,8 +227,12 @@
         ]
       },
       {
-        "tab": "Integration Guides",
+        "tab": "Cookbook",
         "groups": [
+          {
+            "group": "Recipes",
+            "pages": ["cookbook/pr-loop", "cookbook/software-factory"]
+          },
           {
             "group": "MCP",
             "tag": "NEW",
@@ -260,15 +264,6 @@
               "integrations/agent-harnesses/claude-agent-sdk",
               "integrations/agent-harnesses/openai-agents-sdk"
             ]
-          }
-        ]
-      },
-      {
-        "tab": "Cookbook",
-        "groups": [
-          {
-            "group": "Recipes",
-            "pages": ["cookbook/pr-loop", "cookbook/software-factory"]
           }
         ]
       }
