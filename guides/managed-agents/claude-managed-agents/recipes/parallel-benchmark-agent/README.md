@@ -2,7 +2,7 @@
 
 A Claude Managed Agent that benchmarks code across multiple configurations simultaneously. The agent writes a parallel harness that spins up N isolated Superserve sandboxes — one per variant — runs them all concurrently, collects timing results, and synthesizes a comparison report.
 
-**The core pitch:** Benchmarking 9 configurations sequentially takes 9× longer than benchmarking them in parallel. Superserve sandboxes boot in under a second and run truly isolated. The agent drives all of this autonomously.
+**The core pitch:** Benchmarking 9 configurations sequentially takes 9× longer than benchmarking them in parallel. Superserve sandboxes boot in under 50ms and run truly isolated. The agent drives all of this autonomously.
 
 This is the **technical showpiece** recipe — it demonstrates hierarchical sandbox usage (an agent that creates sandboxes) and Superserve's architecture most clearly.
 
