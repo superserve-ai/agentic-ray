@@ -164,7 +164,9 @@ export async function createApiKeyAction(name: string) {
   const rawKey = generateRawKey(region)
   const keyHash = hashKey(rawKey)
   // ss_live_<region>_ plus the first 8 random chars, e.g. "ss_live_use_AbCdEfGh..."
-  const keyPrefix = `${rawKey.slice(0, 20)}...`
+  // Sliced relative to the region length so a future region code of a
+  // different length still shows exactly 8 random chars.
+  const keyPrefix = `${rawKey.slice(0, `ss_live_${region}_`.length + 8)}...`
 
   const admin = createAdminClient()
   const { data, error } = await admin

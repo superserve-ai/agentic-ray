@@ -75,7 +75,9 @@ describe("createApiKeyAction region-prefixed keys", () => {
     const res = await createApiKeyAction("test")
 
     expect(res.key).toMatch(/^ss_live_usw_[A-Za-z0-9_-]{32}$/)
-    expect(res.prefix).toBe(`${res.key.slice(0, 20)}...`)
+    // Exactly 8 random chars after the region segment.
+    const randomPart = res.key.slice("ss_live_usw_".length)
+    expect(res.prefix).toBe(`ss_live_usw_${randomPart.slice(0, 8)}...`)
     // Stored hash covers the full key string, region segment included.
     const wantHash = crypto.createHash("sha256").update(res.key).digest("hex")
     expect(insertedApiKeyRow?.key_hash).toBe(wantHash)
