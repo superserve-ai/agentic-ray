@@ -97,6 +97,14 @@ class TestRegionDerivation:
         cfg = resolve_config(api_key="ss_live_use_abc123")
         assert cfg.base_url == "https://env.example.com"
 
+    def test_region_key_sourced_from_env_var(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SUPERSERVE_API_KEY", "ss_live_use_abc123")
+        cfg = resolve_config()
+        assert cfg.base_url == "https://api.superserve.ai"
+        assert cfg.sandbox_host == "sandbox.superserve.ai"
+
 
 class TestRegionFromApiKey:
     @pytest.mark.parametrize(

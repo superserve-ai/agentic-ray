@@ -148,6 +148,13 @@ describe("resolveConfig", () => {
     const cfg = resolveConfig({ apiKey: "ss_live_use_abc123" })
     expect(cfg.baseUrl).toBe("https://env.example.com")
   })
+
+  it("derives endpoints from a region key sourced from SUPERSERVE_API_KEY", () => {
+    vi.stubEnv("SUPERSERVE_API_KEY", "ss_live_use_abc123")
+    const cfg = resolveConfig()
+    expect(cfg.baseUrl).toBe("https://api.superserve.ai")
+    expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")
+  })
 })
 
 describe("dataPlaneTarget", () => {
