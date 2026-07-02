@@ -63,208 +63,183 @@
     }
   ],
   "navigation": {
-    "tabs": [
+    "groups": [
       {
-        "tab": "Documentation",
-        "groups": [
-          {
-            "group": "Get Started",
-            "pages": ["introduction", "quickstart", "api-key"]
-          },
-          {
-            "group": "Sandbox",
-            "pages": [
-              "sandbox/create",
-              "sandbox/connect",
-              "sandbox/lifecycle",
-              "sandbox/metadata",
-              "sandbox/networking",
-              "sandbox/network-log"
-            ]
-          },
-          {
-            "group": "Secrets & env vars",
-            "pages": [
-              "sandbox/environment-variables",
-              "secrets/overview",
-              "secrets/create",
-              "secrets/binding",
-              "secrets/audit"
-            ]
-          },
-          {
-            "group": "Templates",
-            "pages": [
-              "templates/overview",
-              "templates/create",
-              "templates/lifecycle",
-              "templates/build-spec"
-            ]
-          },
-          {
-            "group": "Commands",
-            "pages": [
-              "commands/overview",
-              "commands/streaming",
-              "commands/sessions"
-            ]
-          },
-          {
-            "group": "Filesystem",
-            "pages": ["filesystem/read-write"]
-          },
-          {
-            "group": "Storage",
-            "pages": ["storage/mesa", "storage/archil", "storage/cloud-buckets"]
-          },
-          {
-            "group": "Errors",
-            "pages": ["errors"]
-          }
+        "group": "Get Started",
+        "pages": ["introduction", "quickstart", "api-key"]
+      },
+      {
+        "group": "Sandbox",
+        "pages": [
+          "sandbox/create",
+          "sandbox/connect",
+          "sandbox/lifecycle",
+          "sandbox/metadata",
+          "sandbox/networking",
+          "sandbox/network-log"
         ]
       },
       {
-        "tab": "Reference",
-        "dropdowns": [
-          {
-            "dropdown": "SDK Reference",
-            "icon": "code",
-            "groups": [
-              {
-                "group": "Reference",
-                "pages": [
-                  "sdk-reference/sandbox",
-                  "sdk-reference/secret",
-                  "sdk-reference/template",
-                  "sdk-reference/commands",
-                  "sdk-reference/files"
-                ]
-              }
-            ]
-          },
-          {
-            "dropdown": "REST API",
-            "icon": "server",
-            "openapi": "https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml",
-            "groups": [
-              {
-                "group": "Sandboxes",
-                "pages": [
-                  "GET /sandboxes",
-                  "POST /sandboxes",
-                  "GET /sandboxes/{sandbox_id}",
-                  "PATCH /sandboxes/{sandbox_id}",
-                  "DELETE /sandboxes/{sandbox_id}",
-                  "POST /sandboxes/{sandbox_id}/pause",
-                  "POST /sandboxes/{sandbox_id}/resume",
-                  "POST /sandboxes/{sandbox_id}/activate",
-                  "GET /sandboxes/{sandbox_id}/network"
-                ]
-              },
-              {
-                "group": "Exec",
-                "pages": [
-                  "POST /exec",
-                  "POST /exec/stream",
-                  "GET /exec/connect"
-                ]
-              },
-              {
-                "group": "Files",
-                "pages": [
-                  "GET /sandboxes/{sandbox_id}/files",
-                  "GET /files",
-                  "POST /files"
-                ]
-              },
-              {
-                "group": "Templates",
-                "pages": [
-                  "GET /templates",
-                  "POST /templates",
-                  "GET /templates/{template_id}",
-                  "DELETE /templates/{template_id}",
-                  "GET /templates/{template_id}/builds",
-                  "POST /templates/{template_id}/builds",
-                  "GET /templates/{template_id}/builds/{build_id}",
-                  "DELETE /templates/{template_id}/builds/{build_id}",
-                  "GET /templates/{template_id}/builds/{build_id}/logs"
-                ]
-              },
-              {
-                "group": "Secrets",
-                "pages": [
-                  "POST /secrets",
-                  "GET /secrets",
-                  "GET /secrets/{name}",
-                  "PATCH /secrets/{name}",
-                  "DELETE /secrets/{name}",
-                  "POST /sandboxes/{sandbox_id}/secrets",
-                  "DELETE /sandboxes/{sandbox_id}/secrets/{env_key}",
-                  "GET /secrets/{name}/audit",
-                  "GET /secrets/{name}/sandboxes",
-                  "GET /providers"
-                ]
-              },
-              {
-                "group": "Billing",
-                "pages": ["GET /billing/pricing", "GET /billing/pricing/public"]
-              },
-              {
-                "group": "Team Management",
-                "pages": [
-                  "GET /teams/{team_id}/management",
-                  "GET /teams/{team_id}/members",
-                  "POST /teams/{team_id}/members",
-                  "DELETE /teams/{team_id}/members/{user_id}",
-                  "GET /teams/{team_id}/roles",
-                  "POST /teams/{team_id}/roles",
-                  "DELETE /teams/{team_id}/roles/{assignment_id}"
-                ]
-              }
-            ]
-          }
+        "group": "Secrets & env vars",
+        "pages": [
+          "sandbox/environment-variables",
+          "secrets/overview",
+          "secrets/create",
+          "secrets/binding",
+          "secrets/audit"
         ]
       },
       {
-        "tab": "Cookbook",
-        "groups": [
-          {
-            "group": "Recipes",
-            "pages": ["cookbook/pr-loop", "cookbook/software-factory"]
-          },
-          {
-            "group": "MCP",
-            "tag": "NEW",
-            "pages": ["integrations/mcp"]
-          },
-          {
-            "group": "Coding Agents",
-            "pages": [
-              "integrations/coding-agents/claude",
-              "integrations/coding-agents/codex",
-              "integrations/coding-agents/opencode",
-              "integrations/coding-agents/kilocode"
-            ]
-          },
-          {
-            "group": "Personal Agents",
-            "pages": [
-              "integrations/personal-agents/openclaw",
-              "integrations/personal-agents/hermes"
-            ]
-          },
-          {
-            "group": "Managed Agents",
-            "pages": ["integrations/managed-agents/claude-managed-agents"]
-          },
-          {
-            "group": "Agent Harnesses",
-            "pages": [
-              "integrations/agent-harnesses/claude-agent-sdk",
-              "integrations/agent-harnesses/openai-agents-sdk"
-            ]
-          }
+        "group": "Templates",
+        "pages": [
+          "templates/overview",
+          "templates/create",
+          "templates/lifecycle",
+          "templates/build-spec"
+        ]
+      },
+      {
+        "group": "Commands",
+        "pages": [
+          "commands/overview",
+          "commands/streaming",
+          "commands/sessions"
+        ]
+      },
+      {
+        "group": "Filesystem",
+        "pages": ["filesystem/read-write"]
+      },
+      {
+        "group": "Storage",
+        "pages": ["storage/mesa", "storage/archil", "storage/cloud-buckets"]
+      },
+      {
+        "group": "Errors",
+        "pages": ["errors"]
+      },
+      {
+        "group": "SDK Reference",
+        "pages": [
+          "sdk-reference/sandbox",
+          "sdk-reference/secret",
+          "sdk-reference/template",
+          "sdk-reference/commands",
+          "sdk-reference/files"
+        ]
+      },
+      {
+        "group": "API: Sandboxes",
+        "pages": [
+          "GET /sandboxes",
+          "POST /sandboxes",
+          "GET /sandboxes/{sandbox_id}",
+          "PATCH /sandboxes/{sandbox_id}",
+          "DELETE /sandboxes/{sandbox_id}",
+          "POST /sandboxes/{sandbox_id}/pause",
+          "POST /sandboxes/{sandbox_id}/resume",
+          "POST /sandboxes/{sandbox_id}/activate",
+          "GET /sandboxes/{sandbox_id}/network"
+        ],
+        "openapi": "https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml"
+      },
+      {
+        "group": "API: Exec",
+        "pages": ["POST /exec", "POST /exec/stream", "GET /exec/connect"],
+        "openapi": "https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml"
+      },
+      {
+        "group": "API: Files",
+        "pages": [
+          "GET /sandboxes/{sandbox_id}/files",
+          "GET /files",
+          "POST /files"
+        ],
+        "openapi": "https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml"
+      },
+      {
+        "group": "API: Templates",
+        "pages": [
+          "GET /templates",
+          "POST /templates",
+          "GET /templates/{template_id}",
+          "DELETE /templates/{template_id}",
+          "GET /templates/{template_id}/builds",
+          "POST /templates/{template_id}/builds",
+          "GET /templates/{template_id}/builds/{build_id}",
+          "DELETE /templates/{template_id}/builds/{build_id}",
+          "GET /templates/{template_id}/builds/{build_id}/logs"
+        ],
+        "openapi": "https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml"
+      },
+      {
+        "group": "API: Secrets",
+        "pages": [
+          "POST /secrets",
+          "GET /secrets",
+          "GET /secrets/{name}",
+          "PATCH /secrets/{name}",
+          "DELETE /secrets/{name}",
+          "POST /sandboxes/{sandbox_id}/secrets",
+          "DELETE /sandboxes/{sandbox_id}/secrets/{env_key}",
+          "GET /secrets/{name}/audit",
+          "GET /secrets/{name}/sandboxes",
+          "GET /providers"
+        ],
+        "openapi": "https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml"
+      },
+      {
+        "group": "API: Billing",
+        "pages": ["GET /billing/pricing", "GET /billing/pricing/public"],
+        "openapi": "https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml"
+      },
+      {
+        "group": "API: Team Management",
+        "pages": [
+          "GET /teams/{team_id}/management",
+          "GET /teams/{team_id}/members",
+          "POST /teams/{team_id}/members",
+          "DELETE /teams/{team_id}/members/{user_id}",
+          "GET /teams/{team_id}/roles",
+          "POST /teams/{team_id}/roles",
+          "DELETE /teams/{team_id}/roles/{assignment_id}"
+        ],
+        "openapi": "https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml"
+      },
+      {
+        "group": "Recipes",
+        "pages": ["cookbook/pr-loop", "cookbook/software-factory"]
+      },
+      {
+        "group": "MCP",
+        "tag": "NEW",
+        "pages": ["integrations/mcp"]
+      },
+      {
+        "group": "Coding Agents",
+        "pages": [
+          "integrations/coding-agents/claude",
+          "integrations/coding-agents/codex",
+          "integrations/coding-agents/opencode",
+          "integrations/coding-agents/kilocode"
+        ]
+      },
+      {
+        "group": "Personal Agents",
+        "pages": [
+          "integrations/personal-agents/openclaw",
+          "integrations/personal-agents/hermes"
+        ]
+      },
+      {
+        "group": "Managed Agents",
+        "pages": ["integrations/managed-agents/claude-managed-agents"]
+      },
+      {
+        "group": "Agent Harnesses",
+        "pages": [
+          "integrations/agent-harnesses/claude-agent-sdk",
+          "integrations/agent-harnesses/openai-agents-sdk"
         ]
       }
     ]
