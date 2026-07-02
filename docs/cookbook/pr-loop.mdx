@@ -1,0 +1,20 @@
+---
+title: "PR Loop"
+sidebarTitle: PR Loop
+description: Run a coding agent in a sandbox that iterates on a pull request until CI passes.
+icon: "arrows-rotate"
+---
+
+The **PR loop** pattern runs a coding agent inside a Superserve sandbox against a real branch: the agent makes a change, pushes it, watches the checks, and iterates on the feedback until the pull request is green — all in an isolated microVM with its own credentials and network policy.
+
+This recipe will cover:
+
+- Launching a sandbox from a template with your repo and toolchain ready
+- Scoping a GitHub token to a single repository
+- Driving the agent loop: change → push → poll checks → read feedback → retry
+- Deciding when to stop: green CI, review approval, or an iteration cap
+
+<Note>
+  This recipe is coming soon. In the meantime, see the [Integration
+  Guides](/integrations/mcp) for running coding agents in a sandbox today.
+</Note>

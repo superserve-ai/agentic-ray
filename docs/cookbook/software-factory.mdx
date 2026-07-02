@@ -1,0 +1,20 @@
+---
+title: "Software Factory"
+sidebarTitle: Software Factory
+description: Orchestrate a fleet of sandboxed agents that plan, build, and review features in parallel.
+icon: "industry"
+---
+
+The **software factory** pattern scales the PR loop out: an orchestrator fans work out to many sandboxes in parallel — one agent per task — then gathers, reviews, and merges the results. Each agent gets its own isolated microVM, its own scoped credentials, and its own audit trail.
+
+This recipe will cover:
+
+- Decomposing a feature into independent tasks an agent can own end to end
+- Spawning one sandbox per task and tracking the fleet
+- Reviewing agent output with a second pass of sandboxed reviewer agents
+- Collecting results: merging green branches and retrying failed tasks
+
+<Note>
+  This recipe is coming soon. In the meantime, see the [Integration
+  Guides](/integrations/mcp) for running coding agents in a sandbox today.
+</Note>
