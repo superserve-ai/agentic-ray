@@ -21,10 +21,13 @@ const DEFAULT_SANDBOX_HOST = "sandbox.superserve.ai"
  * check, not dig. `usw` will be added once `https://api-usw.superserve.ai`
  * / `usw-sandbox.superserve.ai` serve their cell.
  *
- * Legacy keys (`ss_live_<random>`, whose base64url random part may itself
- * contain `_`) can coincidentally parse as having a region segment. That is
- * harmless by design: any token not in this map falls back to the defaults,
- * which is correct for every legacy key (they are all us-east).
+ * Legacy keys (`ss_live_<random>`) can never be misread as region-tagged:
+ * both key formats embed the same fixed-length 32-char base64url random
+ * tail (from `crypto.randomBytes(24)`), and `REGION_KEY_RE` requires that
+ * exact tail length anchored to the end of the string. A legacy key has no
+ * room left over for a region segment on top of its own 32-char tail, so no
+ * random legacy key can ever collide with a real region token — this holds
+ * regardless of how many regions `KNOWN_REGIONS` ends up containing.
  */
 const KNOWN_REGIONS: ReadonlyMap<
   string,
@@ -40,8 +43,10 @@ const KNOWN_REGIONS: ReadonlyMap<
 ])
 
 // Region token in `ss_live_<region>_<random>`: 1-17 lowercase alphanumeric
-// chars, followed by at least one more character of key material.
-const REGION_KEY_RE = /^ss_live_([a-z0-9]{1,17})_./
+// chars, then `_`, then exactly the 32-char base64url tail every key is
+// minted with — anchored to the end so a legacy key's own tail can never be
+// mistaken for `<region>_<tail>`.
+const REGION_KEY_RE = /^ss_live_([a-z0-9]{1,17})_[A-Za-z0-9_-]{32}$/
 
 export interface ResolvedConfig {
   apiKey: string
@@ -93,10 +98,10 @@ export function resolveConfig(opts?: {
 }
 
 /**
- * Extract the candidate region token from an API key, if any.
+ * Extract the region token from an API key, if any.
  *
  * Returns `undefined` for legacy keys and anything else that doesn't match
- * `ss_live_<region>_<random>`. Never throws on weird keys.
+ * `ss_live_<region>_<random-32-char-base64url>`. Never throws on weird keys.
  */
 function regionFromApiKey(apiKey: string): string | undefined {
   return REGION_KEY_RE.exec(apiKey)?.[1]

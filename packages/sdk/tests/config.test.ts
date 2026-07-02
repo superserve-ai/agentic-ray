@@ -9,6 +9,12 @@ import {
 } from "../src/config.js"
 import { AuthenticationError, ValidationError } from "../src/errors.js"
 
+// A realistic 32-char base64url random tail, matching the length every
+// `ss_live_` key (legacy or region-tagged) is minted with. Test keys are
+// built from this so the exact-length anchor in `REGION_KEY_RE` is
+// actually exercised instead of trivially failing on a too-short fixture.
+const TAIL = "AbCdEfGhIjKlMnOpQrStUvWxYz012345"
+
 describe("resolveConfig", () => {
   let savedApiKey: string | undefined
   let savedBaseUrl: string | undefined
@@ -90,41 +96,45 @@ describe("resolveConfig", () => {
   })
 
   it("derives endpoints from a known region key", () => {
-    const cfg = resolveConfig({ apiKey: "ss_live_use_abc123" })
+    const cfg = resolveConfig({ apiKey: `ss_live_use_${TAIL}` })
     expect(cfg.baseUrl).toBe("https://api.superserve.ai")
     expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")
   })
 
   it("falls back to defaults for an unknown region", () => {
     // `usw` won't enter the known-regions map until its DNS is live.
-    const cfg = resolveConfig({ apiKey: "ss_live_usw_abc123" })
+    const cfg = resolveConfig({ apiKey: `ss_live_usw_${TAIL}` })
     expect(cfg.baseUrl).toBe("https://api.superserve.ai")
     expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")
   })
 
   it("falls back to defaults for legacy keys", () => {
-    const cfg = resolveConfig({ apiKey: "ss_live_a1B2c3D4" })
+    const cfg = resolveConfig({ apiKey: `ss_live_${TAIL}` })
     expect(cfg.baseUrl).toBe("https://api.superserve.ai")
     expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")
   })
 
-  it("falls back to defaults for a legacy key whose `_` mimics a region", () => {
-    // Legacy base64url random parts may contain `_`, so this parses as
-    // region "abc123" — not in the map, so defaults win, which is correct
-    // for all legacy keys (they are all us-east).
-    const cfg = resolveConfig({ apiKey: "ss_live_abc123_def456" })
+  it("falls back to defaults for a legacy key whose tail starts like a region", () => {
+    // A legacy key's random tail is exactly 32 chars, same as a real key's
+    // tail. Even when it happens to start with "usw_", there's no length
+    // left over for a genuine `<region>_<32-char-tail>` — so it can never
+    // be misparsed as region-tagged, regardless of what's in
+    // `KNOWN_REGIONS`. Correct for every legacy key (they are all us-east).
+    const cfg = resolveConfig({ apiKey: `ss_live_usw_${TAIL.slice(0, 28)}` })
     expect(cfg.baseUrl).toBe("https://api.superserve.ai")
     expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")
   })
 
   it("never resolves a region from prototype members or weird keys", () => {
     for (const apiKey of [
-      "ss_live_constructor_x",
-      "ss_live_USE_abc", // uppercase is not a region token
-      "ss_live_us-e_abc", // non-alphanumeric
-      `ss_live_${"a".repeat(18)}_rest`, // too long
+      `ss_live_constructor_${TAIL}`,
+      `ss_live_USE_${TAIL}`, // uppercase is not a region token
+      `ss_live_us-e_${TAIL}`, // non-alphanumeric
+      `ss_live_${"a".repeat(18)}_${TAIL}`, // region too long
+      `ss_live_use_${TAIL.slice(0, 31)}`, // tail one char short of 32
+      `ss_live_use_${TAIL}X`, // tail one char over 32
       "ss_live_use_", // nothing after the region
-      "ss_live__abc", // empty region
+      `ss_live__${TAIL}`, // empty region
       "ss_live_",
       "not a key",
     ]) {
@@ -136,7 +146,7 @@ describe("resolveConfig", () => {
 
   it("uses explicit baseUrl over region derivation", () => {
     const cfg = resolveConfig({
-      apiKey: "ss_live_use_abc123",
+      apiKey: `ss_live_use_${TAIL}`,
       baseUrl: "https://explicit.example.com",
     })
     expect(cfg.baseUrl).toBe("https://explicit.example.com")
@@ -145,12 +155,12 @@ describe("resolveConfig", () => {
 
   it("uses SUPERSERVE_BASE_URL env var over region derivation", () => {
     vi.stubEnv("SUPERSERVE_BASE_URL", "https://env.example.com")
-    const cfg = resolveConfig({ apiKey: "ss_live_use_abc123" })
+    const cfg = resolveConfig({ apiKey: `ss_live_use_${TAIL}` })
     expect(cfg.baseUrl).toBe("https://env.example.com")
   })
 
   it("derives endpoints from a region key sourced from SUPERSERVE_API_KEY", () => {
-    vi.stubEnv("SUPERSERVE_API_KEY", "ss_live_use_abc123")
+    vi.stubEnv("SUPERSERVE_API_KEY", `ss_live_use_${TAIL}`)
     const cfg = resolveConfig()
     expect(cfg.baseUrl).toBe("https://api.superserve.ai")
     expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")

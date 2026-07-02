@@ -22,17 +22,22 @@ DEFAULT_SANDBOX_HOST = "sandbox.superserve.ai"
 # ``usw`` will be added once https://api-usw.superserve.ai /
 # usw-sandbox.superserve.ai serve their cell.
 #
-# Legacy keys (``ss_live_<random>``, whose base64url random part may itself
-# contain ``_``) can coincidentally parse as having a region segment. That is
-# harmless by design: any token not in this map falls back to the defaults,
-# which is correct for every legacy key (they are all us-east).
+# Legacy keys (``ss_live_<random>``) can never be misread as region-tagged:
+# both key formats embed the same fixed-length 32-char base64url random tail
+# (from 24 random bytes), and ``_REGION_KEY_RE`` requires that exact tail
+# length anchored to the end of the string. A legacy key has no room left
+# over for a region segment on top of its own 32-char tail, so no random
+# legacy key can ever collide with a real region token — this holds
+# regardless of how many regions ``_KNOWN_REGIONS`` ends up containing.
 _KNOWN_REGIONS: dict[str, tuple[str, str]] = {
     "use": ("https://api.superserve.ai", "sandbox.superserve.ai"),
 }
 
 # Region token in ``ss_live_<region>_<random>``: 1-17 lowercase alphanumeric
-# chars, followed by at least one more character of key material.
-_REGION_KEY_RE = re.compile(r"^ss_live_([a-z0-9]{1,17})_.")
+# chars, then ``_``, then exactly the 32-char base64url tail every key is
+# minted with — anchored to the end so a legacy key's own tail can never be
+# mistaken for ``<region>_<tail>``.
+_REGION_KEY_RE = re.compile(r"^ss_live_([a-z0-9]{1,17})_[A-Za-z0-9_-]{32}$")
 
 
 @dataclass(frozen=True)
@@ -155,10 +160,11 @@ def preview_url(sandbox_id: str, host: str, port: int) -> str:
 
 
 def _region_from_api_key(api_key: str) -> str | None:
-    """Extract the candidate region token from an API key, if any.
+    """Extract the region token from an API key, if any.
 
     Returns ``None`` for legacy keys and anything else that doesn't match
-    ``ss_live_<region>_<random>``. Never raises on weird keys.
+    ``ss_live_<region>_<random-32-char-base64url>``. Never raises on weird
+    keys.
     """
     match = _REGION_KEY_RE.match(api_key)
     return match.group(1) if match else None

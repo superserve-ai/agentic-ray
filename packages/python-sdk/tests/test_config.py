@@ -56,51 +56,62 @@ class TestResolveConfig:
         assert cfg.base_url == DEFAULT_BASE_URL
 
 
+# A realistic 32-char base64url random tail, matching the length every
+# ``ss_live_`` key (legacy or region-tagged) is minted with. Test keys are
+# built from this so the exact-length anchor in `_REGION_KEY_RE` is
+# actually exercised instead of trivially failing on a too-short fixture.
+_TAIL = "AbCdEfGhIjKlMnOpQrStUvWxYz012345"
+assert len(_TAIL) == 32
+
+
 class TestRegionDerivation:
     @pytest.fixture(autouse=True)
     def _no_base_url_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("SUPERSERVE_BASE_URL", raising=False)
 
     def test_known_region_key_resolves_mapped_endpoints(self) -> None:
-        cfg = resolve_config(api_key="ss_live_use_abc123")
+        cfg = resolve_config(api_key=f"ss_live_use_{_TAIL}")
         assert cfg.base_url == "https://api.superserve.ai"
         assert cfg.sandbox_host == "sandbox.superserve.ai"
 
     def test_unknown_region_falls_back_to_default(self) -> None:
         # `usw` won't enter the known-regions map until its DNS is live.
-        cfg = resolve_config(api_key="ss_live_usw_abc123")
+        cfg = resolve_config(api_key=f"ss_live_usw_{_TAIL}")
         assert cfg.base_url == DEFAULT_BASE_URL
         assert cfg.sandbox_host == DEFAULT_SANDBOX_HOST
 
     def test_legacy_key_uses_default(self) -> None:
-        cfg = resolve_config(api_key="ss_live_a1B2c3D4")
+        cfg = resolve_config(api_key=f"ss_live_{_TAIL}")
         assert cfg.base_url == DEFAULT_BASE_URL
         assert cfg.sandbox_host == DEFAULT_SANDBOX_HOST
 
-    def test_legacy_key_with_underscore_collision_uses_default(self) -> None:
-        # Legacy base64url random parts may contain `_`, so this key parses
-        # as region "abc123" — not in the map, so defaults win, which is
-        # correct for all legacy keys (they are all us-east).
-        cfg = resolve_config(api_key="ss_live_abc123_def456")
+    def test_legacy_key_whose_tail_starts_like_a_region_uses_default(self) -> None:
+        # A legacy key's random tail is exactly 32 chars, same as a real
+        # key's tail. Even when it happens to start with "usw_", there's no
+        # length left over for a genuine `<region>_<32-char-tail>` — so it
+        # can never be misparsed as region-tagged, regardless of what's in
+        # `_KNOWN_REGIONS`. Correct for every legacy key (they are all
+        # us-east).
+        cfg = resolve_config(api_key=f"ss_live_usw_{_TAIL[:28]}")
         assert cfg.base_url == DEFAULT_BASE_URL
         assert cfg.sandbox_host == DEFAULT_SANDBOX_HOST
 
     def test_explicit_base_url_beats_region(self) -> None:
         cfg = resolve_config(
-            api_key="ss_live_use_abc123", base_url="https://arg.example.com"
+            api_key=f"ss_live_use_{_TAIL}", base_url="https://arg.example.com"
         )
         assert cfg.base_url == "https://arg.example.com"
         assert cfg.sandbox_host == DEFAULT_SANDBOX_HOST
 
     def test_env_base_url_beats_region(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SUPERSERVE_BASE_URL", "https://env.example.com")
-        cfg = resolve_config(api_key="ss_live_use_abc123")
+        cfg = resolve_config(api_key=f"ss_live_use_{_TAIL}")
         assert cfg.base_url == "https://env.example.com"
 
     def test_region_key_sourced_from_env_var(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("SUPERSERVE_API_KEY", "ss_live_use_abc123")
+        monkeypatch.setenv("SUPERSERVE_API_KEY", f"ss_live_use_{_TAIL}")
         cfg = resolve_config()
         assert cfg.base_url == "https://api.superserve.ai"
         assert cfg.sandbox_host == "sandbox.superserve.ai"
@@ -110,10 +121,10 @@ class TestRegionFromApiKey:
     @pytest.mark.parametrize(
         ("key", "region"),
         [
-            ("ss_live_use_abc123", "use"),
-            ("ss_live_usw_abc123", "usw"),
-            ("ss_live_a_b", "a"),
-            ("ss_live_" + "a" * 17 + "_rest", "a" * 17),
+            (f"ss_live_use_{_TAIL}", "use"),
+            (f"ss_live_usw_{_TAIL}", "usw"),
+            (f"ss_live_a_{_TAIL}", "a"),
+            ("ss_live_" + "a" * 17 + "_" + _TAIL, "a" * 17),
         ],
     )
     def test_extracts_valid_region_tokens(self, key: str, region: str) -> None:
@@ -122,13 +133,16 @@ class TestRegionFromApiKey:
     @pytest.mark.parametrize(
         "key",
         [
-            "ss_live_a1B2c3D4",  # legacy: no second segment
-            "ss_live_USE_abc",  # uppercase is not a region token
-            "ss_live_us-e_abc",  # non-alphanumeric
-            "ss_live_" + "a" * 18 + "_rest",  # too long
+            f"ss_live_{_TAIL}",  # legacy: no region segment
+            f"ss_live_usw_{_TAIL[:28]}",  # legacy tail that starts like "usw_"
+            f"ss_live_USE_{_TAIL}",  # uppercase is not a region token
+            f"ss_live_us-e_{_TAIL}",  # non-alphanumeric
+            "ss_live_" + "a" * 18 + "_" + _TAIL,  # region too long
+            f"ss_live_use_{_TAIL[:31]}",  # tail one char short of 32
+            f"ss_live_use_{_TAIL}X",  # tail one char over 32
             "ss_live_use_",  # nothing after the region
-            "ss_live__abc",  # empty region
-            "ss_test_use_abc",  # wrong prefix
+            f"ss_live__{_TAIL}",  # empty region
+            "ss_test_use_" + _TAIL,  # wrong prefix
             "ss_live_",
             "",
             "not a key",
