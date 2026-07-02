@@ -63,6 +63,20 @@
     }
   ],
   "navigation": {
+    "global": {
+      "anchors": [
+        {
+          "anchor": "Console",
+          "href": "https://console.superserve.ai",
+          "icon": "gauge"
+        },
+        {
+          "anchor": "GitHub",
+          "href": "https://github.com/superserve-ai/superserve",
+          "icon": "github"
+        }
+      ]
+    },
     "tabs": [
       {
         "tab": "Documentation",
