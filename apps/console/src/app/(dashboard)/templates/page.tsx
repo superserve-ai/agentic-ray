@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@superserve/ui"
 import { useSearchParams } from "next/navigation"
-import { Suspense } from "react"
+import { Suspense, useEffect } from "react"
 
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
@@ -78,6 +78,13 @@ function TemplatesPageContent() {
     useTemplatesPage(params)
   const templates = data?.items ?? []
   const total = data?.total ?? 0
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  // Snap back to the last valid page if the current one is now out of bounds
+  // (e.g. after deleting the last template on the last page).
+  useEffect(() => {
+    if (total > 0 && page > pageCount) setPage(pageCount)
+  }, [total, page, pageCount, setPage])
 
   const hasFilters = owner !== "all" || q !== ""
   const isEmpty = !isPending && !error && total === 0 && !hasFilters

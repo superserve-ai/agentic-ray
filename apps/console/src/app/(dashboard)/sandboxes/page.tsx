@@ -127,6 +127,20 @@ function SandboxesPageContent() {
     clearSelection,
   } = useSelection(sandboxes)
 
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  // If the current page falls past the end (e.g. after deleting the last row on
+  // the last page), snap back to the last valid page.
+  useEffect(() => {
+    if (total > 0 && page > pageCount) setPage(pageCount)
+  }, [total, page, pageCount, setPage])
+
+  // Selection is scoped to the current view — clear it when the page, filter, or
+  // search changes so a bulk action can't hit rows that scrolled off-page.
+  useEffect(() => {
+    clearSelection()
+  }, [page, statusTab, debouncedQ, clearSelection])
+
   const hasFilters = statusTab !== "all" || q !== ""
   // A truly empty account (no sandboxes at all) gets the create call-to-action.
   // A zero-result filter/search keeps the toolbar so the user can clear it.

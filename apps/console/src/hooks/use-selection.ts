@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useState } from "react"
 
 interface UseSelectionReturn {
   selected: Set<string>
@@ -38,7 +38,9 @@ export function useSelection(items: { id: string }[]): UseSelectionReturn {
     })
   }
 
-  const clearSelection = () => setSelected(new Set())
+  // Stable identity so callers can safely list it in effect deps (e.g. "clear
+  // selection when the page/filter changes") without re-running every render.
+  const clearSelection = useCallback(() => setSelected(new Set()), [])
 
   return {
     selected,

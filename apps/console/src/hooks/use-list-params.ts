@@ -56,8 +56,9 @@ export function useListParams({
       // Any filter/sort/search change sends the user back to page 1, unless the
       // caller is explicitly navigating pages.
       if (resetPage && !("page" in patch)) next.delete("page")
+      const path = window.location.pathname
       const qs = next.toString()
-      router.replace(qs ? `?${qs}` : window.location.pathname)
+      router.replace(qs ? `${path}?${qs}` : path)
     },
     [router, searchParams],
   )
