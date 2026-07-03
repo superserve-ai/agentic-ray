@@ -1,14 +1,30 @@
-import { apiClient } from "./client"
+import { apiClient, apiClientList, type PagedResult } from "./client"
 import type {
   CreateSandboxRequest,
   ResumeResponse,
   SandboxListItem,
+  SandboxListParams,
   SandboxPatch,
   SandboxResponse,
 } from "./types"
 
-export async function listSandboxes(): Promise<SandboxListItem[]> {
-  return apiClient<SandboxListItem[]>("/sandboxes")
+function sandboxListQuery(params: SandboxListParams): string {
+  const q = new URLSearchParams()
+  q.set("limit", String(params.pageSize))
+  q.set("offset", String((params.page - 1) * params.pageSize))
+  q.set("sort", params.sort)
+  q.set("order", params.order)
+  if (params.status) q.set("status", params.status)
+  if (params.q) q.set("q", params.q)
+  return q.toString()
+}
+
+export async function listSandboxesPaged(
+  params: SandboxListParams,
+): Promise<PagedResult<SandboxListItem>> {
+  return apiClientList<SandboxListItem>(
+    `/sandboxes?${sandboxListQuery(params)}`,
+  )
 }
 
 export async function getSandbox(id: string): Promise<SandboxResponse> {

@@ -1,11 +1,16 @@
-import { apiClient } from "./client"
+import { apiClient, apiClientList, type PagedResult } from "./client"
 import type {
   CreateTemplateRequest,
   CreateTemplateResponse,
   TemplateBuildResponse,
+  TemplateListParams,
   TemplateResponse,
 } from "./types"
 
+/**
+ * Full (unpaginated) template list. Backs the create-sandbox template picker,
+ * which needs every template to choose from. Optional prefix filter.
+ */
 export async function listTemplates(params?: {
   name_prefix?: string
 }): Promise<TemplateResponse[]> {
@@ -14,6 +19,26 @@ export async function listTemplates(params?: {
   const suffix = query.toString()
   return apiClient<TemplateResponse[]>(
     `/templates${suffix ? `?${suffix}` : ""}`,
+  )
+}
+
+function templateListQuery(params: TemplateListParams): string {
+  const q = new URLSearchParams()
+  q.set("limit", String(params.pageSize))
+  q.set("offset", String((params.page - 1) * params.pageSize))
+  q.set("sort", params.sort)
+  q.set("order", params.order)
+  q.set("owner", params.owner)
+  if (params.q) q.set("q", params.q)
+  return q.toString()
+}
+
+/** Paginated template list backing the Templates page. */
+export async function listTemplatesPaged(
+  params: TemplateListParams,
+): Promise<PagedResult<TemplateResponse>> {
+  return apiClientList<TemplateResponse>(
+    `/templates?${templateListQuery(params)}`,
   )
 }
 

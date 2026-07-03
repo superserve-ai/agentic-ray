@@ -1,8 +1,10 @@
+import type { SandboxListParams, TemplateListParams } from "./types"
+
 export const sandboxKeys = {
   all: ["sandboxes"] as const,
   lists: () => [...sandboxKeys.all, "list"] as const,
-  list: (filters: { status?: string; search?: string }) =>
-    [...sandboxKeys.lists(), filters] as const,
+  list: (params: SandboxListParams) =>
+    [...sandboxKeys.lists(), params] as const,
   details: () => [...sandboxKeys.all, "detail"] as const,
   detail: (id: string) => [...sandboxKeys.details(), id] as const,
 }
@@ -80,9 +82,14 @@ export const billingKeys = {
 
 export const templateKeys = {
   all: ["templates"] as const,
+  // Paginated list backing the Templates page.
   lists: () => [...templateKeys.all, "list"] as const,
-  list: (filters?: { name_prefix?: string }) =>
-    [...templateKeys.lists(), filters ?? {}] as const,
+  list: (params: TemplateListParams) =>
+    [...templateKeys.lists(), params] as const,
+  // Full (unpaginated) list backing the create-sandbox template picker.
+  fullLists: () => [...templateKeys.all, "full"] as const,
+  fullList: (filters?: { name_prefix?: string }) =>
+    [...templateKeys.fullLists(), filters ?? {}] as const,
   details: () => [...templateKeys.all, "detail"] as const,
   detail: (id: string) => [...templateKeys.details(), id] as const,
   builds: (templateId: string) =>

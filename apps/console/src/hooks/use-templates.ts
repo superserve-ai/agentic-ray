@@ -1,9 +1,14 @@
 "use client"
 
 import { useToast } from "@superserve/ui"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 
-import { ApiError } from "@/lib/api/client"
+import { ApiError, type PagedResult } from "@/lib/api/client"
 import { templateKeys } from "@/lib/api/query-keys"
 import {
   cancelTemplateBuild,
@@ -14,15 +19,36 @@ import {
   getTemplateBuild,
   listTemplateBuilds,
   listTemplates,
+  listTemplatesPaged,
 } from "@/lib/api/templates"
-import type { CreateTemplateRequest, TemplateResponse } from "@/lib/api/types"
+import type {
+  CreateTemplateRequest,
+  TemplateListParams,
+  TemplateResponse,
+} from "@/lib/api/types"
 
 const TERMINAL_TEMPLATE_STATUSES = new Set(["ready", "failed"])
 const TERMINAL_BUILD_STATUSES = new Set(["ready", "failed", "cancelled"])
 
+/** Paginated template list backing the Templates page. */
+export function useTemplatesPage(params: TemplateListParams) {
+  return useQuery({
+    queryKey: templateKeys.list(params),
+    queryFn: () => listTemplatesPaged(params),
+    // Keep the current page on screen while the next page/sort/filter loads.
+    placeholderData: keepPreviousData,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+  })
+}
+
+/**
+ * Full (unpaginated) template list backing the create-sandbox template picker,
+ * which needs every template to choose from.
+ */
 export function useTemplates() {
   return useQuery({
-    queryKey: templateKeys.list(),
+    queryKey: templateKeys.fullList(),
     queryFn: () => listTemplates(),
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,
@@ -147,21 +173,31 @@ export function useDeleteTemplate() {
   return useMutation({
     mutationFn: (id: string) => deleteTemplate(id),
     onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: templateKeys.lists() })
-      const snapshots = queryClient.getQueriesData<TemplateResponse[]>({
-        queryKey: templateKeys.lists(),
+      await queryClient.cancelQueries({ queryKey: templateKeys.all })
+      // Two cache shapes hold templates: the paginated page ({ items, total })
+      // and the picker's full array. Optimistically drop the row from both.
+      const pagedSnapshots = queryClient.getQueriesData<
+        PagedResult<TemplateResponse>
+      >({ queryKey: templateKeys.lists() })
+      const fullSnapshots = queryClient.getQueriesData<TemplateResponse[]>({
+        queryKey: templateKeys.fullLists(),
       })
-      for (const [key, data] of snapshots) {
-        if (!data) continue
-        queryClient.setQueryData<TemplateResponse[]>(
-          key,
-          data.filter((t) => t.id !== id),
-        )
-      }
-      return { snapshots }
+      queryClient.setQueriesData<PagedResult<TemplateResponse>>(
+        { queryKey: templateKeys.lists() },
+        (old) =>
+          old ? { ...old, items: old.items.filter((t) => t.id !== id) } : old,
+      )
+      queryClient.setQueriesData<TemplateResponse[]>(
+        { queryKey: templateKeys.fullLists() },
+        (old) => (old ? old.filter((t) => t.id !== id) : old),
+      )
+      return { pagedSnapshots, fullSnapshots }
     },
     onError: (error, _id, context) => {
-      for (const [key, data] of context?.snapshots ?? []) {
+      for (const [key, data] of context?.pagedSnapshots ?? []) {
+        queryClient.setQueryData(key, data)
+      }
+      for (const [key, data] of context?.fullSnapshots ?? []) {
         queryClient.setQueryData(key, data)
       }
       const message =
