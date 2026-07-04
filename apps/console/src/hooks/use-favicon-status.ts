@@ -11,9 +11,9 @@ const DEFAULT_FAVICON = "/favicon.ico"
 const ACTIVE_FAVICON = "/favicon-active.ico"
 
 // We only need to know whether ANY sandbox is currently resuming, so fetch a
-// single-row page filtered to that status and read the total off the header.
-// This keeps the always-mounted favicon poll cheap instead of pulling the
-// whole sandbox list on every dashboard page.
+// single-row page filtered to that status. This keeps the always-mounted
+// favicon poll cheap instead of pulling the whole sandbox list on every
+// dashboard page.
 const RESUMING_PROBE: SandboxListParams = {
   page: 1,
   pageSize: 1,
@@ -30,7 +30,12 @@ export function useFaviconStatus() {
     refetchIntervalInBackground: false,
   })
 
-  const hasTransitional = (data?.total ?? 0) > 0
+  // Check the rows' actual status rather than trusting total > 0: against an
+  // API build that ignores the status/limit params (the fallback case
+  // apiClientList handles), the probe gets the full unfiltered list back and a
+  // count-based check would keep the active favicon on forever.
+  const hasTransitional =
+    data?.items.some((s) => s.status === "resuming") ?? false
 
   useEffect(() => {
     const link = document.querySelector<HTMLLinkElement>("link[rel='icon']")

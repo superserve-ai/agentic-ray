@@ -25,10 +25,10 @@ import { TemplateTableRow } from "@/components/templates/template-table-row"
 import { useCreateParam } from "@/hooks/use-create-param"
 import { useListParams } from "@/hooks/use-list-params"
 import { useTemplatesPage } from "@/hooks/use-templates"
-import type {
-  TemplateListParams,
-  TemplateOwnerFilter,
-  TemplateSortColumn,
+import {
+  TEMPLATE_SORT_COLUMNS,
+  type TemplateListParams,
+  type TemplateOwnerFilter,
 } from "@/lib/api/types"
 
 const OWNER_TABS = [
@@ -61,14 +61,21 @@ function TemplatesPageContent() {
     setPage,
     setPageSize,
     setSearch,
-  } = useListParams({ defaultSort: "created_at" })
+  } = useListParams({
+    columns: TEMPLATE_SORT_COLUMNS,
+    defaultSort: "created_at",
+  })
 
-  const owner = (searchParams.get("owner") ?? "all") as TemplateOwnerFilter
+  // URL param is user input — an unknown owner falls back to "all" instead of
+  // being forwarded to the API.
+  const rawOwner = searchParams.get("owner")
+  const owner: TemplateOwnerFilter =
+    rawOwner === "team" || rawOwner === "system" ? rawOwner : "all"
 
   const params: TemplateListParams = {
     page,
     pageSize,
-    sort: sort as TemplateSortColumn,
+    sort,
     order,
     owner,
     q: debouncedQ || undefined,
@@ -86,8 +93,12 @@ function TemplatesPageContent() {
     if (total > 0 && page > pageCount) setPage(pageCount)
   }, [total, page, pageCount, setPage])
 
-  const hasFilters = owner !== "all" || q !== ""
-  const isEmpty = !isPending && !error && total === 0 && !hasFilters
+  // Uses debouncedQ (what the current data was fetched with), not q, and never
+  // trusts a placeholder page's total — otherwise clearing a zero-result search
+  // flashes the account-level empty state until the unfiltered refetch lands.
+  const hasFilters = owner !== "all" || debouncedQ !== ""
+  const isEmpty =
+    !isPending && !error && !isPlaceholderData && total === 0 && !hasFilters
 
   const newButton = (
     <Button size="sm" onClick={() => setCreateOpen(true)}>

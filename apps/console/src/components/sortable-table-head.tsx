@@ -9,24 +9,24 @@ import { cn, TableHead } from "@superserve/ui"
 
 import type { SortDirection } from "@/lib/api/types"
 
-interface SortableTableHeadProps {
+interface SortableTableHeadProps<C extends string> {
   /** Sort column value sent to the API (e.g. "name", "created_at"). */
-  column: string
+  column: C
   label: string
   activeSort: string
   order: SortDirection
-  onSort: (column: string) => void
+  onSort: (column: C) => void
   className?: string
 }
 
-export function SortableTableHead({
+export function SortableTableHead<C extends string>({
   column,
   label,
   activeSort,
   order,
   onSort,
   className,
-}: SortableTableHeadProps) {
+}: SortableTableHeadProps<C>) {
   const isActive = activeSort === column
 
   return (
@@ -43,14 +43,14 @@ export function SortableTableHead({
         {label}
         {isActive ? (
           order === "asc" ? (
-            <CaretUpIcon className="size-3" weight="bold" />
+            <CaretUpIcon className="size-3.5" weight="light" />
           ) : (
-            <CaretDownIcon className="size-3" weight="bold" />
+            <CaretDownIcon className="size-3.5" weight="light" />
           )
         ) : (
           <CaretUpDownIcon
-            className="size-3 opacity-0 transition-opacity group-hover:opacity-40"
-            weight="bold"
+            className="size-3.5 opacity-0 transition-opacity group-hover:opacity-40"
+            weight="light"
           />
         )}
       </button>

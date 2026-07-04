@@ -46,7 +46,7 @@ import {
   useSandboxesPage,
 } from "@/hooks/use-sandboxes"
 import { useSelection } from "@/hooks/use-selection"
-import type { SandboxListParams, SandboxSortColumn } from "@/lib/api/types"
+import { SANDBOX_SORT_COLUMNS, type SandboxListParams } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 
 const STATUS_TABS = [
@@ -72,14 +72,22 @@ function SandboxesPageContent() {
     setPage,
     setPageSize,
     setSearch,
-  } = useListParams({ defaultSort: "created_at" })
+  } = useListParams({
+    columns: SANDBOX_SORT_COLUMNS,
+    defaultSort: "created_at",
+  })
 
-  const statusTab = searchParams.get("status") ?? "all"
+  // URL param is user input — an unknown status falls back to "all" instead of
+  // being forwarded to the API.
+  const rawStatus = searchParams.get("status")
+  const statusTab = STATUS_TABS.some((t) => t.value === rawStatus)
+    ? (rawStatus as string)
+    : "all"
 
   const params: SandboxListParams = {
     page,
     pageSize,
-    sort: sort as SandboxSortColumn,
+    sort,
     order,
     status: statusTab === "all" ? undefined : statusTab,
     q: debouncedQ || undefined,
@@ -135,16 +143,23 @@ function SandboxesPageContent() {
     if (total > 0 && page > pageCount) setPage(pageCount)
   }, [total, page, pageCount, setPage])
 
-  // Selection is scoped to the current view — clear it when the page, filter, or
-  // search changes so a bulk action can't hit rows that scrolled off-page.
+  // Selection is scoped to the current view — clear it when anything that
+  // changes the visible row set (page, page size, sort, filter, search)
+  // changes, so a bulk action can't hit rows that scrolled off-page.
   useEffect(() => {
     clearSelection()
-  }, [page, statusTab, debouncedQ, clearSelection])
+  }, [page, pageSize, sort, order, statusTab, debouncedQ, clearSelection])
 
-  const hasFilters = statusTab !== "all" || q !== ""
+  // Uses debouncedQ (what the current data was fetched with), not q: clearing a
+  // zero-result search would otherwise flash the account-level empty state for
+  // the 300ms until the unfiltered refetch lands.
+  const hasFilters = statusTab !== "all" || debouncedQ !== ""
   // A truly empty account (no sandboxes at all) gets the create call-to-action.
   // A zero-result filter/search keeps the toolbar so the user can clear it.
-  const isEmpty = !isPending && !error && total === 0 && !hasFilters
+  // Placeholder data is a stale page shown during a params change — never treat
+  // its total as proof the account is empty.
+  const isEmpty =
+    !isPending && !error && !isPlaceholderData && total === 0 && !hasFilters
 
   return (
     <div className="flex h-full flex-col">

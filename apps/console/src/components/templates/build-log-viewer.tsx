@@ -75,6 +75,12 @@ export function BuildLogViewer({
             queryKey: templateKeys.detail(templateId),
           }),
           queryClient.invalidateQueries({ queryKey: templateKeys.lists() }),
+          // The create-sandbox picker caches the unpaginated list under a
+          // separate key — invalidate it too so the template turns launchable
+          // there as soon as the build lands.
+          queryClient.invalidateQueries({
+            queryKey: templateKeys.fullLists(),
+          }),
           queryClient.invalidateQueries({
             queryKey: templateKeys.builds(templateId),
           }),

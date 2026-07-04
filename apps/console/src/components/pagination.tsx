@@ -63,7 +63,7 @@ export function Pagination({
   return (
     <nav
       aria-label="Pagination"
-      className="flex h-12 shrink-0 items-center justify-between border-t border-border bg-background px-4"
+      className="flex h-12 shrink-0 items-center justify-between border-t border-dashed border-border bg-background px-4"
     >
       <p className="font-mono text-xs text-muted tabular-nums">
         {start}

@@ -61,7 +61,10 @@ export interface SandboxPatch {
 
 export type SortDirection = "asc" | "desc"
 
-export type SandboxSortColumn = "created_at" | "name" | "status"
+/** Sort columns GET /sandboxes accepts; also the allowlist for URL ?sort=. */
+export const SANDBOX_SORT_COLUMNS = ["created_at", "name", "status"] as const
+
+export type SandboxSortColumn = (typeof SANDBOX_SORT_COLUMNS)[number]
 
 /** Query params for the paginated sandbox list (GET /sandboxes). */
 export interface SandboxListParams {
@@ -205,12 +208,16 @@ export interface TemplateBuildResponse {
 
 export type TemplateOwnerFilter = "all" | "team" | "system"
 
-export type TemplateSortColumn =
-  | "created_at"
-  | "name"
-  | "status"
-  | "size"
-  | "built_at"
+/** Sort columns GET /templates accepts; also the allowlist for URL ?sort=. */
+export const TEMPLATE_SORT_COLUMNS = [
+  "created_at",
+  "name",
+  "status",
+  "size",
+  "built_at",
+] as const
+
+export type TemplateSortColumn = (typeof TEMPLATE_SORT_COLUMNS)[number]
 
 /** Query params for the paginated template list (GET /templates). */
 export interface TemplateListParams {
