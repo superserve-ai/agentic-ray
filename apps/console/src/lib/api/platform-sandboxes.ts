@@ -10,7 +10,7 @@ export interface PlatformSandboxRead {
   memory_mib: number
   snapshot_id?: string | null
   timeout_seconds?: number | null
-  network: NetworkConfig
+  network?: NetworkConfig | null
   metadata: Record<string, string>
   created_at: string
 }

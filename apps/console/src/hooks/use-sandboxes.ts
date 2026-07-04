@@ -10,6 +10,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query"
 
+import { useQueryScope } from "@/components/query-provider"
 import { ApiError, type PagedResult } from "@/lib/api/client"
 import { sandboxKeys } from "@/lib/api/query-keys"
 import {
@@ -62,8 +63,9 @@ function patchSandboxLists(
 // --- Queries ------------------------------------------------------------
 
 export function useSandboxesPage(params: SandboxListParams) {
+  const queryScope = useQueryScope()
   return useQuery({
-    queryKey: sandboxKeys.list(params),
+    queryKey: [...sandboxKeys.list(params), queryScope],
     queryFn: () => listSandboxesPaged(params),
     // Keep the current page on screen while the next page/sort/filter loads,
     // so navigation doesn't flash an empty table.
@@ -74,8 +76,9 @@ export function useSandboxesPage(params: SandboxListParams) {
 }
 
 export function useSandbox(id: string | null) {
+  const queryScope = useQueryScope()
   return useQuery({
-    queryKey: sandboxKeys.detail(id ?? ""),
+    queryKey: [...sandboxKeys.detail(id ?? ""), queryScope],
     queryFn: () => getSandbox(id as string),
     enabled: !!id,
     refetchInterval: (query) => {

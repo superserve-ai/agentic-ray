@@ -11,7 +11,13 @@ import {
 import { useFaviconStatus } from "@/hooks/use-favicon-status"
 import { usePostHogIdentify } from "@/hooks/use-posthog-identify"
 
-function DashboardContent({ children }: { children: React.ReactNode }) {
+function DashboardContent({
+  banner,
+  children,
+}: {
+  banner?: React.ReactNode
+  children: React.ReactNode
+}) {
   const { isCollapsed } = useSidebar()
   usePostHogIdentify()
   useFaviconStatus()
@@ -26,17 +32,24 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
           isCollapsed ? "ml-16" : "ml-64",
         )}
       >
+        {banner}
         {children}
       </main>
     </div>
   )
 }
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+export function DashboardShell({
+  banner,
+  children,
+}: {
+  banner?: React.ReactNode
+  children: React.ReactNode
+}) {
   return (
     <SidebarProvider>
       <TooltipProvider>
-        <DashboardContent>{children}</DashboardContent>
+        <DashboardContent banner={banner}>{children}</DashboardContent>
       </TooltipProvider>
     </SidebarProvider>
   )

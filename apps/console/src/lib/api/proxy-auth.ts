@@ -3,11 +3,17 @@ import crypto from "node:crypto"
 import type { User } from "@supabase/supabase-js"
 
 import {
+  getImpersonationTeamId,
+  impersonationTtlMs,
+} from "@/lib/admin/impersonation"
+import { platformImpersonationReadScopes } from "@/lib/admin/permissions"
+import { ensureImpersonationKeyRow } from "@/lib/admin/impersonation-key"
+import { getProxySecret, hashKey } from "@/lib/api/proxy-secret"
+import {
   pickActiveTeam,
   readTeamSelection,
   serializeTeamSelection,
 } from "@/lib/api/active-team"
-import { getProxySecret, hashKey } from "@/lib/api/proxy-secret"
 import {
   invalidateMembershipDirectory,
   listTeamMembershipsForUser,
@@ -177,8 +183,30 @@ async function ensureProxyKeyRow(
 
 export async function getAuthApiKeyForUser(
   user: User | null,
+  impersonatedTeamId?: string | null,
 ): Promise<string | null> {
   if (!user) return null
+
+  const teamId =
+    impersonatedTeamId === undefined
+      ? await getImpersonationTeamId(user)
+      : impersonatedTeamId
+
+  if (teamId) {
+    const scopes = platformImpersonationReadScopes(user)
+    if (scopes.length === 0) {
+      throw new Error(
+        "Forbidden: impersonation requires platform sandbox or template read access",
+      )
+    }
+
+    return ensureImpersonationKeyRow(
+      user.id,
+      teamId,
+      scopes,
+      Math.floor(impersonationTtlMs() / 60_000),
+    )
+  }
 
   const team = await getTeamForUser(user.id, user.email ?? user.id)
   const rawKey = deriveRawKey(user.id, team.teamId)
