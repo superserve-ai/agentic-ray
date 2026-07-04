@@ -9,10 +9,14 @@ import {
   MenuPopup,
   MenuTrigger,
 } from "@superserve/ui"
+import { useState } from "react"
 
 import { CornerBrackets } from "./corner-brackets"
 
 const DEFAULT_PAGE_SIZE_OPTIONS = [25, 50, 100]
+// Matches the pageRange elision threshold — below this, every page already
+// has its own button, so a jump input has nothing to add.
+const JUMP_THRESHOLD = 7
 
 type PageToken = number | "ellipsis"
 
@@ -22,7 +26,7 @@ type PageToken = number | "ellipsis"
  * render every page.
  */
 function pageRange(current: number, pageCount: number): PageToken[] {
-  if (pageCount <= 7) {
+  if (pageCount <= JUMP_THRESHOLD) {
     return Array.from({ length: pageCount }, (_, i) => i + 1)
   }
   const tokens: PageToken[] = [1]
@@ -33,6 +37,51 @@ function pageRange(current: number, pageCount: number): PageToken[] {
   if (right < pageCount - 1) tokens.push("ellipsis")
   tokens.push(pageCount)
   return tokens
+}
+
+interface JumpToPageProps {
+  current: number
+  pageCount: number
+  onPageChange: (page: number) => void
+}
+
+/** "Go to [__]" input for reaching a distant page without clicking through
+ * every ellipsis — numbered buttons alone don't scale past a handful of
+ * pages. */
+function JumpToPage({ current, pageCount, onPageChange }: JumpToPageProps) {
+  const [value, setValue] = useState("")
+
+  const commit = () => {
+    if (value === "") return
+    const target = Math.min(
+      Math.max(1, Math.trunc(Number(value)) || 1),
+      pageCount,
+    )
+    if (target !== current) onPageChange(target)
+    setValue("")
+  }
+
+  return (
+    <div className="ml-1 flex items-center gap-1.5 border-l border-dashed border-border pl-2">
+      <span className="font-mono text-xs text-muted">Go to</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => setValue(e.target.value.replace(/[^0-9]/g, ""))}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault()
+            commit()
+          }
+        }}
+        onBlur={commit}
+        placeholder={String(current)}
+        aria-label={`Jump to page, 1 to ${pageCount}`}
+        className="h-8 w-12 border border-dashed border-border bg-background px-1.5 text-center font-mono text-xs text-foreground tabular-nums placeholder:text-muted/60 focus:border-border-focus focus:outline-none"
+      />
+    </div>
+  )
 }
 
 interface PaginationProps {
@@ -120,6 +169,14 @@ export function Pagination({
         >
           <CaretRightIcon className="size-3.5" weight="light" />
         </Button>
+
+        {pageCount > JUMP_THRESHOLD && (
+          <JumpToPage
+            current={current}
+            pageCount={pageCount}
+            onPageChange={onPageChange}
+          />
+        )}
 
         <Menu>
           <MenuTrigger

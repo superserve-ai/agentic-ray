@@ -100,6 +100,44 @@ describe("Pagination", () => {
     expect(screen.queryByRole("button", { name: "15" })).not.toBeInTheDocument()
   })
 
+  it("does not show a jump-to-page input for short ranges", () => {
+    render(
+      <Pagination
+        page={1}
+        pageSize={50}
+        total={120}
+        onPageChange={noop}
+        onPageSizeChange={noop}
+      />,
+    )
+    expect(
+      screen.queryByRole("textbox", { name: /jump to page/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("jumps to the typed page on Enter and clamps to the last page", async () => {
+    const onPageChange = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <Pagination
+        page={10}
+        pageSize={50}
+        total={1000}
+        onPageChange={onPageChange}
+        onPageSizeChange={noop}
+      />,
+    )
+    const jumpInput = screen.getByRole("textbox", { name: /jump to page/i })
+    await user.type(jumpInput, "17")
+    await user.keyboard("{Enter}")
+    expect(onPageChange).toHaveBeenCalledWith(17)
+    expect(jumpInput).toHaveValue("")
+
+    await user.type(jumpInput, "999")
+    await user.keyboard("{Enter}")
+    expect(onPageChange).toHaveBeenCalledWith(20)
+  })
+
   it("shows a single page and disables both arrows when the list fits one page", () => {
     render(
       <Pagination
