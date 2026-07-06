@@ -1,6 +1,5 @@
 /** `sandbox_exec` — run a shell command in a sandbox. */
 
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 
 import type { SandboxClient } from "../client.js"
@@ -12,6 +11,7 @@ import {
 } from "../constants.js"
 import { formatSdkError } from "../lib/errors.js"
 import { toolError, toolOk, truncateText } from "../lib/result.js"
+import type { McpServer } from "../lib/sdk.js"
 import { defineTool } from "../lib/tool.js"
 
 interface ExecArgs {

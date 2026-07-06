@@ -11,7 +11,14 @@ import {
 } from "@superserve/ui"
 import Image from "next/image"
 
-import { adminNavItem, bottomNavItems, mainNavItems } from "./nav-config"
+import { useUser } from "@/hooks/use-user"
+import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
+
+import {
+  bottomNavItems,
+  mainNavItems,
+  userManagementNavItem,
+} from "./nav-config"
 import { useSidebar } from "./sidebar-context"
 import { SidebarNav } from "./sidebar-nav"
 import { SidebarUserMenu } from "./sidebar-user-menu"
@@ -22,13 +29,13 @@ function openCommandPalette() {
   )
 }
 
-interface SidebarProps {
-  isStaff: boolean
-}
-
-export function Sidebar({ isStaff }: SidebarProps) {
+export function Sidebar() {
   const { isCollapsed, toggle } = useSidebar()
-  const navItems = isStaff ? [...mainNavItems, adminNavItem] : mainNavItems
+  const { user } = useUser()
+  const navItems = [
+    ...mainNavItems,
+    ...(canViewOtherUsersAccount(user) ? [userManagementNavItem] : []),
+  ]
 
   return (
     <aside

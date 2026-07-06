@@ -1,13 +1,13 @@
 # Claude Managed Agents on Superserve
 
-Run [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) inside [Superserve sandboxes](https://superserve.ai) — isolated Firecracker microVMs with sub-second startup, pause/resume, and per-sandbox network isolation.
+Run [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) inside [Superserve sandboxes](https://superserve.ai) — isolated Firecracker microVMs with fast (`<50ms`) startup, pause/resume, and per-sandbox network isolation.
 
 Anthropic runs the harness. Superserve runs the sandbox. You wire them together with an orchestrator.
 
 ## How it fits together
 
 - [**Claude Managed Agents**](https://platform.claude.com/docs/en/managed-agents/overview) — Anthropic's remote agent harness. Orchestrates the agent loop, manages sessions, dispatches tool calls via a work queue.
-- [**Superserve**](https://docs.superserve.ai) — Firecracker microVM sandboxes. Each session gets its own VM with a full filesystem, shell, and network namespace. Sandboxes boot in under a second and can be paused between turns.
+- [**Superserve**](https://docs.superserve.ai) — Firecracker microVM sandboxes. Each session gets its own VM with a full filesystem, shell, and network namespace. Sandboxes boot in under 50ms and can be paused between turns.
 
 The orchestrator polls Anthropic's work queue, creates (or resumes) a Superserve sandbox for each session, and starts a runner inside it. The runner executes tool calls — `bash`, `read`, `write`, `edit`, `glob`, `grep` — against the sandbox and posts results back.
 

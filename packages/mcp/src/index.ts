@@ -5,11 +5,10 @@
  * All diagnostics go to stderr; stdout is reserved for the JSON-RPC stream.
  */
 
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
-
 import { createSdkClient } from "./client.js"
 import { ConfigError, looksLikeProdKey, resolveClientConfig } from "./config.js"
 import { SERVER_NAME, SERVER_VERSION } from "./constants.js"
+import { StdioServerTransport } from "./lib/sdk.js"
 import { createServer } from "./server.js"
 
 function fail(message: string): never {

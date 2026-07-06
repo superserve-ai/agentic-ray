@@ -16,7 +16,6 @@ import {
   MenuTrigger,
 } from "@superserve/ui"
 
-import { useImpersonation } from "@/components/admin/impersonation-context"
 import type { SandboxResponse } from "@/lib/api/types"
 import { formatTime } from "@/lib/format"
 
@@ -70,7 +69,6 @@ export function SandboxStatusHero({
   onOpenTerminal,
   onDelete,
 }: SandboxStatusHeroProps) {
-  const { isImpersonating } = useImpersonation()
   const cfg = STATUS_CONFIG[sandbox.status]
   const created = formatTime(new Date(sandbox.created_at))
 
@@ -112,7 +110,6 @@ export function SandboxStatusHero({
           onStop={onStop}
           onOpenTerminal={onOpenTerminal}
           onDelete={onDelete}
-          isImpersonating={isImpersonating}
         />
       </div>
     </section>
@@ -125,7 +122,6 @@ interface SandboxActionsProps {
   onStop: () => void
   onOpenTerminal: () => void
   onDelete: () => void
-  isImpersonating: boolean
 }
 
 function SandboxActions({
@@ -134,16 +130,7 @@ function SandboxActions({
   onStop,
   onOpenTerminal,
   onDelete,
-  isImpersonating,
 }: SandboxActionsProps) {
-  // Read-only impersonation: every action here (terminal, start, stop, delete)
-  // is a write or a data-plane connection that's blocked, so show none of them.
-  if (isImpersonating) {
-    return (
-      <span className="font-mono text-xs text-muted uppercase">Read-only</span>
-    )
-  }
-
   // Inapplicable actions are removed entirely (not greyed). What's
   // visible always reflects what you can do.
   if (status === "active") {

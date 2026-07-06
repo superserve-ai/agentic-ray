@@ -9,7 +9,7 @@
  *   import { renderHook, waitFor } from "@testing-library/react"
  *
  *   const { wrapper, queryClient } = createQueryWrapper()
- *   const { result } = renderHook(() => useSandboxes(), { wrapper })
+ *   const { result } = renderHook(() => useSandboxesPage(params), { wrapper })
  *   await waitFor(() => expect(result.current.isSuccess).toBe(true))
  */
 

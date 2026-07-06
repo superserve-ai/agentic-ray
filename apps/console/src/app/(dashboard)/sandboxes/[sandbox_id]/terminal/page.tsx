@@ -5,7 +5,6 @@ import { Badge, Button } from "@superserve/ui"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 
-import { useImpersonation } from "@/components/admin/impersonation-context"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { TerminalTabs } from "@/components/sandboxes/terminal-tabs"
@@ -32,7 +31,6 @@ export default function TerminalPage() {
   const sandboxId = params.sandbox_id
 
   const router = useRouter()
-  const { isImpersonating } = useImpersonation()
   const { data: sandbox, isPending, error, refetch } = useSandbox(sandboxId)
   const resumeMutation = useResumeSandbox()
 
@@ -58,7 +56,7 @@ export default function TerminalPage() {
     )
   }
 
-  const canRun = sandbox.status === "active" && !isImpersonating
+  const canRun = sandbox.status === "active"
 
   return (
     <div className="flex h-full flex-col">
@@ -105,13 +103,7 @@ export default function TerminalPage() {
         </div>
       </div>
 
-      {isImpersonating ? (
-        <EmptyState
-          icon={TerminalIcon}
-          title="Read-only mode"
-          description="Terminal access is disabled while viewing another team. Exit impersonation to use the terminal on your own sandboxes."
-        />
-      ) : canRun ? (
+      {canRun ? (
         <TerminalTabs
           sandboxId={sandboxId}
           accessToken={sandbox.access_token}

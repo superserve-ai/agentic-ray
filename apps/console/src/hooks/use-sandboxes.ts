@@ -1,9 +1,16 @@
 "use client"
 
 import { useToast } from "@superserve/ui"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  keepPreviousData,
+  type QueryClient,
+  type QueryKey,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 
-import { ApiError } from "@/lib/api/client"
+import { ApiError, type PagedResult } from "@/lib/api/client"
 import { sandboxKeys } from "@/lib/api/query-keys"
 import {
   attachSandboxSecret,
@@ -11,7 +18,7 @@ import {
   deleteSandbox,
   detachSandboxSecret,
   getSandbox,
-  listSandboxes,
+  listSandboxesPaged,
   patchSandbox,
   pauseSandbox,
   resumeSandbox,
@@ -19,14 +26,48 @@ import {
 import type {
   CreateSandboxRequest,
   SandboxListItem,
+  SandboxListParams,
   SandboxPatch,
   SandboxResponse,
 } from "@/lib/api/types"
 
-export function useSandboxes() {
+type SandboxPage = PagedResult<SandboxListItem>
+type SandboxListSnapshots = [QueryKey, SandboxPage | undefined][]
+
+// --- List-cache helpers -------------------------------------------------
+// Sandbox list results are cached per (page, sort, filter) combination under
+// sandboxKeys.lists(). These helpers snapshot / patch / restore every cached
+// variant at once, so an optimistic mutation stays correct no matter which
+// page or filter the user is currently looking at. Totals are intentionally
+// not adjusted here — the onSettled invalidation refetches the authoritative
+// count.
+
+function snapshotSandboxLists(qc: QueryClient): SandboxListSnapshots {
+  return qc.getQueriesData<SandboxPage>({ queryKey: sandboxKeys.lists() })
+}
+
+function restoreSandboxLists(qc: QueryClient, snapshots: SandboxListSnapshots) {
+  for (const [key, data] of snapshots) qc.setQueryData(key, data)
+}
+
+function patchSandboxLists(
+  qc: QueryClient,
+  updater: (items: SandboxListItem[]) => SandboxListItem[],
+) {
+  qc.setQueriesData<SandboxPage>({ queryKey: sandboxKeys.lists() }, (old) =>
+    old ? { ...old, items: updater(old.items) } : old,
+  )
+}
+
+// --- Queries ------------------------------------------------------------
+
+export function useSandboxesPage(params: SandboxListParams) {
   return useQuery({
-    queryKey: sandboxKeys.all,
-    queryFn: listSandboxes,
+    queryKey: sandboxKeys.list(params),
+    queryFn: () => listSandboxesPaged(params),
+    // Keep the current page on screen while the next page/sort/filter loads,
+    // so navigation doesn't flash an empty table.
+    placeholderData: keepPreviousData,
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,
   })
@@ -45,6 +86,8 @@ export function useSandbox(id: string | null) {
   })
 }
 
+// --- Mutations ----------------------------------------------------------
+
 export function useCreateSandbox() {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
@@ -52,9 +95,10 @@ export function useCreateSandbox() {
   return useMutation({
     mutationFn: (data: CreateSandboxRequest) => createSandbox(data),
     onSuccess: (newSandbox) => {
-      queryClient.setQueryData<SandboxListItem[]>(sandboxKeys.all, (old) =>
-        old ? [newSandbox, ...old] : [newSandbox],
-      )
+      // A new sandbox lands on page 1 under the default created_at-desc sort;
+      // refetch the lists rather than guessing its slot under the active
+      // page/sort/filter.
+      queryClient.invalidateQueries({ queryKey: sandboxKeys.lists() })
       addToast(`Sandbox "${newSandbox.name}" created`, "success")
     },
     onError: (error) => {
@@ -74,17 +118,15 @@ export function useDeleteSandbox() {
   return useMutation({
     mutationFn: (id: string) => deleteSandbox(id),
     onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: sandboxKeys.all })
-      const previous = queryClient.getQueryData<SandboxListItem[]>(
-        sandboxKeys.all,
+      await queryClient.cancelQueries({ queryKey: sandboxKeys.lists() })
+      const snapshots = snapshotSandboxLists(queryClient)
+      patchSandboxLists(queryClient, (items) =>
+        items.filter((s) => s.id !== id),
       )
-      queryClient.setQueryData<SandboxListItem[]>(sandboxKeys.all, (old) =>
-        old?.filter((s) => s.id !== id),
-      )
-      return { previous }
+      return { snapshots }
     },
     onError: (error, _id, context) => {
-      queryClient.setQueryData(sandboxKeys.all, context?.previous)
+      if (context) restoreSandboxLists(queryClient, context.snapshots)
       const message =
         error instanceof ApiError
           ? error.message
@@ -106,18 +148,16 @@ export function useBulkDeleteSandboxes() {
       await Promise.all(ids.map((id) => deleteSandbox(id)))
     },
     onMutate: async (ids) => {
-      await queryClient.cancelQueries({ queryKey: sandboxKeys.all })
-      const previous = queryClient.getQueryData<SandboxListItem[]>(
-        sandboxKeys.all,
-      )
+      await queryClient.cancelQueries({ queryKey: sandboxKeys.lists() })
+      const snapshots = snapshotSandboxLists(queryClient)
       const idSet = new Set(ids)
-      queryClient.setQueryData<SandboxListItem[]>(sandboxKeys.all, (old) =>
-        old?.filter((s) => !idSet.has(s.id)),
+      patchSandboxLists(queryClient, (items) =>
+        items.filter((s) => !idSet.has(s.id)),
       )
-      return { previous }
+      return { snapshots }
     },
     onError: (error, _ids, context) => {
-      queryClient.setQueryData(sandboxKeys.all, context?.previous)
+      if (context) restoreSandboxLists(queryClient, context.snapshots)
       const message =
         error instanceof ApiError
           ? error.message
@@ -137,29 +177,28 @@ export function usePauseSandbox() {
   return useMutation({
     mutationFn: (id: string) => pauseSandbox(id),
     onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: sandboxKeys.all })
-      const previousList = queryClient.getQueryData<SandboxListItem[]>(
-        sandboxKeys.all,
-      )
+      await queryClient.cancelQueries({ queryKey: sandboxKeys.lists() })
+      const snapshots = snapshotSandboxLists(queryClient)
       const previousDetail = queryClient.getQueryData<SandboxResponse>(
         sandboxKeys.detail(id),
       )
-      queryClient.setQueryData<SandboxListItem[]>(sandboxKeys.all, (old) =>
-        old?.map((s) =>
-          s.id === id ? { ...s, status: "paused" as const } : s,
-        ),
+      patchSandboxLists(queryClient, (items) =>
+        items.map((s) => (s.id === id ? { ...s, status: "paused" } : s)),
       )
       queryClient.setQueryData<SandboxResponse>(sandboxKeys.detail(id), (old) =>
-        old ? { ...old, status: "paused" as const } : old,
+        old ? { ...old, status: "paused" } : old,
       )
-      return { previousList, previousDetail }
+      return { snapshots, previousDetail }
     },
     onError: (error, id, context) => {
-      if (context?.previousList !== undefined) {
-        queryClient.setQueryData(sandboxKeys.all, context.previousList)
-      }
-      if (context?.previousDetail !== undefined) {
-        queryClient.setQueryData(sandboxKeys.detail(id), context.previousDetail)
+      if (context) {
+        restoreSandboxLists(queryClient, context.snapshots)
+        if (context.previousDetail !== undefined) {
+          queryClient.setQueryData(
+            sandboxKeys.detail(id),
+            context.previousDetail,
+          )
+        }
       }
       const message =
         error instanceof ApiError
@@ -180,27 +219,23 @@ export function useResumeSandbox() {
   return useMutation({
     mutationFn: (id: string) => resumeSandbox(id),
     onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: sandboxKeys.all })
-      const previousList = queryClient.getQueryData<SandboxListItem[]>(
-        sandboxKeys.all,
-      )
+      await queryClient.cancelQueries({ queryKey: sandboxKeys.lists() })
+      const snapshots = snapshotSandboxLists(queryClient)
       const previousDetail = queryClient.getQueryData<SandboxResponse>(
         sandboxKeys.detail(id),
       )
-      queryClient.setQueryData<SandboxListItem[]>(sandboxKeys.all, (old) =>
-        old?.map((s) =>
-          s.id === id ? { ...s, status: "resuming" as const } : s,
-        ),
+      patchSandboxLists(queryClient, (items) =>
+        items.map((s) => (s.id === id ? { ...s, status: "resuming" } : s)),
       )
       queryClient.setQueryData<SandboxResponse>(sandboxKeys.detail(id), (old) =>
-        old ? { ...old, status: "resuming" as const } : old,
+        old ? { ...old, status: "resuming" } : old,
       )
-      return { previousList, previousDetail }
+      return { snapshots, previousDetail }
     },
     onSuccess: (resumed, id) => {
-      // Server returns a fresh access_token with the resume response — write
-      // it into the detail cache so the terminal and file-transfer panels
-      // pick up the new token without waiting for a refetch.
+      // The resume response carries a fresh access_token — write it into the
+      // detail cache so the terminal and file panels pick it up without waiting
+      // for a refetch.
       queryClient.setQueryData<SandboxResponse>(sandboxKeys.detail(id), (old) =>
         old
           ? {
@@ -210,16 +245,19 @@ export function useResumeSandbox() {
             }
           : old,
       )
-      queryClient.setQueryData<SandboxListItem[]>(sandboxKeys.all, (old) =>
-        old?.map((s) => (s.id === id ? { ...s, status: resumed.status } : s)),
+      patchSandboxLists(queryClient, (items) =>
+        items.map((s) => (s.id === id ? { ...s, status: resumed.status } : s)),
       )
     },
     onError: (error, id, context) => {
-      if (context?.previousList !== undefined) {
-        queryClient.setQueryData(sandboxKeys.all, context.previousList)
-      }
-      if (context?.previousDetail !== undefined) {
-        queryClient.setQueryData(sandboxKeys.detail(id), context.previousDetail)
+      if (context) {
+        restoreSandboxLists(queryClient, context.snapshots)
+        if (context.previousDetail !== undefined) {
+          queryClient.setQueryData(
+            sandboxKeys.detail(id),
+            context.previousDetail,
+          )
+        }
       }
       const message =
         error instanceof ApiError

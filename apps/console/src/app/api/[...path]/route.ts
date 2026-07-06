@@ -1,8 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-import { getImpersonationTeamId } from "@/lib/admin/impersonation"
 import { getAuthApiKeyForUser } from "@/lib/api/proxy-auth"
-import { redactAccessTokens } from "@/lib/api/redact"
 import { createServerClient } from "@/lib/supabase/server"
 
 const SANDBOX_API_URL =
@@ -58,27 +56,6 @@ async function proxyRequest(
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
-  const supabase = await createServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  // Resolve once and reuse: the read-only gate, the key injection, and the
-  // response redaction all key off the same impersonation decision.
-  const impersonatedTeamId = await getImpersonationTeamId(user)
-  const impersonating = impersonatedTeamId !== null
-  const isReadMethod = request.method === "GET" || request.method === "HEAD"
-  if (impersonating && !isReadMethod) {
-    return NextResponse.json(
-      {
-        error: {
-          code: "read_only_impersonation",
-          message: "Write operations are disabled while viewing another team.",
-        },
-      },
-      { status: 403 },
-    )
-  }
-
   const url = new URL(`${SANDBOX_API_URL}/${joinedPath}`)
   url.search = request.nextUrl.search
 
@@ -91,7 +68,12 @@ async function proxyRequest(
 
   // Inject server-side API key for authenticated requests
   if (!shouldSkipKeyInjection(joinedPath)) {
-    const apiKey = await getAuthApiKeyForUser(user, impersonatedTeamId)
+    const supabase = await createServerClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    const apiKey = await getAuthApiKeyForUser(user)
+
     if (!apiKey) {
       return NextResponse.json(
         { error: { code: "unauthorized", message: "Not authenticated" } },
@@ -152,25 +134,6 @@ async function proxyRequest(
   }
 
   const data = await response.arrayBuffer()
-
-  // While impersonating, strip the data-plane access_token from JSON bodies.
-  // It never travels through this proxy on the way back out — the terminal and
-  // file panels read it from the sandbox GET response and connect straight to
-  // boxd-…, so leaking it would bypass the read-only gate entirely. resume()
-  // (the other token source) is a POST and is already blocked above.
-  if (impersonating) {
-    const contentType = responseHeaders.get("content-type") ?? ""
-    if (contentType.includes("application/json")) {
-      const redacted = redactAccessTokens(new TextDecoder().decode(data))
-      const body = new TextEncoder().encode(redacted)
-      responseHeaders.set("content-length", String(body.byteLength))
-      return new NextResponse(body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: responseHeaders,
-      })
-    }
-  }
 
   return new NextResponse(data, {
     status: response.status,

@@ -8,12 +8,12 @@
  * not in an agent's tool-call transcript. `secret_list` returns metadata only.
  */
 
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 
 import type { SandboxClient } from "../client.js"
 import { formatSdkError } from "../lib/errors.js"
 import { toolError, toolOk } from "../lib/result.js"
+import type { McpServer } from "../lib/sdk.js"
 import { defineTool } from "../lib/tool.js"
 
 type EmptyArgs = Record<string, never>

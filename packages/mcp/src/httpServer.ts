@@ -16,8 +16,6 @@
 import { createServer as createHttpServer } from "node:http"
 import type { IncomingMessage, ServerResponse } from "node:http"
 
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
-
 import { MAX_REQUEST_BYTES, SERVER_NAME, SERVER_VERSION } from "./constants.js"
 import {
   buildServerForKey,
@@ -31,6 +29,7 @@ import {
   PAYLOAD_TOO_LARGE_MESSAGE,
   readNodeRequestBody,
 } from "./lib/httpBody.js"
+import { StreamableHTTPServerTransport } from "./lib/sdk.js"
 
 const DEFAULT_PORT = 8080
 

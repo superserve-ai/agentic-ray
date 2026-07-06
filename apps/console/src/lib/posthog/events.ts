@@ -61,8 +61,3 @@ export const SETTINGS_EVENTS = {
   PASSWORD_CHANGED: "settings_password_changed",
   ACCOUNT_DELETION_REQUESTED: "settings_account_deletion_requested",
 } as const
-
-export const ADMIN_EVENTS = {
-  IMPERSONATION_STARTED: "admin_impersonation_started",
-  IMPERSONATION_STOPPED: "admin_impersonation_stopped",
-} as const

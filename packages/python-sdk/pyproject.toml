@@ -45,6 +45,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+pythonpath = ["src"]
 
 [tool.ruff]
 # Match the package's Python floor so Ruff doesn't suggest 3.11+ APIs (e.g. datetime.UTC).

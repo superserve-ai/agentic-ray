@@ -4,7 +4,7 @@
  * truncated head+tail so it stays token-efficient.
  */
 
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
+import type { CallToolResult } from "./sdk.js"
 
 export interface Truncation {
   text: string

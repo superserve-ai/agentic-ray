@@ -90,7 +90,7 @@ agent = client.beta.agents.create(
 
 ## Build the sandbox template
 
-Build a Superserve template with Python and the Anthropic SDK pre-installed. Sandboxes created from this template boot in under a second - no image pull or package install at session time.
+Build a Superserve template with Python and the Anthropic SDK pre-installed. Sandboxes created from this template boot in under 50ms - no image pull or package install at session time.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -363,7 +363,7 @@ Keep `ANTHROPIC_ENVIRONMENT_KEY` on the orchestrator host only. The orchestrator
 </Warning>
 
 <Tip>
-To reduce costs, pause sandboxes that sit idle between turns. Superserve's `pause()` checkpoints the full VM state - memory, processes, and filesystem - at zero compute cost. The next work item for that session calls `resume()` and picks up exactly where it left off, in under a second.
+To reduce costs, pause sandboxes that sit idle between turns. Superserve's `pause()` checkpoints the full VM state - memory, processes, and filesystem - at zero compute cost. The next work item for that session calls `resume()` and picks up exactly where it left off, in under 50ms.
 </Tip>
 
 ## Start a session
@@ -501,7 +501,7 @@ The orchestrator reads `superserve.sandbox_id` from `work.data.metadata` and con
 ## What you get
 
 - **Firecracker microVM isolation.** Each session runs in its own lightweight VM - not a shared container. Process tree, filesystem, and network namespace are fully isolated. A compromised sandbox cannot affect others.
-- **Sub-second startup.** Sandboxes are ready instantly. No image pull, no package install, no boot sequence at session time.
+- **Fast startup (`<50ms`).** Sandboxes are ready instantly. No image pull, no package install, no boot sequence at session time.
 - **Pause and resume.** Checkpoint the full sandbox state between turns. Resume picks up exactly where it left off - running processes, open files, in-memory state. Pay for compute only when the agent is actively working.
 - **Per-sandbox network isolation.** Each sandbox gets its own network namespace with CIDR and domain-based egress filtering. Lock the agent down to `api.anthropic.com` only, or open access to specific internal services.
 - **The sandbox is yours.** Beyond running the agent's tools, you control the full VM. Pre-install packages in the template, mount data via the files API, stream command output for observability. The tool runner is one process in a VM you own.

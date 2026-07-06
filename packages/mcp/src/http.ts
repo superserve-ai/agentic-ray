@@ -16,8 +16,6 @@
  * Runs on Node 18+, Cloudflare Workers, Deno, and Bun.
  */
 
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
-
 import { MAX_REQUEST_BYTES } from "./constants.js"
 import {
   buildServerForKey,
@@ -32,6 +30,7 @@ import {
   PAYLOAD_TOO_LARGE_MESSAGE,
   readWebRequestBody,
 } from "./lib/httpBody.js"
+import { WebStandardStreamableHTTPServerTransport } from "./lib/sdk.js"
 
 function unauthorized(): Response {
   return new Response(

@@ -7,21 +7,17 @@
  *  - Header allowlist: cookie, x-api-key from client are stripped
  *  - 204/205/304 null-body handling
  *  - 401 when not authenticated
- *  - 403 for write methods while impersonating
  */
 
 import { NextRequest } from "next/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mocks declared BEFORE the module under test is imported.
-vi.mock("@/lib/supabase/server", () => ({
-  createServerClient: vi.fn(),
-}))
-vi.mock("@/lib/admin/impersonation", () => ({
-  getImpersonationTeamId: vi.fn(),
-}))
 vi.mock("@/lib/api/proxy-auth", () => ({
   getAuthApiKeyForUser: vi.fn(),
+}))
+vi.mock("@/lib/supabase/server", () => ({
+  createServerClient: vi.fn(),
 }))
 
 // Global fetch spy — upstream responses are crafted per test.
@@ -31,15 +27,12 @@ vi.stubGlobal("fetch", fetchSpy)
 // SANDBOX_API_URL is pre-stubbed in src/test/setup.ts before the route
 // module is imported (route reads it at module load).
 
-import { getImpersonationTeamId } from "@/lib/admin/impersonation"
 import { getAuthApiKeyForUser } from "@/lib/api/proxy-auth"
 import { createServerClient } from "@/lib/supabase/server"
 
-import { DELETE, GET, PATCH, POST, PUT } from "./route"
+import { DELETE, GET, POST, PUT } from "./route"
 
 type AnyParams = { params: Promise<{ path: string[] }> }
-
-const mockUser = { id: "u1", email: "user@test.com", app_metadata: {} }
 
 function req(
   method: string,
@@ -62,9 +55,8 @@ describe("api proxy /api/[...path]", () => {
   beforeEach(() => {
     fetchSpy.mockReset()
     vi.mocked(createServerClient).mockResolvedValue({
-      auth: { getUser: async () => ({ data: { user: mockUser } }) },
+      auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) },
     } as never)
-    vi.mocked(getImpersonationTeamId).mockResolvedValue(null)
     vi.mocked(getAuthApiKeyForUser).mockReset()
     vi.mocked(getAuthApiKeyForUser).mockResolvedValue("ss_live_test_key")
   })
@@ -219,9 +211,7 @@ describe("api proxy /api/[...path]", () => {
     expect(await res.json()).toEqual({ id: "abc" })
   })
 
-  it("preserves access_token in responses when NOT impersonating", async () => {
-    // Default beforeEach mocks getImpersonationTeamId → null. The data-plane
-    // token must still reach the browser so terminal/file transfer work.
+  it("preserves access_token in sandbox responses", async () => {
     fetchSpy.mockResolvedValue(
       new Response(JSON.stringify({ id: "abc", access_token: "keep-me" }), {
         status: 200,
@@ -233,120 +223,5 @@ describe("api proxy /api/[...path]", () => {
       params(["sandboxes", "abc"]),
     )
     expect((await res.json()).access_token).toBe("keep-me")
-  })
-})
-
-describe("proxy read-only impersonation gate", () => {
-  beforeEach(() => {
-    fetchSpy.mockReset()
-    vi.mocked(createServerClient).mockResolvedValue({
-      auth: {
-        getUser: async () => ({
-          data: {
-            user: {
-              id: "a1",
-              email: "amit@superserve.ai",
-              app_metadata: { provider: "google" },
-            },
-          },
-        }),
-      },
-    } as never)
-    vi.mocked(getImpersonationTeamId).mockResolvedValue("team-1")
-    vi.mocked(getAuthApiKeyForUser).mockResolvedValue("ss_live_x")
-    fetchSpy.mockResolvedValue(
-      new Response(JSON.stringify([]), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
-    )
-  })
-
-  it("rejects a POST with 403 while impersonating", async () => {
-    const request = new Request("http://localhost/api/sandboxes", {
-      method: "POST",
-    }) as never
-    const res = await POST(request, {
-      params: Promise.resolve({ path: ["sandboxes"] }),
-    })
-    expect(res.status).toBe(403)
-    const body = await res.json()
-    expect(body.error.code).toBe("read_only_impersonation")
-  })
-
-  it("forwards GET while impersonating (reads are allowed)", async () => {
-    const res = await GET(req("GET", ["sandboxes"]), params(["sandboxes"]))
-    expect(res.status).toBe(200)
-    expect(fetchSpy).toHaveBeenCalledTimes(1)
-  })
-
-  it("forwards HEAD while impersonating (reads are allowed)", async () => {
-    fetchSpy.mockResolvedValue(new Response(null, { status: 200 }))
-    const res = await GET(req("HEAD", ["sandboxes"]), params(["sandboxes"]))
-    expect(res.status).toBe(200)
-    expect(fetchSpy).toHaveBeenCalledTimes(1)
-  })
-
-  it("rejects a DELETE with 403 while impersonating", async () => {
-    const res = await DELETE(
-      req("DELETE", ["sandboxes", "abc"]),
-      params(["sandboxes", "abc"]),
-    )
-    expect(res.status).toBe(403)
-  })
-
-  it("rejects a PATCH with 403 while impersonating", async () => {
-    const res = await PATCH(
-      req("PATCH", ["sandboxes", "abc"]),
-      params(["sandboxes", "abc"]),
-    )
-    expect(res.status).toBe(403)
-  })
-
-  // The data-plane access_token is the credential the terminal WebSocket and
-  // file upload/download use to talk DIRECTLY to boxd-… (bypassing this proxy).
-  // Leaking it to an impersonating session would let an admin exec and write
-  // files as the customer, defeating read-only. The proxy must strip it.
-  it("strips access_token from a sandbox detail response while impersonating", async () => {
-    fetchSpy.mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          id: "s1",
-          name: "box",
-          access_token: "secret-data-plane-token",
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    )
-    const res = await GET(
-      req("GET", ["sandboxes", "s1"]),
-      params(["sandboxes", "s1"]),
-    )
-    expect(res.status).toBe(200)
-    const raw = await res.text()
-    expect(raw).not.toContain("secret-data-plane-token")
-    const body = JSON.parse(raw)
-    expect(body.id).toBe("s1")
-    expect(body.access_token).toBeUndefined()
-  })
-
-  it("strips access_token from every item in a list response while impersonating", async () => {
-    fetchSpy.mockResolvedValue(
-      new Response(
-        JSON.stringify([
-          { id: "s1", access_token: "tok1" },
-          { id: "s2", access_token: "tok2" },
-        ]),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    )
-    const res = await GET(req("GET", ["sandboxes"]), params(["sandboxes"]))
-    const raw = await res.text()
-    expect(raw).not.toContain("tok1")
-    expect(raw).not.toContain("tok2")
-    const body = JSON.parse(raw)
-    expect(body).toHaveLength(2)
-    expect(body[0].access_token).toBeUndefined()
-    expect(body[1].access_token).toBeUndefined()
   })
 })

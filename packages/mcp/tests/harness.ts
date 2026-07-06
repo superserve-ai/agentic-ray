@@ -1,9 +1,7 @@
 /** Wire an MCP client to the Superserve server over an in-memory transport. */
 
-import { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
-
 import type { SandboxClient } from "../src/client.js"
+import { Client, InMemoryTransport } from "../src/lib/sdk.js"
 import { createServer } from "../src/server.js"
 
 export interface ConnectedClient {

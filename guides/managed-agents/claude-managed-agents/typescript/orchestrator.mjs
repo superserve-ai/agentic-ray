@@ -138,7 +138,7 @@ async function fetchRunnerLog(sandbox) {
 
 async function updateMetadata(sandbox, updates) {
   const info = await sandbox.getInfo()
-  const meta = { ...(info.metadata || {}) }
+  const meta = { ...info.metadata }
   for (const [key, value] of Object.entries(updates)) {
     if (value === null) delete meta[key]
     else meta[key] = value

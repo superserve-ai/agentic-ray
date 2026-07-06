@@ -5,14 +5,13 @@
  * in-memory transport with a fake {@link SandboxClient}.
  */
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
-
 import type { SandboxClient } from "./client.js"
 import {
   SERVER_INSTRUCTIONS,
   SERVER_NAME,
   SERVER_VERSION,
 } from "./constants.js"
+import { McpServer } from "./lib/sdk.js"
 import { registerExecTool } from "./tools/exec.js"
 import { registerFileTools } from "./tools/files.js"
 import { registerLifecycleTools } from "./tools/lifecycle.js"

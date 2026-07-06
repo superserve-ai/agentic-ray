@@ -1,6 +1,5 @@
 /** `sandbox_files_read`, `sandbox_files_write`, `sandbox_files_list`. */
 
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { ValidationError } from "@superserve/sdk"
 import { z } from "zod"
 
@@ -12,6 +11,7 @@ import {
 } from "../constants.js"
 import { formatSdkError } from "../lib/errors.js"
 import { toolError, toolOk } from "../lib/result.js"
+import type { McpServer } from "../lib/sdk.js"
 import { defineTool } from "../lib/tool.js"
 
 const mib = (bytes: number): string =>

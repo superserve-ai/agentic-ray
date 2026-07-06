@@ -12,10 +12,9 @@
  * these helpers never pulls a specific transport into either bundle.
  */
 
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
-
 import { createSdkClient } from "../client.js"
 import { createServer } from "../server.js"
+import type { McpServer } from "./sdk.js"
 
 const BEARER_SCHEME = /^Bearer[ \t]+(\S.*)$/i
 

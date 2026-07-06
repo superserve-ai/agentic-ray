@@ -59,6 +59,26 @@ export interface SandboxPatch {
   metadata?: Record<string, string>
 }
 
+export type SortDirection = "asc" | "desc"
+
+/** Sort columns GET /sandboxes accepts; also the allowlist for URL ?sort=. */
+export const SANDBOX_SORT_COLUMNS = ["created_at", "name", "status"] as const
+
+export type SandboxSortColumn = (typeof SANDBOX_SORT_COLUMNS)[number]
+
+/** Query params for the paginated sandbox list (GET /sandboxes). */
+export interface SandboxListParams {
+  /** 1-based page number. */
+  page: number
+  pageSize: number
+  sort: SandboxSortColumn
+  order: SortDirection
+  /** Exact status filter (e.g. "active", "paused"); omit for all statuses. */
+  status?: string
+  /** Case-insensitive name substring search. */
+  q?: string
+}
+
 export interface ApiKeyResponse {
   id: string
   name: string
@@ -184,6 +204,32 @@ export interface TemplateBuildResponse {
   started_at?: string
   finalized_at?: string
   created_at: string
+}
+
+export type TemplateOwnerFilter = "all" | "team" | "system"
+
+/** Sort columns GET /templates accepts; also the allowlist for URL ?sort=. */
+export const TEMPLATE_SORT_COLUMNS = [
+  "created_at",
+  "name",
+  "status",
+  "size",
+  "built_at",
+] as const
+
+export type TemplateSortColumn = (typeof TEMPLATE_SORT_COLUMNS)[number]
+
+/** Query params for the paginated template list (GET /templates). */
+export interface TemplateListParams {
+  /** 1-based page number. */
+  page: number
+  pageSize: number
+  sort: TemplateSortColumn
+  order: SortDirection
+  /** Which shelf to return: all (team + system), team-only, or system-only. */
+  owner: TemplateOwnerFilter
+  /** Case-insensitive name substring search. */
+  q?: string
 }
 
 export interface BuildLogEvent {

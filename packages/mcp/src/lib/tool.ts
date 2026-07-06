@@ -9,12 +9,9 @@
  * call site instead.
  */
 
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
-import type {
-  CallToolResult,
-  ToolAnnotations,
-} from "@modelcontextprotocol/sdk/types.js"
 import type { ZodRawShape } from "zod"
+
+import type { CallToolResult, McpServer, ToolAnnotations } from "./sdk.js"
 
 export interface ToolConfig {
   title?: string

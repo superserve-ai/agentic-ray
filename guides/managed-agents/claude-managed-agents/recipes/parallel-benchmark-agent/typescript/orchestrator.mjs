@@ -109,7 +109,7 @@ function acquireLock() {
   try {
     writeFileSync(lockPath, `pid=${process.pid} env=${ENVIRONMENT_ID}\n`, { flag: "wx" })
   } catch (err) {
-    throw new Error(`cannot create lock file ${lockPath}: ${err.message}`)
+    throw new Error(`cannot create lock file ${lockPath}: ${err.message}`, { cause: err })
   }
   process.on("exit", () => { try { unlinkSync(lockPath) } catch {} })
 }
@@ -150,7 +150,7 @@ async function fetchRunnerLog(sandbox) {
 
 async function updateMetadata(sandbox, updates) {
   const info = await sandbox.getInfo()
-  const meta = { ...(info.metadata || {}) }
+  const meta = { ...info.metadata }
   for (const [key, value] of Object.entries(updates)) {
     if (value === null) delete meta[key]
     else meta[key] = value

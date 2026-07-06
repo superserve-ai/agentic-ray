@@ -20,6 +20,9 @@ jobs:
   release-ts:
     if: ${{ inputs.package == 'ts' || inputs.package == 'both' }}
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # npm Trusted Publishing (OIDC) + provenance
+      contents: write # push the version-bump commit + tag
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,6 +31,16 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.5
+
+      # npm (not bun publish) for OIDC Trusted Publishing; needs npm >= 11.5.1.
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "lts/*"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: Install
         run: bun install --frozen-lockfile
@@ -40,10 +53,8 @@ jobs:
       - name: Build
         run: bunx turbo run build --filter=@superserve/sdk
 
-      - name: Publish to npm
-        run: cd packages/sdk && bun publish --access public
-        env:
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish to npm (Trusted Publishing + provenance)
+        run: cd packages/sdk && npm publish --access public --provenance
 
       - name: Commit version bump
         run: |
@@ -58,6 +69,9 @@ jobs:
   release-python:
     if: ${{ inputs.package == 'python' || inputs.package == 'both' }}
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # PyPI Trusted Publishing (OIDC)
+      contents: write # push the version-bump commit + tag
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -65,24 +79,25 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v4
 
+      # Bump pyproject + __version__ together (they must match).
       - name: Bump version
         run: |
           cd packages/python-sdk
           python3 -c "import re; p=open('pyproject.toml').read(); p=re.sub(r'version = \"[^\"]+\"', 'version = \"${{ inputs.version }}\"', p, count=1); open('pyproject.toml','w').write(p)"
+          python3 -c "import re; p=open('src/superserve/__init__.py').read(); p=re.sub(r'__version__ = \"[^\"]+\"', '__version__ = \"${{ inputs.version }}\"', p, count=1); open('src/superserve/__init__.py','w').write(p)"
 
+      # uv workspace puts artifacts in the repo-root dist/.
       - name: Build
-        run: cd packages/python-sdk && uv build
+        run: uv build --package superserve
 
-      - name: Publish to PyPI
-        run: cd packages/python-sdk && uv publish
-        env:
-          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      - name: Publish to PyPI (Trusted Publishing)
+        run: uv publish --trusted-publishing always dist/superserve-${{ inputs.version }}*
 
       - name: Commit version bump
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add packages/python-sdk/pyproject.toml
+          git add packages/python-sdk/pyproject.toml packages/python-sdk/src/superserve/__init__.py
           git commit -m "release: superserve-py@${{ inputs.version }}"
           git tag "superserve-py@${{ inputs.version }}"
           git push
