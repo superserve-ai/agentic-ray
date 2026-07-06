@@ -1,13 +1,13 @@
 import { Sandbox } from "@superserve/sdk"
 
-// Live runtime check for the PR Superloop design: boot the claude-code template,
+// Live runtime check for the PR Loop design: boot the claude-code template,
 // confirm the `claude` harness is present, run the loop's real "cold setup"
 // (install gh + clone), pause, then resume warm by metadata (exactly like the
 // orchestrator) and confirm state persisted. Prints the warm-vs-cold numbers.
 //
 //   SUPERSERVE_API_KEY=ss_live_... bun run examples/loops/scripts/bench.ts
 
-const META = { loop: "smoke", run: "pr-superloop-bench" }
+const META = { loop: "smoke", run: "pr-loop-bench" }
 const now = (): number => performance.now()
 const secs = (ms: number): string => (ms / 1000).toFixed(1)
 
@@ -20,7 +20,7 @@ async function main(): Promise<void> {
   console.log("[1] creating box from superserve/claude-code ...")
   const t0 = now()
   const box = await Sandbox.create({
-    name: "pr-superloop-smoke",
+    name: "pr-loop-smoke",
     fromTemplate: "superserve/claude-code",
     metadata: META,
   })

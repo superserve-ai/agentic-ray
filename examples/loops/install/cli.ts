@@ -5,21 +5,21 @@ import { dirname, join } from "node:path"
 
 import { Secret } from "@superserve/sdk"
 
-import { runLoopCli } from "../pr-superloop/loop"
+import { runLoopCli } from "../pr-loop/loop"
 
 /**
- * `superserve-loops add pr-superloop` — one-command install of a loop into the
+ * `superserve-loops add pr-loop` — one-command install of a loop into the
  * current repo. Creates the Superserve secrets, writes the GitHub Actions
  * workflow, and sets the `SUPERSERVE_API_KEY` repo secret.
  *
- *   bunx @superserve/loops add pr-superloop            # interactive
+ *   bunx @superserve/loops add pr-loop            # interactive
  *   SUPERSERVE_API_KEY=… CLAUDE_CODE_OAUTH_TOKEN=… GITHUB_TOKEN=… \
- *     bunx @superserve/loops add pr-superloop --yes    # non-interactive
+ *     bunx @superserve/loops add pr-loop --yes    # non-interactive
  *
  * The workflow it writes does NOT vendor any loop source into the repo — it runs
- * the published package (`bunx @superserve/loops run pr-superloop …`), so the only
+ * the published package (`bunx @superserve/loops run pr-loop …`), so the only
  * thing that touches the repo is one workflow file. `run` is the CI-facing verb the
- * workflow invokes; it drives ../pr-superloop/loop.ts from inside the package.
+ * workflow invokes; it drives ../pr-loop/loop.ts from inside the package.
  *
  * Tokens you provide are turned into Superserve secrets (swapped in at egress,
  * never committed, never seen by the box). Only the workflow file and the
@@ -264,19 +264,19 @@ export function buildWorkflow(opts: { githubSecret?: string } = {}): string {
           SUPERSERVE_GITHUB_SECRET: ${opts.githubSecret}`
     : `          # Reviews post as github-actions[bot] via the workflow's built-in token.
           GITHUB_TOKEN: \${{ github.token }}`
-  return `# Installed by \`superserve-loops add pr-superloop\`. Runs on every PR code change
+  return `# Installed by \`superserve-loops add pr-loop\`. Runs on every PR code change
 # (a commit pushed to a PR) — no idle cron. One warm-sandbox tick per event, then it sleeps.
 # Note: \`pull_request\` from a forked repo gets a read-only token, so reviews on fork PRs need
 # the cross-repo PAT path (see below) or \`pull_request_target\` (the loop runs PR code only in
 # the sandbox, never on the runner). Add \`schedule:\` back if you also want a safety-net sweep.
-name: loop-pr-superloop
+name: loop-pr-loop
 on:
   pull_request:
     types: [opened, synchronize, reopened] # synchronize = new commits pushed to the PR
   workflow_dispatch: {}
 concurrency:
   # Serialize per repo: all PR reviews share one warm sandbox, so don't run two at once.
-  group: loop-pr-superloop
+  group: loop-pr-loop
   cancel-in-progress: false
 # Least privilege: clone the repo + post the review and ready-to-merge / needs-human labels.
 permissions:
@@ -293,7 +293,7 @@ jobs:
       # checkout is needed (the sandbox clones the target repo itself). \`@stable\` is a
       # Superserve-gated channel, so blessed updates roll out here without editing this file.
       # --pr focuses the tick on the changed PR; empty on manual dispatch → sweep all.
-      - run: bunx ${PACKAGE_SPEC} run pr-superloop --repo "\${{ github.repository }}" --pr "\${{ github.event.pull_request.number }}" --once
+      - run: bunx ${PACKAGE_SPEC} run pr-loop --repo "\${{ github.repository }}" --pr "\${{ github.event.pull_request.number }}" --once
         env:
           SUPERSERVE_API_KEY: \${{ secrets.SUPERSERVE_API_KEY }}
           SUPERSERVE_CLAUDE_SECRET: ${CLAUDE_SECRET}
@@ -306,7 +306,7 @@ function writeWorkflow(
   opts: { githubSecret?: string },
   dryRun: boolean,
 ): string {
-  const path = join(repoRoot, ".github", "workflows", "loop-pr-superloop.yml")
+  const path = join(repoRoot, ".github", "workflows", "loop-pr-loop.yml")
   if (dryRun) {
     c.ok(`would write ${path}`)
     return path
@@ -363,8 +363,8 @@ function setActionsSecret(
 const HELP = `superserve-loops — install agent loops into a repo
 
 Usage:
-  superserve-loops add pr-superloop [options]
-  superserve-loops run pr-superloop [--repo owner/name] [--pr N] [--once]
+  superserve-loops add pr-loop [options]
+  superserve-loops run pr-loop [--repo owner/name] [--pr N] [--once]
                                     (CI-facing — the installed workflow invokes this)
 
 Options:
@@ -386,21 +386,21 @@ async function main(): Promise<void> {
   const [command, loop] = argv
   if (command === "run") {
     // The CI-facing verb the generated workflow invokes (`bunx @superserve/loops run
-    // pr-superloop …`). Drive the loop from inside the published package — everything
-    // after `run pr-superloop` is the loop's own argv (--repo, --pr, --once, …).
-    if (loop !== "pr-superloop") {
-      fail(`unknown loop "${loop ?? ""}". Available: pr-superloop`)
+    // pr-loop …`). Drive the loop from inside the published package — everything
+    // after `run pr-loop` is the loop's own argv (--repo, --pr, --once, …).
+    if (loop !== "pr-loop") {
+      fail(`unknown loop "${loop ?? ""}". Available: pr-loop`)
     }
     await runLoopCli(argv.slice(2))
     return
   }
   if (command !== "add") {
     fail(
-      `unknown command "${command}". Try: superserve-loops add pr-superloop (or: run pr-superloop …)`,
+      `unknown command "${command}". Try: superserve-loops add pr-loop (or: run pr-loop …)`,
     )
   }
-  if (loop !== "pr-superloop") {
-    fail(`unknown loop "${loop ?? ""}". Available: pr-superloop`)
+  if (loop !== "pr-loop") {
+    fail(`unknown loop "${loop ?? ""}". Available: pr-loop`)
   }
 
   const flags = parseFlags(argv)
@@ -409,7 +409,7 @@ async function main(): Promise<void> {
     tryExec("git", ["rev-parse", "--show-toplevel"]) ?? process.cwd()
 
   console.log(
-    `\nInstalling \x1b[1mpr-superloop\x1b[0m into \x1b[1m${repo}\x1b[0m${flags.dryRun ? " (dry run)" : ""}\n`,
+    `\nInstalling \x1b[1mpr-loop\x1b[0m into \x1b[1m${repo}\x1b[0m${flags.dryRun ? " (dry run)" : ""}\n`,
   )
   if (!flags.dryRun) {
     console.log(
@@ -491,10 +491,10 @@ async function main(): Promise<void> {
   )
   if (!flags.dryRun) {
     c.info(
-      "git add .github/workflows/loop-pr-superloop.yml && git commit -m 'add pr-superloop loop' && git push",
+      "git add .github/workflows/loop-pr-loop.yml && git commit -m 'add pr-loop loop' && git push",
     )
     c.info(
-      `gh workflow run loop-pr-superloop.yml --repo ${repo}   # trigger the first run now`,
+      `gh workflow run loop-pr-loop.yml --repo ${repo}   # trigger the first run now`,
     )
     c.info(
       patToken

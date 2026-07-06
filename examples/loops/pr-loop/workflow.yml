@@ -1,4 +1,4 @@
-# PR Superloop — GitHub Actions workflow (event-driven).
+# PR Loop — GitHub Actions workflow (event-driven).
 #
 # Copy this into `.github/workflows/` of the repo you want reviewed. On every PR code change
 # (a commit pushed to a PR) it runs ONE tick against a warm Superserve sandbox to review just
@@ -7,7 +7,7 @@
 # It runs the PUBLISHED `@superserve/loops` package via `bunx` — no loop source is vendored into
 # your repo, and no repo checkout is needed (the sandbox clones the target repo itself). `@stable`
 # is a Superserve-gated channel, so blessed loop updates roll out here without you editing this
-# file. `superserve-loops add pr-superloop` writes this file for you.
+# file. `superserve-loops add pr-loop` writes this file for you.
 #
 # One-time setup:
 #   1. `claude setup-token`  → a Claude subscription OAuth token (Pro/Max/Team/Enterprise).
@@ -24,14 +24,14 @@
 # Reviewing a DIFFERENT repo, or want a branded bot identity? See the commented
 # "cross-repo" lines at the end of the env block.
 
-name: loop-pr-superloop
+name: loop-pr-loop
 on:
   pull_request:
     types: [opened, synchronize, reopened] # synchronize = new commits pushed to the PR
   workflow_dispatch: {}
 
 concurrency:
-  group: loop-pr-superloop
+  group: loop-pr-loop
   cancel-in-progress: false
 
 # Least privilege: clone the repo + post the review and ready-to-merge / needs-human labels.
@@ -49,7 +49,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       # Runs the published loop; --pr focuses the tick on the changed PR (empty on manual
       # dispatch → sweep all). `@stable` is the Superserve-gated update channel.
-      - run: bunx @superserve/loops@stable run pr-superloop --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
+      - run: bunx @superserve/loops@stable run pr-loop --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
         env:
           SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}
           SUPERSERVE_CLAUDE_SECRET: claude-oauth

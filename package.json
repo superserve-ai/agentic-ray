@@ -17,8 +17,8 @@
     "test": "turbo run test",
     "test:coverage": "turbo run test:coverage",
     "test:e2e": "turbo run e2e",
-    "docs:dev": "mintlify dev --dir docs",
-    "docs:build": "mintlify build --dir docs",
+    "docs:dev": "cd docs && mintlify dev",
+    "docs:build": "cd docs && mintlify validate",
     "docs:check-nav": "bun run scripts/check-docs-nav.ts",
     "prepare": "husky"
   },

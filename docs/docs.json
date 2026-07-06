@@ -124,23 +124,115 @@
         ]
       },
       {
-        "tab": "SDK Reference",
-        "groups": [
+        "tab": "Reference",
+        "dropdowns": [
           {
-            "group": "Reference",
-            "pages": [
-              "sdk-reference/sandbox",
-              "sdk-reference/secret",
-              "sdk-reference/template",
-              "sdk-reference/commands",
-              "sdk-reference/files"
+            "dropdown": "SDK Reference",
+            "icon": "code",
+            "groups": [
+              {
+                "group": "Reference",
+                "pages": [
+                  "sdk-reference/sandbox",
+                  "sdk-reference/secret",
+                  "sdk-reference/template",
+                  "sdk-reference/commands",
+                  "sdk-reference/files"
+                ]
+              }
+            ]
+          },
+          {
+            "dropdown": "REST API",
+            "icon": "server",
+            "openapi": "https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml",
+            "groups": [
+              {
+                "group": "Sandboxes",
+                "pages": [
+                  "GET /sandboxes",
+                  "POST /sandboxes",
+                  "GET /sandboxes/{sandbox_id}",
+                  "PATCH /sandboxes/{sandbox_id}",
+                  "DELETE /sandboxes/{sandbox_id}",
+                  "POST /sandboxes/{sandbox_id}/pause",
+                  "POST /sandboxes/{sandbox_id}/resume",
+                  "POST /sandboxes/{sandbox_id}/activate",
+                  "GET /sandboxes/{sandbox_id}/network"
+                ]
+              },
+              {
+                "group": "Exec",
+                "pages": [
+                  "POST /exec",
+                  "POST /exec/stream",
+                  "GET /exec/connect"
+                ]
+              },
+              {
+                "group": "Files",
+                "pages": [
+                  "GET /sandboxes/{sandbox_id}/files",
+                  "GET /files",
+                  "POST /files"
+                ]
+              },
+              {
+                "group": "Templates",
+                "pages": [
+                  "GET /templates",
+                  "POST /templates",
+                  "GET /templates/{template_id}",
+                  "DELETE /templates/{template_id}",
+                  "GET /templates/{template_id}/builds",
+                  "POST /templates/{template_id}/builds",
+                  "GET /templates/{template_id}/builds/{build_id}",
+                  "DELETE /templates/{template_id}/builds/{build_id}",
+                  "GET /templates/{template_id}/builds/{build_id}/logs"
+                ]
+              },
+              {
+                "group": "Secrets",
+                "pages": [
+                  "POST /secrets",
+                  "GET /secrets",
+                  "GET /secrets/{name}",
+                  "PATCH /secrets/{name}",
+                  "DELETE /secrets/{name}",
+                  "POST /sandboxes/{sandbox_id}/secrets",
+                  "DELETE /sandboxes/{sandbox_id}/secrets/{env_key}",
+                  "GET /secrets/{name}/audit",
+                  "GET /secrets/{name}/sandboxes",
+                  "GET /providers"
+                ]
+              },
+              {
+                "group": "Billing",
+                "pages": ["GET /billing/pricing", "GET /billing/pricing/public"]
+              },
+              {
+                "group": "Team Management",
+                "pages": [
+                  "GET /teams/{team_id}/management",
+                  "GET /teams/{team_id}/members",
+                  "POST /teams/{team_id}/members",
+                  "DELETE /teams/{team_id}/members/{user_id}",
+                  "GET /teams/{team_id}/roles",
+                  "POST /teams/{team_id}/roles",
+                  "DELETE /teams/{team_id}/roles/{assignment_id}"
+                ]
+              }
             ]
           }
         ]
       },
       {
-        "tab": "Integration Guides",
+        "tab": "Cookbook",
         "groups": [
+          {
+            "group": "Recipes",
+            "pages": ["cookbook/pr-loop", "cookbook/software-factory"]
+          },
           {
             "group": "MCP",
             "tag": "NEW",
@@ -172,88 +264,6 @@
               "integrations/agent-harnesses/claude-agent-sdk",
               "integrations/agent-harnesses/openai-agents-sdk"
             ]
-          },
-          {
-            "group": "Loops",
-            "tag": "NEW",
-            "pages": ["integrations/loops/pr-superloop"]
-          }
-        ]
-      },
-      {
-        "tab": "API Reference",
-        "openapi": "https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml",
-        "groups": [
-          {
-            "group": "Sandboxes",
-            "pages": [
-              "GET /sandboxes",
-              "POST /sandboxes",
-              "GET /sandboxes/{sandbox_id}",
-              "PATCH /sandboxes/{sandbox_id}",
-              "DELETE /sandboxes/{sandbox_id}",
-              "POST /sandboxes/{sandbox_id}/pause",
-              "POST /sandboxes/{sandbox_id}/resume",
-              "POST /sandboxes/{sandbox_id}/activate",
-              "GET /sandboxes/{sandbox_id}/network"
-            ]
-          },
-          {
-            "group": "Exec",
-            "pages": ["POST /exec", "POST /exec/stream", "GET /exec/connect"]
-          },
-          {
-            "group": "Files",
-            "pages": [
-              "GET /sandboxes/{sandbox_id}/files",
-              "GET /files",
-              "POST /files"
-            ]
-          },
-          {
-            "group": "Templates",
-            "pages": [
-              "GET /templates",
-              "POST /templates",
-              "GET /templates/{template_id}",
-              "DELETE /templates/{template_id}",
-              "GET /templates/{template_id}/builds",
-              "POST /templates/{template_id}/builds",
-              "GET /templates/{template_id}/builds/{build_id}",
-              "DELETE /templates/{template_id}/builds/{build_id}",
-              "GET /templates/{template_id}/builds/{build_id}/logs"
-            ]
-          },
-          {
-            "group": "Secrets",
-            "pages": [
-              "POST /secrets",
-              "GET /secrets",
-              "GET /secrets/{name}",
-              "PATCH /secrets/{name}",
-              "DELETE /secrets/{name}",
-              "POST /sandboxes/{sandbox_id}/secrets",
-              "DELETE /sandboxes/{sandbox_id}/secrets/{env_key}",
-              "GET /secrets/{name}/audit",
-              "GET /secrets/{name}/sandboxes",
-              "GET /providers"
-            ]
-          },
-          {
-            "group": "Teams",
-            "pages": [
-              "GET /teams/{team_id}/management",
-              "GET /teams/{team_id}/members",
-              "POST /teams/{team_id}/members",
-              "DELETE /teams/{team_id}/members/{user_id}",
-              "GET /teams/{team_id}/roles",
-              "POST /teams/{team_id}/roles",
-              "DELETE /teams/{team_id}/roles/{assignment_id}"
-            ]
-          },
-          {
-            "group": "Billing",
-            "pages": ["GET /billing/pricing", "GET /billing/pricing/public"]
           }
         ]
       }

@@ -5,12 +5,12 @@ import { runLoop } from "../lib/run-loop"
 import type { LoopSpec, RunResult } from "../lib/run-loop"
 
 /**
- * PR Superloop — orchestrator (runs on the CI runner, NOT in a sandbox).
+ * PR Loop — orchestrator (runs on the CI runner, NOT in a sandbox).
  *
  * This script is pure scheduling + lifecycle: find this repo's warm sandbox,
  * run ONE Claude Code tick inside it, pause. All the actual PR work — discover,
  * triage, fix, verify, comment, escalate — happens inside the box, driven by the
- * `pr-superloop` skill (see ./skill/SKILL.md). The box boots from the
+ * `pr-loop` skill (see ./skill/SKILL.md). The box boots from the
  * `superserve/claude-code` template, so the `claude` CLI is already installed.
  *
  * Auth is the headless Claude subscription path: a `CLAUDE_CODE_OAUTH_TOKEN`
@@ -24,16 +24,16 @@ import type { LoopSpec, RunResult } from "../lib/run-loop"
  * The repo defaults to the current git checkout's `github.com` remote, so `--repo`
  * is optional when you run inside the repo you want reviewed.
  *
- *   bun run pr-superloop/loop.ts --pr 42              # review PR #42 in the current repo
- *   bun run pr-superloop/loop.ts                      # sweep all open PRs (one tick)
- *   bun run pr-superloop/loop.ts --watch              # local dev: re-tick on an interval
- *   bun run pr-superloop/loop.ts --dry-run            # no keys needed
- *   bun run pr-superloop/loop.ts --repo owner/name    # or target another repo explicitly
+ *   bun run pr-loop/loop.ts --pr 42              # review PR #42 in the current repo
+ *   bun run pr-loop/loop.ts                      # sweep all open PRs (one tick)
+ *   bun run pr-loop/loop.ts --watch              # local dev: re-tick on an interval
+ *   bun run pr-loop/loop.ts --dry-run            # no keys needed
+ *   bun run pr-loop/loop.ts --repo owner/name    # or target another repo explicitly
  */
 
 const TEMPLATE = "superserve/claude-code"
 const REPO_DIR = "/home/user/repo"
-const SKILL_UPLOAD_PATH = "/home/user/pr-superloop.SKILL.md"
+const SKILL_UPLOAD_PATH = "/home/user/pr-loop.SKILL.md"
 
 export type ClaudeMode = "subscription" | "metered"
 
@@ -110,9 +110,9 @@ function setupScript(): string {
     "  tar -xzf /tmp/gh.tgz -C /tmp",
     '  cp "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" "$HOME/.local/bin/gh"',
     "fi",
-    "# Make the pr-superloop skill discoverable by Claude Code.",
-    'mkdir -p "$HOME/.claude/skills/pr-superloop"',
-    `cp ${SKILL_UPLOAD_PATH} "$HOME/.claude/skills/pr-superloop/SKILL.md"`,
+    "# Make the pr-loop skill discoverable by Claude Code.",
+    'mkdir -p "$HOME/.claude/skills/pr-loop"',
+    `cp ${SKILL_UPLOAD_PATH} "$HOME/.claude/skills/pr-loop/SKILL.md"`,
     "# Authenticate git to github.com via the bound GITHUB_TOKEN. A credential",
     "# helper reads it at call time, so the token never lands in .gitconfig (works",
     "# for a raw PAT and for a Superserve proxy token swapped at egress). `gh` API",
@@ -134,7 +134,8 @@ function iterateScript(claudeMode: ClaudeMode, pr?: number): string {
     ? `Review pull request #${pr} in $TARGET_REPO.`
     : "Review the open PRs in $TARGET_REPO."
   return [
-    // Fail the tick if cd/fetch fail, instead of running claude in the wrong dir.
+    // Fail the tick if the cd/fetch/refresh fail, instead of reviewing against a
+    // stale or wrong-directory checkout.
     "set -e",
     // Subscription billing: drop any stray metered key so the OAuth token wins.
     // Metered mode keeps ANTHROPIC_API_KEY — it IS the credential.
@@ -142,8 +143,23 @@ function iterateScript(claudeMode: ClaudeMode, pr?: number): string {
       ? ["unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN"]
       : []),
     'export PATH="$HOME/.local/bin:$PATH"',
-    `cd ${REPO_DIR} && git fetch --all --prune --quiet`,
-    `claude -p "/pr-superloop ${task}" \\`,
+    `cd ${REPO_DIR}`,
+    // Refresh the warm checkout every tick. `git fetch` alone only updates the
+    // remote-tracking refs (origin/*): the default-branch working tree — where the
+    // reviewer reads project context (CLAUDE.md/AGENTS.md, test & lint commands) —
+    // would otherwise stay pinned at the clone-time SHA and go stale as the default
+    // branch moves. So fetch, then hard-reset that checkout to the remote tip.
+    "git fetch --all --prune --quiet",
+    // Re-derive the default branch (guards a rename since clone); fall back to main.
+    // Best-effort — the lookup itself must never fail the tick.
+    "git remote set-head origin --auto >/dev/null 2>&1 || true",
+    `DEFAULT_BRANCH="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' || true)"`,
+    `DEFAULT_BRANCH="\${DEFAULT_BRANCH:-main}"`,
+    // Each PR is reviewed in its own scratch worktree, so the main tree stays on the
+    // default branch: `-f -B` fast-forwards it to origin and drops any stray change,
+    // while leaving the untracked .pr-loop-state.md (loop memory) untouched.
+    'git checkout -f -q -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"',
+    `claude -p "/pr-loop ${task}" \\`,
     "  --permission-mode dontAsk \\",
     // Allow gh/git + the common test runners so the verifier can actually run the
     // project's checks inside the microVM (safe — it's an isolated box).
@@ -164,10 +180,10 @@ export function buildSpec(config: {
   pr?: number
 }): LoopSpec {
   return {
-    name: "pr-superloop",
+    name: "pr-loop",
     // Keyed by repo only (not PR) on purpose: one warm box reviews the whole
     // repo, and the concurrency group serializes each PR's events onto it.
-    metadata: { loop: "pr-superloop", repo: config.repo },
+    metadata: { loop: "pr-loop", repo: config.repo },
     template: TEMPLATE,
     secrets: config.auth.secrets,
     envVars: { ...config.auth.envVars, TARGET_REPO: config.repo },
@@ -240,9 +256,7 @@ function printDryRun(spec: LoopSpec): void {
       k === "TARGET_REPO" ? spec.envVars?.[k] : "<provided>",
     ]),
   )
-  console.log(
-    "[pr-superloop] dry run — resolved loop spec (no sandbox created):\n",
-  )
+  console.log("[pr-loop] dry run — resolved loop spec (no sandbox created):\n")
   console.log(`  template:  ${spec.template}`)
   console.log(`  metadata:  ${JSON.stringify(spec.metadata)}`)
   console.log(
@@ -272,17 +286,17 @@ export async function runTick(
   const result = await run(spec)
   const mode = result.bootstrapped ? "cold start (bootstrapped)" : "warm resume"
   log(
-    `\n[pr-superloop] tick done — sandbox ${result.sandboxId}, ${mode}, exit ${result.exitCode}`,
+    `\n[pr-loop] tick done — sandbox ${result.sandboxId}, ${mode}, exit ${result.exitCode}`,
   )
   return result.exitCode
 }
 
 /**
  * Run the loop from an explicit argv. Exported so the package's `superserve-loops
- * run pr-superloop …` verb (see ../install/cli.ts) drives the exact same code path
- * the CI workflow does via `bunx @superserve/loops run pr-superloop`, without a
+ * run pr-loop …` verb (see ../install/cli.ts) drives the exact same code path
+ * the CI workflow does via `bunx @superserve/loops run pr-loop`, without a
  * vendored copy. The `import.meta.main` guard below passes `process.argv.slice(2)`
- * so the local `bun run pr-superloop/loop.ts …` dev path is unchanged.
+ * so the local `bun run pr-loop/loop.ts …` dev path is unchanged.
  */
 export async function runLoopCli(argv: string[]): Promise<void> {
   const args = argv
@@ -326,7 +340,7 @@ export async function runLoopCli(argv: string[]): Promise<void> {
   const scope = pr ? `PR #${pr}` : "all open PRs"
 
   if (!watch) {
-    console.log(`[pr-superloop] reviewing ${scope} in ${repo}`)
+    console.log(`[pr-loop] reviewing ${scope} in ${repo}`)
     // One-shot (the `--once` GitHub Action path): surface a failed iterate as a
     // non-zero process exit so a scheduled run shows red instead of silently
     // green. Prefer process.exitCode over throwing — a throw reaches the
@@ -339,7 +353,7 @@ export async function runLoopCli(argv: string[]): Promise<void> {
 
   const intervalMs = parseDuration(getFlag(args, "--watch"), 15 * 60_000)
   console.log(
-    `[pr-superloop] watching ${repo} every ${intervalMs / 1000}s — Ctrl-C to stop`,
+    `[pr-loop] watching ${repo} every ${intervalMs / 1000}s — Ctrl-C to stop`,
   )
   // Recursive setTimeout, NOT setInterval: schedule the next tick only after the
   // current one settles. Ticks share one persistent box, so an overlapping run
@@ -352,7 +366,7 @@ export async function runLoopCli(argv: string[]): Promise<void> {
   const scheduleNext = (): void => {
     setTimeout(() => {
       void runTick(spec)
-        .catch((err) => console.error(`[pr-superloop] tick failed: ${err}`))
+        .catch((err) => console.error(`[pr-loop] tick failed: ${err}`))
         .finally(scheduleNext)
     }, intervalMs)
   }

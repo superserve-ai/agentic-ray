@@ -8,7 +8,7 @@
   "files": [
     "install",
     "lib",
-    "pr-superloop"
+    "pr-loop"
   ],
   "type": "module",
   "publishConfig": {
@@ -16,7 +16,7 @@
   },
   "scripts": {
     "add": "bun run install/cli.ts",
-    "superloop": "bun run pr-superloop/loop.ts",
+    "loop": "bun run pr-loop/loop.ts",
     "e2e": "bun run e2e/scenario.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

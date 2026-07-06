@@ -1,4 +1,4 @@
-# PR Superloop
+# PR Loop
 
 Shepherd open pull requests toward merge — without a human watching them — by running
 **Claude Code headless inside a warm Superserve sandbox** on a schedule.
@@ -7,7 +7,7 @@ Each tick the loop discovers open PRs, reviews every new commit against a calibr
 the project's own checks as a verifier, posts **one** concise signed review, and **escalates** risky
 PRs to a human. It **proposes**; a human merges. It never merges, force-pushes, or edits CI.
 
-![One PR Superloop tick end to end: a pushed commit resumes the warm box, which reads context, reviews the diff, and runs the project's own tests as the verifier, then branches three ways — a clean PR gets a ready-to-merge label, a real bug gets a needs-author verdict, and a security or injection or stuck case escalates to a human. All three converge on updating state and pausing to near-zero idle. A hard-limits band notes it never merges, force-pushes, or edits CI](../assets/pr-superloop-tick.png)
+![One PR Loop tick end to end: a pushed commit resumes the warm box, which reads context, reviews the diff, and runs the project's own tests as the verifier, then branches three ways — a clean PR gets a ready-to-merge label, a real bug gets a needs-author verdict, and a security or injection or stuck case escalates to a human. All three converge on updating state and pausing to near-zero idle. A hard-limits band notes it never merges, force-pushes, or edits CI](../assets/pr-loop-tick.png)
 
 Everything is on this one page, from "just try it" to "a branded bot with your own skills":
 
@@ -25,9 +25,9 @@ Everything is on this one page, from "just try it" to "a branded bot with your o
   inside a Firecracker microVM with `git worktree` isolation — never on your host or CI runner.
 - **~$0 idle.** The box is paused between ticks.
 
-The brain is Claude Code, driven by the [`pr-superloop` skill](./skill/SKILL.md) (review rubric
+The brain is Claude Code, driven by the [`pr-loop` skill](./skill/SKILL.md) (review rubric
 ported from [`reviewd`](https://github.com/simion/reviewd), MIT). State lives in the box at
-`/home/user/repo/.pr-superloop-state.md`, deduped by PR head SHA.
+`/home/user/repo/.pr-loop-state.md`, deduped by PR head SHA.
 
 The mental model: the loop is a tiny **orchestrator** that drives that warm sandbox. "Running it" —
 locally or in CI — only means running the orchestrator; the review always happens in the cloud
@@ -47,24 +47,24 @@ needs nothing.
 
 ```bash
 # run inside the repo you want reviewed
-bunx @superserve/loops add pr-superloop
+bunx @superserve/loops add pr-loop
 ```
 
 It detects the repo, prompts (without echo) for your Superserve API key, and — when `claude` is
 installed — **runs `claude setup-token` for you** to mint the long-lived Claude token (otherwise it
 prompts you to paste one). Then it does everything: creates the Superserve secret (`claude-oauth`,
-egress-swapped — the token never enters the box), writes `.github/workflows/loop-pr-superloop.yml`
+egress-swapped — the token never enters the box), writes `.github/workflows/loop-pr-loop.yml`
 (the _only_ file added to your repo), and sets the `SUPERSERVE_API_KEY` Actions secret.
 The workflow runs the **published** `@superserve/loops` package (`bunx @superserve/loops@stable run
-pr-superloop …`), so **no loop source is vendored in**. It pins the `@stable` channel, so
+pr-loop …`), so **no loop source is vendored in**. It pins the `@stable` channel, so
 improvements to the loop roll out automatically; you never edit the file again.
 Reviews post as **`github-actions[bot]`** (the workflow's built-in token — no GitHub PAT needed).
 
 Then commit and push the workflow file:
 
 ```bash
-git add .github/workflows/loop-pr-superloop.yml
-git commit -m "add pr-superloop" && git push
+git add .github/workflows/loop-pr-loop.yml
+git commit -m "add pr-loop" && git push
 ```
 
 Push a commit to any PR and it reviews that PR within seconds — no idle cron.
@@ -74,13 +74,13 @@ Non-interactive and other flags:
 ```bash
 # CI / non-interactive: pass tokens via env…
 SUPERSERVE_API_KEY=… CLAUDE_CODE_OAUTH_TOKEN=… \
-  bunx @superserve/loops add pr-superloop --yes
+  bunx @superserve/loops add pr-loop --yes
 # …or the same as flags:
-bunx @superserve/loops add pr-superloop --api-key ss_live_… --claude-token sk-ant-oat01-… --yes
+bunx @superserve/loops add pr-loop --api-key ss_live_… --claude-token sk-ant-oat01-… --yes
 # preview without changing anything
-bunx @superserve/loops add pr-superloop --dry-run
+bunx @superserve/loops add pr-loop --dry-run
 # review a DIFFERENT repo, or post under a machine-user identity → opt into a PAT
-bunx @superserve/loops add pr-superloop --github-token <PAT>
+bunx @superserve/loops add pr-loop --github-token <PAT>
 ```
 
 **PAT scopes** (only for the `--github-token` path): a fine-grained PAT on the target repo with
@@ -90,7 +90,7 @@ dedicated [machine-user account](https://docs.github.com/en/get-started/learning
 (e.g. `acme-review-bot`); reviews then post as that user. A GitHub App ([below](#give-it-a-branded-avatar))
 additionally gets you the `[bot]` badge, an avatar, and short-lived per-repo tokens.
 
-> In this monorepo (pre-publish), run it as `bun run examples/loops/install/cli.ts add pr-superloop`.
+> In this monorepo (pre-publish), run it as `bun run examples/loops/install/cli.ts add pr-loop`.
 
 ## Run a tick locally
 
@@ -100,24 +100,24 @@ from inside the repo you want reviewed (or pass `--repo owner/name` to target an
 
 ```bash
 # Preview only — creates nothing, needs no keys:
-bunx @superserve/loops run pr-superloop --dry-run
+bunx @superserve/loops run pr-loop --dry-run
 
 # One real tick from your machine (the orchestrator runs here; the review runs in the
 # cloud sandbox). Point at your Superserve secrets:
 SUPERSERVE_API_KEY=ss_live_… \
 SUPERSERVE_CLAUDE_SECRET=claude-oauth \
 SUPERSERVE_GITHUB_SECRET=loop-github-token \
-  bunx @superserve/loops run pr-superloop --pr 42
+  bunx @superserve/loops run pr-loop --pr 42
 
 # Local watch loop (dev): every 15 min
-bunx @superserve/loops run pr-superloop --watch=15m
+bunx @superserve/loops run pr-loop --watch=15m
 ```
 
 - `--pr N` focuses one PR; omit it to sweep every open PR in one tick.
 - For dev without Superserve secrets, pass raw tokens instead (they then live in the box for the
-  run): `CLAUDE_CODE_OAUTH_TOKEN=… GITHUB_TOKEN=$(gh auth token) bunx @superserve/loops run pr-superloop`.
+  run): `CLAUDE_CODE_OAUTH_TOKEN=… GITHUB_TOKEN=$(gh auth token) bunx @superserve/loops run pr-loop`.
   Swap `CLAUDE_CODE_OAUTH_TOKEN` for `ANTHROPIC_API_KEY` to use metered billing.
-- In this monorepo: `bun run pr-superloop/loop.ts …` runs the same CLI.
+- In this monorepo: `bun run pr-loop/loop.ts …` runs the same CLI.
 
 ## Manual setup (what the installer automates)
 
@@ -196,7 +196,7 @@ gh secret set LOOP_APP_ID --body "<your App ID>"
 gh secret set LOOP_APP_PRIVATE_KEY < ~/Downloads/your-app.*.private-key.pem
 ```
 
-Edit `.github/workflows/loop-pr-superloop.yml` — add the token-mint step and point the
+Edit `.github/workflows/loop-pr-loop.yml` — add the token-mint step and point the
 loop at it:
 
 ```yaml
@@ -207,7 +207,7 @@ steps:
     with:
       app-id: ${{ secrets.LOOP_APP_ID }}
       private-key: ${{ secrets.LOOP_APP_PRIVATE_KEY }}
-  - run: bunx @superserve/loops@stable run pr-superloop --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
+  - run: bunx @superserve/loops@stable run pr-loop --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
     env:
       SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}
       SUPERSERVE_CLAUDE_SECRET: claude-oauth
@@ -242,7 +242,7 @@ These work with the published loop as-is — nothing to fork.
 
 The loop's code ships as the `@superserve/loops` package (your workflow just `bunx`es it),
 so changing its _behavior_ means running your own copy: fork/clone `examples/loops`, edit,
-then either run it locally (`bun run pr-superloop/loop.ts …`) or, in the workflow, replace
+then either run it locally (`bun run pr-loop/loop.ts …`) or, in the workflow, replace
 the `bunx @superserve/loops@stable …` line with a checkout of your fork + `bun run`.
 
 Knobs live in [`loop.ts`](./loop.ts) (sandbox template, model / `--max-turns`,
@@ -294,13 +294,13 @@ rotate the secret as above).
 
 **Uninstall the loop:**
 
-1. Delete `.github/workflows/loop-pr-superloop.yml` — no more ticks.
+1. Delete `.github/workflows/loop-pr-loop.yml` — no more ticks.
 2. Kill the warm sandbox (it's paused, so it costs ~nothing, but still): console → Sandboxes →
-   the box named `pr-superloop`, or via the SDK:
+   the box named `pr-loop`, or via the SDK:
    ```ts
    import { Sandbox } from "@superserve/sdk"
    const [box] = await Sandbox.list({
-     metadata: { loop: "pr-superloop", repo: "owner/name" },
+     metadata: { loop: "pr-loop", repo: "owner/name" },
    })
    if (box) await Sandbox.killById(box.id)
    ```
@@ -317,7 +317,7 @@ rotate the secret as above).
 | A PR isn't getting reviewed                   | Fork PRs are skipped by design (their token is read-only) — use the PAT path. Drafts are skipped unless opted in. And a head SHA is reviewed **once**: no new commits → no new review.                                                                                                             |
 | Tick is slow / times out                      | One tick is capped at **20 minutes**, then the Action fails. Event-driven ticks review one PR; a manual `workflow_dispatch` sweeps _every_ open PR and can take much longer. Re-run from the Actions tab.                                                                                          |
 | Two PRs updated at once                       | Fine — the workflow's `concurrency` group serializes ticks per repo (they share one warm box), so the second waits for the first.                                                                                                                                                                  |
-| Where are the logs?                           | The sandbox's stdout/stderr stream straight into the GitHub Actions step log. The box itself (state file, repo checkout) is inspectable in the [console](https://console.superserve.ai) — it's the sandbox named `pr-superloop`.                                                                   |
+| Where are the logs?                           | The sandbox's stdout/stderr stream straight into the GitHub Actions step log. The box itself (state file, repo checkout) is inspectable in the [console](https://console.superserve.ai) — it's the sandbox named `pr-loop`.                                                                        |
 
 ## Which key does what
 
@@ -352,7 +352,7 @@ loop accepts its Claude credential four ways, checked in this order: `SUPERSERVE
 | Primitive      | Here                                                                       |
 | -------------- | -------------------------------------------------------------------------- |
 | Scheduling     | GitHub Actions `pull_request` events (the heartbeat)                       |
-| Memory / State | `.pr-superloop-state.md` in the warm box, deduped by head SHA              |
+| Memory / State | `.pr-loop-state.md` in the warm box, deduped by head SHA                   |
 | Worktrees      | `git worktree` **inside** the microVM (branch + host isolation)            |
 | Sub-agents     | maker (review) / checker (run the project's tests) split                   |
 | Skills         | [`skill/SKILL.md`](./skill/SKILL.md), discovered by Claude Code in the box |

@@ -13,7 +13,7 @@ import {
   parseRepoUrl,
   resolveAuth,
   runTick,
-} from "../pr-superloop/loop"
+} from "../pr-loop/loop"
 
 // Loop code always passes the same metadata object (stable key order), so a
 // plain stringify is a sufficient and deterministic map key here.
@@ -186,7 +186,7 @@ describe("runLoop", () => {
   })
 })
 
-describe("pr-superloop buildSpec / resolveAuth", () => {
+describe("pr-loop buildSpec / resolveAuth", () => {
   it("binds the subscription + github secrets by name", () => {
     const auth = resolveAuth({
       SUPERSERVE_CLAUDE_SECRET: "claude-oauth",
@@ -238,7 +238,7 @@ describe("pr-superloop buildSpec / resolveAuth", () => {
 
     expect(built.template).toBe("superserve/claude-code")
     expect(built.metadata).toEqual({
-      loop: "pr-superloop",
+      loop: "pr-loop",
       repo: "acme/widget",
     })
     expect(built.envVars?.TARGET_REPO).toBe("acme/widget")
@@ -253,6 +253,25 @@ describe("pr-superloop buildSpec / resolveAuth", () => {
     expect(built.iterate).toContain("Review the open PRs in $TARGET_REPO")
   })
 
+  it("refreshes the warm checkout to the latest default branch every tick", () => {
+    const auth = resolveAuth({
+      CLAUDE_CODE_OAUTH_TOKEN: "tok",
+      GITHUB_TOKEN: "ght",
+    } as NodeJS.ProcessEnv)
+    const built = buildSpec({ repo: "acme/widget", skill: "S", auth })
+
+    // `git fetch` alone only moves the origin/* refs; the default-branch working
+    // tree (where the reviewer reads CLAUDE.md / AGENTS.md / the test & lint
+    // commands) would stay at the clone-time SHA and go stale as the branch moves.
+    // Every tick must re-derive the default branch and hard-reset the checkout to
+    // the fetched remote tip so project context is never stale.
+    expect(built.iterate).toContain("git fetch --all --prune")
+    expect(built.iterate).toContain("symbolic-ref")
+    expect(built.iterate).toContain(
+      '-B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"',
+    )
+  })
+
   it("focuses the tick on one PR when given --pr", () => {
     const auth = resolveAuth({
       CLAUDE_CODE_OAUTH_TOKEN: "tok",
@@ -264,7 +283,7 @@ describe("pr-superloop buildSpec / resolveAuth", () => {
     expect(built.iterate).not.toContain("Review the open PRs")
     // One box per repo regardless of which PR fired — the metadata key omits the PR.
     expect(built.metadata).toEqual({
-      loop: "pr-superloop",
+      loop: "pr-loop",
       repo: "acme/widget",
     })
   })
@@ -285,7 +304,7 @@ describe("pr-superloop buildSpec / resolveAuth", () => {
   })
 })
 
-describe("pr-superloop one-shot exit propagation", () => {
+describe("pr-loop one-shot exit propagation", () => {
   const fakeResult = (exitCode: number): RunResult => ({
     sandboxId: "box-1",
     bootstrapped: false,

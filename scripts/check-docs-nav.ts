@@ -30,13 +30,14 @@ const EXEMPT_PATHS = new Set([
 
 const OP_RE = new RegExp(`^(${HTTP_METHODS.join("|")})\\s+/`)
 
+type NavDivision = {
+  openapi?: string
+  groups?: Array<{ pages: unknown[] }>
+}
+
 type DocsConfig = {
   navigation: {
-    tabs: Array<{
-      tab: string
-      openapi?: string
-      groups?: Array<{ pages: unknown[] }>
-    }>
+    tabs: Array<NavDivision & { tab: string; dropdowns?: NavDivision[] }>
   }
 }
 
@@ -44,21 +45,25 @@ function navOpsFromDocs(docs: DocsConfig): {
   ops: Set<string>
   specUrl: string
 } {
-  const apiTab = docs.navigation?.tabs?.find(
-    (t) => typeof t.openapi === "string",
-  )
-  if (!apiTab?.openapi) {
-    throw new Error("no tab with an `openapi` field found in docs.json")
+  const divisions: NavDivision[] = []
+  for (const tab of docs.navigation?.tabs ?? []) {
+    divisions.push(tab, ...(tab.dropdowns ?? []))
+  }
+  const apiDivision = divisions.find((d) => typeof d.openapi === "string")
+  if (!apiDivision?.openapi) {
+    throw new Error(
+      "no tab or dropdown with an `openapi` field found in docs.json",
+    )
   }
   const ops = new Set<string>()
-  for (const group of apiTab.groups ?? []) {
+  for (const group of apiDivision.groups ?? []) {
     for (const page of group.pages ?? []) {
       if (typeof page === "string" && OP_RE.test(page)) {
         ops.add(page.replace(/\s+/g, " ").trim())
       }
     }
   }
-  return { ops, specUrl: apiTab.openapi }
+  return { ops, specUrl: apiDivision.openapi }
 }
 
 function specOps(spec: unknown): Set<string> {

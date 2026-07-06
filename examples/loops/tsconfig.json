@@ -14,7 +14,7 @@
     "e2e/**/*.ts",
     "install/**/*.ts",
     "lib/**/*.ts",
-    "pr-superloop/**/*.ts",
+    "pr-loop/**/*.ts",
     "tests/**/*.ts",
     "vitest.config.ts"
   ]

@@ -1,11 +1,11 @@
 ---
-title: "PR Superloop"
-sidebarTitle: PR Superloop
+title: "PR Loop"
+sidebarTitle: PR Loop
 description: "An open-source PR review loop you install into any repo — Claude Code reviews every commit from a warm Superserve sandbox, with your own credentials and branding."
 icon: "code-pull-request"
 ---
 
-PR Superloop is an open-source [agent loop](https://github.com/superserve-ai/superserve/tree/main/examples/loops) that shepherds your open pull requests. Each time a commit is pushed to a PR, Claude Code — running headless inside a warm Superserve sandbox — reviews the new code against a calibrated rubric, runs your project's own tests as a verifier, posts **one** concise review, and escalates risky changes to a human. It proposes; a human merges. It never merges, force-pushes, or edits CI.
+PR Loop is an open-source [agent loop](https://github.com/superserve-ai/superserve/tree/main/examples/loops) that shepherds your open pull requests. Each time a commit is pushed to a PR, Claude Code — running headless inside a warm Superserve sandbox — reviews the new code against a calibrated rubric, runs your project's own tests as a verifier, posts **one** concise review, and escalates risky changes to a human. It proposes; a human merges. It never merges, force-pushes, or edits CI.
 
 Everything is self-hosted and yours: your repo, your GitHub identity, your Claude subscription, your sandboxes, your review norms.
 
@@ -37,7 +37,7 @@ The review runs in a sandbox rather than on the CI runner because:
 Run inside the repo you want reviewed:
 
 ```bash
-bunx @superserve/loops add pr-superloop
+bunx @superserve/loops add pr-loop
 ```
 
 The installer does everything:
@@ -45,20 +45,20 @@ The installer does everything:
 1. Prompts for your Superserve API key (hidden input) and — when the `claude` CLI is installed — runs `claude setup-token` for you to mint the long-lived Claude token.
 2. Stores that token as a Superserve secret (`claude-oauth`) bound to `api.anthropic.com` — it is [swapped in at egress](/secrets/binding) and never enters the sandbox.
 3. Sets `SUPERSERVE_API_KEY` as a GitHub Actions secret on the repo.
-4. Writes `.github/workflows/loop-pr-superloop.yml` — the only file added to your repo.
+4. Writes `.github/workflows/loop-pr-loop.yml` — the only file added to your repo.
 
 Commit and push the workflow file:
 
 ```bash
-git add .github/workflows/loop-pr-superloop.yml
-git commit -m "add pr-superloop" && git push
+git add .github/workflows/loop-pr-loop.yml
+git commit -m "add pr-loop" && git push
 ```
 
 Push a commit to any PR and it is reviewed within seconds.
 
 <Note>
   The workflow runs the published package (`bunx @superserve/loops@stable run
-  pr-superloop …`) — no loop source is vendored into your repo. `@stable` is a
+  pr-loop …`) — no loop source is vendored into your repo. `@stable` is a
   gated release channel, so loop improvements roll out without you ever editing
   the file.
 </Note>
@@ -67,10 +67,10 @@ For CI or scripted installs, pass credentials via env or flags instead of prompt
 
 ```bash
 SUPERSERVE_API_KEY=… CLAUDE_CODE_OAUTH_TOKEN=… \
-  bunx @superserve/loops add pr-superloop --yes
+  bunx @superserve/loops add pr-loop --yes
 
 # preview without changing anything
-bunx @superserve/loops add pr-superloop --dry-run
+bunx @superserve/loops add pr-loop --dry-run
 ```
 
 ## Try one tick locally
@@ -79,13 +79,13 @@ No install, no repo changes — good for seeing the resolved plan and one live r
 
 ```bash
 # resolved plan only, needs no keys
-bunx @superserve/loops run pr-superloop --repo owner/name --dry-run
+bunx @superserve/loops run pr-loop --repo owner/name --dry-run
 
 # one real review from your machine (the review still runs in a cloud sandbox)
 SUPERSERVE_API_KEY=ss_live_… \
 CLAUDE_CODE_OAUTH_TOKEN=… \
 GITHUB_TOKEN=$(gh auth token) \
-  bunx @superserve/loops run pr-superloop --repo owner/name --pr 42
+  bunx @superserve/loops run pr-loop --repo owner/name --pr 42
 ```
 
 Omit `--pr` to sweep every open PR in one tick, or add `--watch=15m` to re-tick on an interval.
@@ -109,7 +109,7 @@ By default reviews post as `github-actions[bot]` — zero GitHub credentials to 
 Create a dedicated GitHub account (e.g. `acme-review-bot`) and mint a fine-grained PAT on the target repo with `Contents: Read`, `Pull requests: Read & write`, `Issues: Read & write` (or a classic token with `repo` scope). Then install with:
 
 ```bash
-bunx @superserve/loops add pr-superloop --github-token <PAT>
+bunx @superserve/loops add pr-loop --github-token <PAT>
 ```
 
 Reviews now post as that account. The PAT is stored as the Superserve secret `loop-github-token` and swapped at egress. This path is also how one repo's workflow reviews a _different_ repo.
@@ -127,7 +127,7 @@ gh secret set LOOP_APP_ID --body "<your App ID>"
 gh secret set LOOP_APP_PRIVATE_KEY < ~/Downloads/your-app.*.private-key.pem
 ```
 
-In `.github/workflows/loop-pr-superloop.yml`, add the token-mint step and point the loop at it:
+In `.github/workflows/loop-pr-loop.yml`, add the token-mint step and point the loop at it:
 
 ```yaml
 steps:
@@ -137,7 +137,7 @@ steps:
     with:
       app-id: ${{ secrets.LOOP_APP_ID }}
       private-key: ${{ secrets.LOOP_APP_PRIVATE_KEY }}
-  - run: bunx @superserve/loops@stable run pr-superloop --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
+  - run: bunx @superserve/loops@stable run pr-loop --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
     env:
       SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}
       SUPERSERVE_CLAUDE_SECRET: claude-oauth
@@ -154,13 +154,13 @@ These work with the published loop as-is — nothing to fork:
 - **The verifier's checks.** The loop runs your project's _own_ tests, lint, and build — discovered from `CLAUDE.md`, `AGENTS.md`, `Makefile`, or CI config on the default branch. Nothing loop-specific to define.
 - **Your own skills.** Commit them to your repo at `.claude/skills/<name>/SKILL.md`. Claude Code runs inside your cloned repo, so it discovers project skills automatically.
 
-Deeper changes — your own rubric, MCP servers, models, tool policy — mean running the loop from source. The [loop's README](https://github.com/superserve-ai/superserve/tree/main/examples/loops/pr-superloop#deeper-changes-run-from-source) covers that path.
+Deeper changes — your own rubric, MCP servers, models, tool policy — mean running the loop from source. The [loop's README](https://github.com/superserve-ai/superserve/tree/main/examples/loops/pr-loop#deeper-changes-run-from-source) covers that path.
 
 ## Rotate, revoke, uninstall
 
 - **Rotate a credential by re-running the installer.** `add` is idempotent: it rotates the existing Superserve secrets in place and rewrites the same workflow file. The Claude token lasts about a year; when it expires, run `claude setup-token` again and re-run the installer.
 - **Revoke independently.** Revoke the Claude token in your Claude account, the PAT in GitHub settings, or the Superserve API key in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link) — each kills its own half without touching the others.
-- **Uninstall** by deleting the workflow file, then kill the warm sandbox (console → Sandboxes → the box named `pr-superloop`, or `Sandbox.killById`) and delete the `claude-oauth` secret.
+- **Uninstall** by deleting the workflow file, then kill the warm sandbox (console → Sandboxes → the box named `pr-loop`, or `Sandbox.killById`) and delete the `claude-oauth` secret.
 
 ## Safety model
 
@@ -181,7 +181,7 @@ Deeper changes — your own rubric, MCP servers, models, tool policy — mean ru
 <CardGroup cols={2}>
   <Card
     title="Source and full install guide"
-    href="https://github.com/superserve-ai/superserve/tree/main/examples/loops/pr-superloop"
+    href="https://github.com/superserve-ai/superserve/tree/main/examples/loops/pr-loop"
   >
     The loop's code, review rubric, and the step-by-step README — from "just try
     it" to a branded bot with your own skills.
