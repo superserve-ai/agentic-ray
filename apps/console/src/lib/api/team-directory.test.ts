@@ -111,3 +111,56 @@ describe("team directory fan-out", () => {
     expect(cellClients.usw.from).toHaveBeenCalledTimes(1)
   })
 })
+
+describe("cell failure isolation", () => {
+  beforeEach(() => {
+    regions = ["use", "usw"]
+    cellClients = {}
+  })
+
+  // Shape-compatible with cellClient but every query fails; cast because the
+  // success type pins error to null.
+  function failingClient(message: string) {
+    const from = vi.fn(() => ({
+      select: () => ({
+        eq: async () => ({ data: null, error: { message } }),
+      }),
+    }))
+    return { from } as unknown as ReturnType<typeof cellClient>
+  }
+
+  it("serves the remaining cells when a secondary cell fails", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    cellClients.use = cellClient([{ team_id: "team-1" }])
+    cellClients.usw = failingClient("usw pooler unreachable")
+
+    const memberships = await listTeamMembershipsForUser("u1")
+
+    expect(memberships).toEqual([{ teamId: "team-1", region: "use" }])
+    expect(errSpy).toHaveBeenCalledOnce()
+    errSpy.mockRestore()
+  })
+
+  it("still throws when the default cell fails", async () => {
+    cellClients.use = failingClient("primary down")
+    cellClients.usw = cellClient([{ team_id: "team-9" }])
+
+    await expect(listTeamMembershipsForUser("u1")).rejects.toThrow(
+      "primary down",
+    )
+  })
+
+  it("isolates a secondary-cell failure in the team directory too", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    cellClients.use = cellClient(
+      [{ team_id: "team-1" }],
+      [{ id: "team-1", name: "Alpha" }],
+    )
+    cellClients.usw = failingClient("usw down")
+
+    const teams = await listTeamsForUser("u1")
+
+    expect(teams).toEqual([{ id: "team-1", name: "Alpha", region: "use" }])
+    errSpy.mockRestore()
+  })
+})

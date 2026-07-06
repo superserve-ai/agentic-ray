@@ -29,6 +29,24 @@ function defaultCell(): Cell {
   }
 }
 
+// One client per credential set, reused across calls — a fresh client per
+// call would bypass HTTP agent reuse and risk socket exhaustion under load.
+// Keyed by url+key (not a singleton) so tests that swap env, and future key
+// rotations, get a matching client instead of a stale one.
+const clientCache = new Map<string, SupabaseClient>()
+
+function cachedClient(url: string, serviceRoleKey: string): SupabaseClient {
+  const cacheKey = `${url}\n${serviceRoleKey}`
+  let client = clientCache.get(cacheKey)
+  if (!client) {
+    client = createClient(url, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+    clientCache.set(cacheKey, client)
+  }
+  return client
+}
+
 function uswCell(): Cell | null {
   const url = process.env.SUPABASE_USWEST_URL
   const serviceRoleKey = process.env.SUPABASE_USWEST_SERVICE_ROLE_KEY
@@ -38,10 +56,7 @@ function uswCell(): Cell | null {
     region: "usw",
     apiBaseUrl:
       process.env.SANDBOX_API_URL_USWEST ?? "https://api-usw.superserve.ai",
-    createAdminClient: () =>
-      createClient(url, serviceRoleKey, {
-        auth: { autoRefreshToken: false, persistSession: false },
-      }),
+    createAdminClient: () => cachedClient(url, serviceRoleKey),
   }
 }
 

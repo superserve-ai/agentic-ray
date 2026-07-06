@@ -100,3 +100,26 @@ describe("cells registry env gating", () => {
     expect(mockCreateAdminClient).not.toHaveBeenCalled()
   })
 })
+
+describe("admin client reuse", () => {
+  beforeEach(() => {
+    mockCreateClient.mockClear()
+    mockCreateClient.mockImplementation(() => ({}))
+    process.env.SUPABASE_USWEST_URL = "https://usw.supabase.test"
+  })
+
+  it("returns the same usw client across calls", () => {
+    process.env.SUPABASE_USWEST_SERVICE_ROLE_KEY = "svc-key-reuse"
+    cellFor("usw").createAdminClient()
+    cellFor("usw").createAdminClient()
+    expect(mockCreateClient).toHaveBeenCalledTimes(1)
+  })
+
+  it("builds a fresh client when the credentials change", () => {
+    process.env.SUPABASE_USWEST_SERVICE_ROLE_KEY = "svc-key-a"
+    cellFor("usw").createAdminClient()
+    process.env.SUPABASE_USWEST_SERVICE_ROLE_KEY = "svc-key-b"
+    cellFor("usw").createAdminClient()
+    expect(mockCreateClient).toHaveBeenCalledTimes(2)
+  })
+})
