@@ -9,6 +9,7 @@ from superserve._config import (
     MAX_PREVIEW_PORT,
     MIN_PREVIEW_PORT,
     _derive_sandbox_host,
+    _region_from_api_key,
     data_plane_target,
     preview_url,
     resolve_config,
@@ -53,6 +54,102 @@ class TestResolveConfig:
         monkeypatch.delenv("SUPERSERVE_BASE_URL", raising=False)
         cfg = resolve_config()
         assert cfg.base_url == DEFAULT_BASE_URL
+
+
+# A realistic 32-char base64url random tail, matching the length every
+# ``ss_live_`` key (legacy or region-tagged) is minted with. Test keys are
+# built from this so the exact-length anchor in `_REGION_KEY_RE` is
+# actually exercised instead of trivially failing on a too-short fixture.
+_TAIL = "AbCdEfGhIjKlMnOpQrStUvWxYz012345"
+assert len(_TAIL) == 32
+
+
+class TestRegionDerivation:
+    @pytest.fixture(autouse=True)
+    def _no_base_url_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("SUPERSERVE_BASE_URL", raising=False)
+
+    def test_known_region_key_resolves_mapped_endpoints(self) -> None:
+        cfg = resolve_config(api_key=f"ss_live_use_{_TAIL}")
+        assert cfg.base_url == "https://api.superserve.ai"
+        assert cfg.sandbox_host == "sandbox.superserve.ai"
+
+    def test_unknown_region_falls_back_to_default(self) -> None:
+        # `usw` won't enter the known-regions map until its DNS is live.
+        cfg = resolve_config(api_key=f"ss_live_usw_{_TAIL}")
+        assert cfg.base_url == DEFAULT_BASE_URL
+        assert cfg.sandbox_host == DEFAULT_SANDBOX_HOST
+
+    def test_legacy_key_uses_default(self) -> None:
+        cfg = resolve_config(api_key=f"ss_live_{_TAIL}")
+        assert cfg.base_url == DEFAULT_BASE_URL
+        assert cfg.sandbox_host == DEFAULT_SANDBOX_HOST
+
+    def test_legacy_key_whose_tail_starts_like_a_region_uses_default(self) -> None:
+        # A legacy key's random tail is exactly 32 chars, same as a real
+        # key's tail. Even when it happens to start with "usw_", there's no
+        # length left over for a genuine `<region>_<32-char-tail>` — so it
+        # can never be misparsed as region-tagged, regardless of what's in
+        # `_KNOWN_REGIONS`. Correct for every legacy key (they are all
+        # us-east).
+        cfg = resolve_config(api_key=f"ss_live_usw_{_TAIL[:28]}")
+        assert cfg.base_url == DEFAULT_BASE_URL
+        assert cfg.sandbox_host == DEFAULT_SANDBOX_HOST
+
+    def test_explicit_base_url_beats_region(self) -> None:
+        cfg = resolve_config(
+            api_key=f"ss_live_use_{_TAIL}", base_url="https://arg.example.com"
+        )
+        assert cfg.base_url == "https://arg.example.com"
+        assert cfg.sandbox_host == DEFAULT_SANDBOX_HOST
+
+    def test_env_base_url_beats_region(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SUPERSERVE_BASE_URL", "https://env.example.com")
+        cfg = resolve_config(api_key=f"ss_live_use_{_TAIL}")
+        assert cfg.base_url == "https://env.example.com"
+
+    def test_region_key_sourced_from_env_var(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SUPERSERVE_API_KEY", f"ss_live_use_{_TAIL}")
+        cfg = resolve_config()
+        assert cfg.base_url == "https://api.superserve.ai"
+        assert cfg.sandbox_host == "sandbox.superserve.ai"
+
+
+class TestRegionFromApiKey:
+    @pytest.mark.parametrize(
+        ("key", "region"),
+        [
+            (f"ss_live_use_{_TAIL}", "use"),
+            (f"ss_live_usw_{_TAIL}", "usw"),
+            (f"ss_live_a_{_TAIL}", "a"),
+            ("ss_live_" + "a" * 17 + "_" + _TAIL, "a" * 17),
+        ],
+    )
+    def test_extracts_valid_region_tokens(self, key: str, region: str) -> None:
+        assert _region_from_api_key(key) == region
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            f"ss_live_{_TAIL}",  # legacy: no region segment
+            f"ss_live_usw_{_TAIL[:28]}",  # legacy tail that starts like "usw_"
+            f"ss_live_USE_{_TAIL}",  # uppercase is not a region token
+            f"ss_live_us-e_{_TAIL}",  # non-alphanumeric
+            "ss_live_" + "a" * 18 + "_" + _TAIL,  # region too long
+            f"ss_live_use_{_TAIL[:31]}",  # tail one char short of 32
+            f"ss_live_use_{_TAIL}X",  # tail one char over 32
+            "ss_live_use_",  # nothing after the region
+            f"ss_live__{_TAIL}",  # empty region
+            "ss_test_use_" + _TAIL,  # wrong prefix
+            "ss_live_",
+            "",
+            "not a key",
+        ],
+    )
+    def test_returns_none_for_legacy_or_weird_keys(self, key: str) -> None:
+        assert _region_from_api_key(key) is None
 
 
 class TestDeriveSandboxHost:

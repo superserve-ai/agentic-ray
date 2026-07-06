@@ -1,31 +1,9 @@
 name: Publish MCP Server
 
-# Tag-triggered. Use tags like `mcp-v0.1.0` so this does NOT collide with the
-# CLI/SDK release flows that listen on `v*` (cli-publish.yml, release.yml).
-#
-# What it does, in order:
-#   1. npm publish @superserve/mcp (with provenance)
-#   2. publish server.json to the official MCP Registry via GitHub OIDC
-#
-# PREREQUISITES (see spec/2026-06-23-mcp-launch-runbook.md):
-#   - NPM access: the NPM_TOKEN secret must be able to create a NEW package under
-#     the @superserve org. A granular token scoped to only the EXISTING packages
-#     (@superserve/sdk, @superserve/cli) CANNOT create @superserve/mcp — in that
-#     case an org owner must do the FIRST `npm publish` manually once, after which
-#     this workflow handles every later version. Confirm with an @superserve npm
-#     org owner before the first run.
-#   - SDK on npm: @superserve/sdk is an EXTERNAL runtime dep (tsup leaves it
-#     unbundled). This workflow pins it to the LATEST version published on npm.
-#     That version MUST be >= the minimum the MCP server actually calls (currently
-#     0.7.7, which introduced Sandbox.files.downloadDir — see packages/mcp/src/client.ts).
-#     The "Pin workspace runtime deps" step enforces this floor and FAILS the
-#     release if the latest published SDK is older, so a tag can never ship an
-#     @superserve/mcp whose pinned SDK lacks an API it depends on. If the guard
-#     trips, publish @superserve/sdk (>= the floor) first, then re-tag.
-#   - mcp.superserve.ai must be live: server.json's remotes[].url points there and
-#     the registry expects the URL to be reachable.
-#   - Public repo: required for both npm provenance and the io.github.superserve-ai
-#     GitHub-namespace OIDC ownership proof.
+# Tag-triggered (mcp-v0.1.0 -> 0.1.0). Publishes @superserve/mcp to npm (Trusted
+# Publishing + provenance), then registers server.json in the MCP Registry.
+# Prereqs: npm Trusted Publisher configured for @superserve/mcp; @superserve/sdk
+# >= 0.7.7 published; mcp.superserve.ai live; public repo (OIDC + provenance).
 
 on:
   push:
@@ -36,7 +14,7 @@ jobs:
     name: Publish @superserve/mcp + MCP Registry
     runs-on: ubuntu-latest
     permissions:
-      id-token: write # GitHub OIDC for mcp-publisher AND npm provenance
+      id-token: write # OIDC: npm Trusted Publishing + provenance + mcp-publisher
       contents: read
     steps:
       - name: Checkout
@@ -47,7 +25,6 @@ jobs:
         with:
           bun-version: 1.3.5
 
-      # npm CLI (>= 9.5, for --provenance) and registry auth for the publish step.
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
@@ -57,9 +34,6 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
-      # Derive the version from the tag (mcp-v0.1.0 -> 0.1.0) and write it into
-      # both package.json and server.json so the npm artifact and the registry
-      # metadata agree.
       - name: Set version from tag
         working-directory: packages/mcp
         run: |
@@ -68,50 +42,31 @@ jobs:
           jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
           jq --arg v "$VERSION" '.version = $v | (.packages[] | select(.registryType=="npm") | .version) = $v' server.json > server.json.tmp && mv server.json.tmp server.json
 
-      # npm publish does NOT translate `workspace:*`, so a literal
-      # "@superserve/sdk": "workspace:*" would ship and break `npm i`. Pin it to
-      # the latest version PUBLISHED on npm (the workspace may be ahead of the
-      # registry).
-      #
-      # The MCP server is NOT fully decoupled from the SDK version: it calls APIs
-      # that exist only past a known floor (e.g. Sandbox.files.downloadDir, added
-      # in @superserve/sdk 0.7.7 — see packages/mcp/src/client.ts). So before
-      # pinning, FAIL FAST if the latest published SDK is older than that floor;
-      # otherwise the package builds against the workspace SDK but publishes a
-      # runtime dep that lacks downloadDir, breaking sandbox_files_download_dir for
-      # users. If this trips, publish @superserve/sdk (>= the floor) first, then
-      # re-tag. Keep MIN_SDK_VERSION in sync with the requirement in client.ts.
+      # Pin @superserve/sdk (workspace:* would break `npm i`) to the published
+      # version, failing if it's below the floor the server needs (downloadDir).
       - name: Pin workspace runtime deps to published versions
         working-directory: packages/mcp
         run: |
           set -euo pipefail
-          MIN_SDK_VERSION="0.7.7" # floor: Sandbox.files.downloadDir (see src/client.ts)
+          MIN_SDK_VERSION="0.7.7"
           SDK_VERSION="$(npm view @superserve/sdk version)"
           test -n "$SDK_VERSION"
-          # `sort -V` orders the pair; if the floor sorts first (or they're equal)
-          # the resolved version satisfies `>= MIN`. npm's `latest` tag is always a
-          # stable x.y.z, so version-sort matches semver here.
           if [ "$(printf '%s\n%s\n' "$MIN_SDK_VERSION" "$SDK_VERSION" | sort -V | head -n1)" != "$MIN_SDK_VERSION" ]; then
-            echo "::error::Latest published @superserve/sdk is $SDK_VERSION but @superserve/mcp requires >= $MIN_SDK_VERSION (Sandbox.files.downloadDir). Publish @superserve/sdk >= $MIN_SDK_VERSION before tagging mcp-v*, then re-tag." >&2
+            echo "::error::Published @superserve/sdk $SDK_VERSION < required $MIN_SDK_VERSION. Publish the SDK first, then re-tag." >&2
             exit 1
           fi
-          echo "Pinning @superserve/sdk to ^$SDK_VERSION (>= $MIN_SDK_VERSION required)"
           jq --arg v "^$SDK_VERSION" '.dependencies["@superserve/sdk"] = $v' package.json > package.json.tmp && mv package.json.tmp package.json
 
       - name: Build
         run: bunx turbo run build --filter=@superserve/mcp
 
-      - name: Publish package to npm (with provenance)
-        working-directory: packages/mcp
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          set -euo pipefail
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
-          npm publish --access public --provenance
-          rm .npmrc
+      # Trusted Publishing needs npm >= 11.5.1 (newer than setup-node's bundled npm).
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
-      # --- Official MCP Registry ---
+      - name: Publish to npm (Trusted Publishing + provenance)
+        working-directory: packages/mcp
+        run: npm publish --access public --provenance
 
       - name: Install mcp-publisher
         run: |
@@ -124,7 +79,7 @@ jobs:
         working-directory: packages/mcp
         run: ${{ github.workspace }}/mcp-publisher validate
 
-      - name: Authenticate to MCP Registry (GitHub OIDC)
+      - name: Login to MCP Registry (GitHub OIDC)
         working-directory: packages/mcp
         run: ${{ github.workspace }}/mcp-publisher login github-oidc
 

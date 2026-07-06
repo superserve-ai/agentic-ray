@@ -1,15 +1,18 @@
 /**
  * use-sandboxes hook tests — focus on optimistic updates, rollback, and
  * cache invalidation. Mocks the `@/lib/api/sandboxes` layer so tests don't
- * hit the real fetch.
+ * hit the real fetch. List results are cached per-page as `{ items, total }`
+ * under sandboxKeys.list(params); the mutations patch every such cache via
+ * sandboxKeys.lists(), so seeding one representative page is enough.
  */
 
+import type { QueryClient } from "@tanstack/react-query"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { ApiError } from "@/lib/api/client"
+import { ApiError, type PagedResult } from "@/lib/api/client"
 import { sandboxKeys } from "@/lib/api/query-keys"
-import type { SandboxResponse } from "@/lib/api/types"
+import type { SandboxListParams, SandboxResponse } from "@/lib/api/types"
 import { createQueryWrapper } from "@/test/react-query"
 
 // Mock the API layer. These functions are what the hooks delegate to.
@@ -23,7 +26,7 @@ vi.mock("@/lib/api/sandboxes", () => ({
   deleteSandbox: (...a: unknown[]) => mockDelete(...a),
   pauseSandbox: (...a: unknown[]) => mockPause(...a),
   resumeSandbox: (...a: unknown[]) => mockResume(...a),
-  listSandboxes: vi.fn(),
+  listSandboxesPaged: vi.fn(),
   getSandbox: vi.fn(),
   patchSandbox: vi.fn(),
 }))
@@ -56,15 +59,33 @@ const sandbox = (
   ...overrides,
 })
 
+// A representative page-cache key + shape. The mutations target every cache
+// under sandboxKeys.lists(), so this single seeded page stands in for the
+// user's current view.
+const LIST_PARAMS: SandboxListParams = {
+  page: 1,
+  pageSize: 50,
+  sort: "created_at",
+  order: "desc",
+}
+const listKey = sandboxKeys.list(LIST_PARAMS)
+const page = (items: SandboxResponse[]): PagedResult<SandboxResponse> => ({
+  items,
+  total: items.length,
+})
+const cachedList = (
+  queryClient: QueryClient,
+): PagedResult<SandboxResponse> | undefined =>
+  queryClient.getQueryData<PagedResult<SandboxResponse>>(listKey)
+
 describe("useCreateSandbox", () => {
   beforeEach(() => {
     mockCreate.mockReset()
     mockAddToast.mockReset()
   })
 
-  it("prepends the new sandbox to the list cache on success", async () => {
-    const { queryClient, wrapper } = createQueryWrapper()
-    queryClient.setQueryData(sandboxKeys.all, [sandbox({ id: "old" })])
+  it("shows a success toast on success", async () => {
+    const { wrapper } = createQueryWrapper()
     mockCreate.mockResolvedValue(sandbox({ id: "new", name: "new-box" }))
 
     const { result } = renderHook(() => useCreateSandbox(), { wrapper })
@@ -73,9 +94,6 @@ describe("useCreateSandbox", () => {
       await result.current.mutateAsync({ name: "new-box" })
     })
 
-    const list = queryClient.getQueryData<SandboxResponse[]>(sandboxKeys.all)
-    expect(list).toHaveLength(2)
-    expect(list?.[0].id).toBe("new")
     expect(mockAddToast).toHaveBeenCalledWith(
       'Sandbox "new-box" created',
       "success",
@@ -123,12 +141,12 @@ describe("useDeleteSandbox", () => {
     mockAddToast.mockReset()
   })
 
-  it("optimistically removes the sandbox from the cache", async () => {
+  it("optimistically removes the sandbox from the page cache", async () => {
     const { queryClient, wrapper } = createQueryWrapper()
-    queryClient.setQueryData(sandboxKeys.all, [
-      sandbox({ id: "a" }),
-      sandbox({ id: "b" }),
-    ])
+    queryClient.setQueryData(
+      listKey,
+      page([sandbox({ id: "a" }), sandbox({ id: "b" })]),
+    )
     mockDelete.mockResolvedValue(undefined)
 
     const { result } = renderHook(() => useDeleteSandbox(), { wrapper })
@@ -139,15 +157,14 @@ describe("useDeleteSandbox", () => {
 
     // Immediately after mutate, the optimistic removal should apply.
     await waitFor(() => {
-      const list = queryClient.getQueryData<SandboxResponse[]>(sandboxKeys.all)
-      expect(list?.map((s) => s.id)).toEqual(["b"])
+      expect(cachedList(queryClient)?.items.map((s) => s.id)).toEqual(["b"])
     })
   })
 
   it("rolls back the cache on failure", async () => {
     const { queryClient, wrapper } = createQueryWrapper()
-    const before = [sandbox({ id: "a" }), sandbox({ id: "b" })]
-    queryClient.setQueryData(sandboxKeys.all, before)
+    const before = page([sandbox({ id: "a" }), sandbox({ id: "b" })])
+    queryClient.setQueryData(listKey, before)
     mockDelete.mockRejectedValue(new Error("boom"))
 
     const { result } = renderHook(() => useDeleteSandbox(), { wrapper })
@@ -158,9 +175,7 @@ describe("useDeleteSandbox", () => {
 
     await waitFor(() => {
       // Cache restored to the pre-mutate snapshot.
-      expect(
-        queryClient.getQueryData<SandboxResponse[]>(sandboxKeys.all),
-      ).toEqual(before)
+      expect(cachedList(queryClient)).toEqual(before)
     })
     expect(mockAddToast).toHaveBeenCalledWith(expect.any(String), "error")
   })
@@ -174,11 +189,10 @@ describe("useBulkDeleteSandboxes", () => {
 
   it("optimistically removes all selected sandboxes", async () => {
     const { queryClient, wrapper } = createQueryWrapper()
-    queryClient.setQueryData(sandboxKeys.all, [
-      sandbox({ id: "a" }),
-      sandbox({ id: "b" }),
-      sandbox({ id: "c" }),
-    ])
+    queryClient.setQueryData(
+      listKey,
+      page([sandbox({ id: "a" }), sandbox({ id: "b" }), sandbox({ id: "c" })]),
+    )
     mockDelete.mockResolvedValue(undefined)
 
     const { result } = renderHook(() => useBulkDeleteSandboxes(), {
@@ -189,8 +203,7 @@ describe("useBulkDeleteSandboxes", () => {
       await result.current.mutateAsync(["a", "c"])
     })
 
-    const list = queryClient.getQueryData<SandboxResponse[]>(sandboxKeys.all)
-    expect(list?.map((s) => s.id)).toEqual(["b"])
+    expect(cachedList(queryClient)?.items.map((s) => s.id)).toEqual(["b"])
     expect(mockDelete).toHaveBeenCalledTimes(2)
   })
 })
@@ -204,9 +217,10 @@ describe("usePauseSandbox / useResumeSandbox", () => {
 
   it("pauses: flips the cached sandbox to paused optimistically", async () => {
     const { queryClient, wrapper } = createQueryWrapper()
-    queryClient.setQueryData(sandboxKeys.all, [
-      sandbox({ id: "a", status: "active" }),
-    ])
+    queryClient.setQueryData(
+      listKey,
+      page([sandbox({ id: "a", status: "active" })]),
+    )
     mockPause.mockResolvedValue(undefined)
 
     const { result } = renderHook(() => usePauseSandbox(), { wrapper })
@@ -215,16 +229,16 @@ describe("usePauseSandbox / useResumeSandbox", () => {
     })
 
     await waitFor(() => {
-      const list = queryClient.getQueryData<SandboxResponse[]>(sandboxKeys.all)
-      expect(list?.[0].status).toBe("paused")
+      expect(cachedList(queryClient)?.items[0].status).toBe("paused")
     })
   })
 
   it("resumes: flips the cached sandbox to resuming optimistically, then active on success with the fresh access_token", async () => {
     const { queryClient, wrapper } = createQueryWrapper()
-    queryClient.setQueryData(sandboxKeys.all, [
-      sandbox({ id: "a", status: "paused" }),
-    ])
+    queryClient.setQueryData(
+      listKey,
+      page([sandbox({ id: "a", status: "paused" })]),
+    )
     queryClient.setQueryData(
       sandboxKeys.detail("a"),
       sandbox({ id: "a", status: "paused", access_token: "old" }),
@@ -249,8 +263,7 @@ describe("usePauseSandbox / useResumeSandbox", () => {
     })
 
     await waitFor(() => {
-      const list = queryClient.getQueryData<SandboxResponse[]>(sandboxKeys.all)
-      expect(list?.[0].status).toBe("resuming")
+      expect(cachedList(queryClient)?.items[0].status).toBe("resuming")
       const detail = queryClient.getQueryData<SandboxResponse>(
         sandboxKeys.detail("a"),
       )
@@ -272,8 +285,8 @@ describe("usePauseSandbox / useResumeSandbox", () => {
 
   it("rolls back pause on error", async () => {
     const { queryClient, wrapper } = createQueryWrapper()
-    const before = [sandbox({ id: "a", status: "active" })]
-    queryClient.setQueryData(sandboxKeys.all, before)
+    const before = page([sandbox({ id: "a", status: "active" })])
+    queryClient.setQueryData(listKey, before)
     mockPause.mockRejectedValue(new Error("boom"))
 
     const { result } = renderHook(() => usePauseSandbox(), { wrapper })
@@ -282,9 +295,7 @@ describe("usePauseSandbox / useResumeSandbox", () => {
     })
 
     await waitFor(() => {
-      expect(
-        queryClient.getQueryData<SandboxResponse[]>(sandboxKeys.all),
-      ).toEqual(before)
+      expect(cachedList(queryClient)).toEqual(before)
     })
   })
 })

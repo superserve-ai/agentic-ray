@@ -1,22 +1,41 @@
 "use client"
 
 import { PlusIcon, StackIcon } from "@phosphor-icons/react"
-import { Button, Table, TableHead, TableHeader, TableRow } from "@superserve/ui"
-import { Suspense, useMemo, useState } from "react"
+import {
+  Button,
+  cn,
+  Table,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@superserve/ui"
+import { useSearchParams } from "next/navigation"
+import { Suspense, useEffect } from "react"
 
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
+import { Pagination } from "@/components/pagination"
+import { SortableTableHead } from "@/components/sortable-table-head"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
 import { CreateTemplateDialog } from "@/components/templates/create-template-dialog"
 import { TemplateTableRow } from "@/components/templates/template-table-row"
 import { useCreateParam } from "@/hooks/use-create-param"
-import { useTemplates } from "@/hooks/use-templates"
-import { isSystemTemplate } from "@/lib/templates/is-system-template"
+import { useListParams } from "@/hooks/use-list-params"
+import { useTemplatesPage } from "@/hooks/use-templates"
+import {
+  TEMPLATE_SORT_COLUMNS,
+  type TemplateListParams,
+  type TemplateOwnerFilter,
+} from "@/lib/api/types"
 
-type Tab = "all" | "team" | "system"
+const OWNER_TABS = [
+  { label: "All", value: "all" },
+  { label: "Team", value: "team" },
+  { label: "System", value: "system" },
+]
 
 export default function TemplatesPage() {
   return (
@@ -27,36 +46,59 @@ export default function TemplatesPage() {
 }
 
 function TemplatesPageContent() {
+  const searchParams = useSearchParams()
   const [createOpen, setCreateOpen] = useCreateParam()
-  const [tab, setTab] = useState<Tab>("all")
-  const [search, setSearch] = useState("")
 
-  const { data: templates, isPending, error, refetch } = useTemplates()
+  const {
+    page,
+    pageSize,
+    sort,
+    order,
+    q,
+    debouncedQ,
+    setParam,
+    toggleSort,
+    setPage,
+    setPageSize,
+    setSearch,
+  } = useListParams({
+    columns: TEMPLATE_SORT_COLUMNS,
+    defaultSort: "created_at",
+  })
 
-  const counts = useMemo(() => {
-    if (!templates) return { all: 0, team: 0, system: 0 }
-    let team = 0
-    let system = 0
-    for (const t of templates) {
-      if (isSystemTemplate(t)) system++
-      else team++
-    }
-    return { all: templates.length, team, system }
-  }, [templates])
+  // URL param is user input — an unknown owner falls back to "all" instead of
+  // being forwarded to the API.
+  const rawOwner = searchParams.get("owner")
+  const owner: TemplateOwnerFilter =
+    rawOwner === "team" || rawOwner === "system" ? rawOwner : "all"
 
-  const filtered = useMemo(() => {
-    if (!templates) return []
-    const byTab =
-      tab === "all"
-        ? templates
-        : tab === "team"
-          ? templates.filter((t) => !isSystemTemplate(t))
-          : templates.filter((t) => isSystemTemplate(t))
+  const params: TemplateListParams = {
+    page,
+    pageSize,
+    sort,
+    order,
+    owner,
+    q: debouncedQ || undefined,
+  }
 
-    const q = search.trim().toLowerCase()
-    if (!q) return byTab
-    return byTab.filter((t) => t.name.toLowerCase().includes(q))
-  }, [templates, tab, search])
+  const { data, isPending, error, refetch, isPlaceholderData } =
+    useTemplatesPage(params)
+  const templates = data?.items ?? []
+  const total = data?.total ?? 0
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  // Snap back to the last valid page if the current one is now out of bounds
+  // (e.g. after deleting the last template on the last page).
+  useEffect(() => {
+    if (total > 0 && page > pageCount) setPage(pageCount)
+  }, [total, page, pageCount, setPage])
+
+  // Uses debouncedQ (what the current data was fetched with), not q, and never
+  // trusts a placeholder page's total — otherwise clearing a zero-result search
+  // flashes the account-level empty state until the unfiltered refetch lands.
+  const hasFilters = owner !== "all" || debouncedQ !== ""
+  const isEmpty =
+    !isPending && !error && !isPlaceholderData && total === 0 && !hasFilters
 
   const newButton = (
     <Button size="sm" onClick={() => setCreateOpen(true)}>
@@ -83,13 +125,11 @@ function TemplatesPageContent() {
     )
   }
 
-  const totalEmpty = (templates?.length ?? 0) === 0
-
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Templates">{newButton}</PageHeader>
 
-      {totalEmpty ? (
+      {isEmpty ? (
         <EmptyState
           icon={StackIcon}
           title="No templates yet"
@@ -101,65 +141,102 @@ function TemplatesPageContent() {
         <>
           <TableToolbar
             id="templates-toolbar"
-            tabs={[
-              { value: "all", label: "All", count: counts.all },
-              { value: "team", label: "Team", count: counts.team },
-              { value: "system", label: "System", count: counts.system },
-            ]}
-            activeTab={tab}
-            onTabChange={(v) => setTab(v as Tab)}
+            tabs={OWNER_TABS}
+            activeTab={owner}
+            onTabChange={(v) => setParam({ owner: v === "all" ? null : v })}
             searchPlaceholder="Search names…"
-            searchValue={search}
+            searchValue={q}
             onSearchChange={setSearch}
           />
 
-          <div className="flex flex-1 flex-col overflow-y-auto">
-            {filtered.length === 0 ? (
+          <div
+            className={cn(
+              "flex flex-1 flex-col overflow-y-auto transition-opacity",
+              isPlaceholderData && "opacity-60",
+            )}
+          >
+            {templates.length === 0 ? (
               <EmptyState
                 icon={StackIcon}
                 title={
-                  search
+                  q
                     ? "No templates match that search"
-                    : tab === "team"
+                    : owner === "team"
                       ? "No team templates yet"
                       : "No system templates available"
                 }
                 description={
-                  search
-                    ? "Try a different name prefix."
-                    : tab === "team"
+                  q
+                    ? "Try a different name."
+                    : owner === "team"
                       ? "Create one to get started."
                       : "System templates are curated by Superserve."
                 }
                 actionLabel={
-                  !search && tab === "team" ? "Create template" : undefined
+                  !q && owner === "team" ? "Create template" : undefined
                 }
                 onAction={
-                  !search && tab === "team"
-                    ? () => setCreateOpen(true)
-                    : undefined
+                  !q && owner === "team" ? () => setCreateOpen(true) : undefined
                 }
               />
             ) : (
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background/70 backdrop-blur-md">
                   <TableRow>
-                    <TableHead className="w-[30%]">Name</TableHead>
-                    <TableHead className="w-[12%]">Status</TableHead>
+                    <SortableTableHead
+                      column="name"
+                      label="Name"
+                      activeSort={sort}
+                      order={order}
+                      onSort={toggleSort}
+                      className="w-[30%]"
+                    />
+                    <SortableTableHead
+                      column="status"
+                      label="Status"
+                      activeSort={sort}
+                      order={order}
+                      onSort={toggleSort}
+                      className="w-[12%]"
+                    />
                     <TableHead className="w-[26%]">Resources</TableHead>
-                    <TableHead className="w-[14%]">Created</TableHead>
-                    <TableHead className="w-[14%]">Updated</TableHead>
+                    <SortableTableHead
+                      column="created_at"
+                      label="Created"
+                      activeSort={sort}
+                      order={order}
+                      onSort={toggleSort}
+                      className="w-[14%]"
+                    />
+                    <SortableTableHead
+                      column="built_at"
+                      label="Updated"
+                      activeSort={sort}
+                      order={order}
+                      onSort={toggleSort}
+                      className="w-[14%]"
+                    />
                     <TableHead className="w-12" />
                   </TableRow>
                 </TableHeader>
                 <StickyHoverTableBody>
-                  {filtered.map((t) => (
+                  {templates.map((t) => (
                     <TemplateTableRow key={t.id} template={t} />
                   ))}
                 </StickyHoverTableBody>
               </Table>
             )}
           </div>
+
+          {total > 0 && (
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          )}
         </>
       )}
 

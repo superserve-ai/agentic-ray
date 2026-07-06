@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -10,6 +11,33 @@ from .errors import AuthenticationError, ValidationError
 
 DEFAULT_BASE_URL = "https://api.superserve.ai"
 DEFAULT_SANDBOX_HOST = "sandbox.superserve.ai"
+
+# Known Superserve regions, keyed by the region token embedded in API keys
+# (``ss_live_<region>_<random>``) and mapped to (base URL, sandbox host).
+#
+# A region may be listed here only once its endpoints ACTUALLY SERVE THE
+# API — DNS resolving is not the bar: superserve.ai has a catch-all wildcard,
+# so every derived hostname resolves and answers with a valid-TLS 404 from
+# the wrong infrastructure. Verify with a live /health check, not dig.
+# ``usw`` will be added once https://api-usw.superserve.ai /
+# usw-sandbox.superserve.ai serve their cell.
+#
+# Legacy keys (``ss_live_<random>``) can never be misread as region-tagged:
+# both key formats embed the same fixed-length 32-char base64url random tail
+# (from 24 random bytes), and ``_REGION_KEY_RE`` requires that exact tail
+# length anchored to the end of the string. A legacy key has no room left
+# over for a region segment on top of its own 32-char tail, so no random
+# legacy key can ever collide with a real region token — this holds
+# regardless of how many regions ``_KNOWN_REGIONS`` ends up containing.
+_KNOWN_REGIONS: dict[str, tuple[str, str]] = {
+    "use": ("https://api.superserve.ai", "sandbox.superserve.ai"),
+}
+
+# Region token in ``ss_live_<region>_<random>``: 1-17 lowercase alphanumeric
+# chars, then ``_``, then exactly the 32-char base64url tail every key is
+# minted with — anchored to the end so a legacy key's own tail can never be
+# mistaken for ``<region>_<tail>``.
+_REGION_KEY_RE = re.compile(r"^ss_live_([a-z0-9]{1,17})_[A-Za-z0-9_-]{32}$")
 
 
 @dataclass(frozen=True)
@@ -23,15 +51,30 @@ def resolve_config(
     api_key: str | None = None,
     base_url: str | None = None,
 ) -> ResolvedConfig:
-    """Resolve connection config from explicit args + environment variables."""
+    """Resolve connection config from explicit args + environment variables.
+
+    Base URL precedence: explicit ``base_url`` > ``SUPERSERVE_BASE_URL`` env
+    var > region derived from the API key > ``DEFAULT_BASE_URL``. The sandbox
+    host follows the same source (derived from the override URL, or taken
+    from the region map).
+    """
     resolved_key = api_key or os.environ.get("SUPERSERVE_API_KEY")
     if not resolved_key:
         raise AuthenticationError(
             "Missing API key. Pass `api_key` or set the "
             "SUPERSERVE_API_KEY environment variable."
         )
-    resolved_url = base_url or os.environ.get("SUPERSERVE_BASE_URL", DEFAULT_BASE_URL)
-    sandbox_host = _derive_sandbox_host(resolved_url)
+    resolved_url = base_url or os.environ.get("SUPERSERVE_BASE_URL")
+    if resolved_url is not None:
+        sandbox_host = _derive_sandbox_host(resolved_url)
+    else:
+        region = _region_from_api_key(resolved_key)
+        endpoints = _KNOWN_REGIONS.get(region) if region else None
+        if endpoints is not None:
+            resolved_url, sandbox_host = endpoints
+        else:
+            resolved_url = DEFAULT_BASE_URL
+            sandbox_host = DEFAULT_SANDBOX_HOST
     return ResolvedConfig(
         api_key=resolved_key,
         base_url=resolved_url,
@@ -114,6 +157,17 @@ def preview_url(sandbox_id: str, host: str, port: int) -> str:
             f"(< {MIN_PREVIEW_PORT}) are not proxied."
         )
     return f"https://{port}-{sandbox_id}.{host}"
+
+
+def _region_from_api_key(api_key: str) -> str | None:
+    """Extract the region token from an API key, if any.
+
+    Returns ``None`` for legacy keys and anything else that doesn't match
+    ``ss_live_<region>_<random-32-char-base64url>``. Never raises on weird
+    keys.
+    """
+    match = _REGION_KEY_RE.match(api_key)
+    return match.group(1) if match else None
 
 
 def _derive_sandbox_host(base_url: str) -> str:
