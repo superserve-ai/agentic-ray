@@ -76,3 +76,31 @@ export function cellFor(region: string): Cell {
   if (!cell) throw new Error(`Region ${region} is not configured`)
   return cell
 }
+
+// Multi-cell UI allowlist. Region choice (and later the team switcher,
+// SS-162) rolls out person-by-person, independent of which cells are
+// configured: MULTI_CELL_UI_ALLOWLIST is a comma-separated list of email
+// addresses and/or @domain entries (e.g. "@superserve.ai,pilot@acme.com").
+// Absent or unmatched, users see only the default region even when other
+// cells are live — so wiring a cell's env vars alone exposes nothing.
+export function multiCellUiEnabled(email: string | undefined): boolean {
+  const allowlist = process.env.MULTI_CELL_UI_ALLOWLIST
+  if (!allowlist || !email) return false
+  const normalized = email.toLowerCase()
+  return allowlist
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean)
+    .some((entry) =>
+      entry.startsWith("@") ? normalized.endsWith(entry) : normalized === entry,
+    )
+}
+
+// Regions the given user may create teams in: everyone gets the default
+// cell; other configured cells require the allowlist.
+export function creatableRegions(email: string | undefined): string[] {
+  const regions = configuredRegions()
+  return multiCellUiEnabled(email)
+    ? regions
+    : regions.filter((r) => r === DEFAULT_REGION)
+}

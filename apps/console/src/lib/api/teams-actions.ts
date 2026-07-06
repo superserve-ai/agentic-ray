@@ -1,7 +1,7 @@
 "use server"
 
 import { listTeamsForUser } from "@/lib/api/team-directory"
-import { cellFor, configuredRegions, DEFAULT_REGION } from "@/lib/cells"
+import { cellFor, creatableRegions, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 // Role granted to a team's creator. Seeded by the control-plane RBAC
@@ -16,8 +16,9 @@ export interface TeamSummary {
 
 export interface TeamDirectoryResponse {
   teams: TeamSummary[]
-  // Regions teams can be created in. Length 1 unless a second cell is
-  // configured, which is what gates the region select in the UI.
+  // Regions THIS USER may create teams in. Length 1 unless a second cell is
+  // configured AND the user is on the multi-cell UI allowlist — which is
+  // what gates the region select in the UI.
   regions: string[]
 }
 
@@ -29,7 +30,7 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
   if (!user) throw new Error("Not authenticated")
 
   const teams = await listTeamsForUser(user.id)
-  return { teams, regions: configuredRegions() }
+  return { teams, regions: creatableRegions(user.email) }
 }
 
 /**
@@ -53,9 +54,11 @@ export async function createTeamAction(
   const trimmed = name.trim()
   if (!trimmed) throw new Error("Team name is required")
 
+  // Server-side enforcement, not just UI hiding: non-default regions
+  // require the multi-cell allowlist (internal-first rollout).
   const targetRegion = region ?? DEFAULT_REGION
-  if (!configuredRegions().includes(targetRegion)) {
-    throw new Error(`Region ${targetRegion} is not configured`)
+  if (!creatableRegions(user.email).includes(targetRegion)) {
+    throw new Error(`Region ${targetRegion} is not available`)
   }
 
   const admin = cellFor(targetRegion).createAdminClient()

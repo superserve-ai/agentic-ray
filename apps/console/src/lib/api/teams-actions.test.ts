@@ -12,6 +12,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 // Per-test knobs read lazily by the cells mock.
 let regions: string[] = ["use", "usw"]
+let allowedRegions: string[] | null = null
 let cellClients: Record<string, ReturnType<typeof recordingCellClient>> = {}
 
 // Records every write per table so tests can assert the full create chain
@@ -74,6 +75,7 @@ function recordingCellClient() {
 vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
   configuredRegions: () => regions,
+  creatableRegions: () => allowedRegions ?? regions,
   cellFor: (region: string) => {
     if (!regions.includes(region)) {
       throw new Error(`Region ${region} is not configured`)
@@ -86,11 +88,16 @@ vi.mock("@/lib/cells", () => ({
   },
 }))
 
-import { createTeamAction } from "./teams-actions"
+vi.mock("@/lib/api/team-directory", () => ({
+  listTeamsForUser: async () => [],
+}))
+
+import { createTeamAction, listTeamsAction } from "./teams-actions"
 
 describe("createTeamAction", () => {
   beforeEach(() => {
     regions = ["use", "usw"]
+    allowedRegions = null
     cellClients = {
       use: recordingCellClient(),
       usw: recordingCellClient(),
@@ -139,7 +146,7 @@ describe("createTeamAction", () => {
   it("rejects a region that is not configured", async () => {
     regions = ["use"]
     await expect(createTeamAction("west pilot", "usw")).rejects.toThrow(
-      "Region usw is not configured",
+      "Region usw is not available",
     )
   })
 
@@ -147,5 +154,24 @@ describe("createTeamAction", () => {
     await expect(createTeamAction("   ")).rejects.toThrow(
       "Team name is required",
     )
+  })
+})
+
+describe("multi-cell allowlist enforcement", () => {
+  beforeEach(() => {
+    regions = ["use", "usw"]
+  })
+
+  it("rejects creating in a configured region the user is not allowed into", async () => {
+    allowedRegions = ["use"]
+    await expect(createTeamAction("Pilot", "usw")).rejects.toThrow(
+      "Region usw is not available",
+    )
+  })
+
+  it("returns only the user's creatable regions from the directory action", async () => {
+    allowedRegions = ["use"]
+    const { regions: visible } = await listTeamsAction()
+    expect(visible).toEqual(["use"])
   })
 })
