@@ -223,10 +223,6 @@
         "icon": "utensils",
         "groups": [
           {
-            "group": "Recipes",
-            "pages": ["cookbook/pr-loop", "cookbook/software-factory"]
-          },
-          {
             "group": "MCP",
             "tag": "NEW",
             "pages": ["integrations/mcp"]
