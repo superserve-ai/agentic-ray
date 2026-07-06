@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import {
+  MAX_AUTO_DELETE_SECONDS,
   MAX_DOWNLOAD_DIR_BYTES,
   MAX_EXEC_TIMEOUT_MS,
   MAX_FILE_BYTES,
@@ -31,6 +32,15 @@ describe("resource bounds (in-memory, fake client)", () => {
     const r = await callTool(conn.client, "sandbox_create", { name: "t" })
     return r.structured.id as string
   }
+
+  it("sandbox_create rejects auto_delete_seconds over the 30-day cap", async () => {
+    const r = await callTool(conn.client, "sandbox_create", {
+      name: "t",
+      auto_delete_seconds: MAX_AUTO_DELETE_SECONDS + 1,
+    })
+    expect(r.isError).toBe(true)
+    expect(r.text).toMatch(/validation|too_big/i)
+  })
 
   it("sandbox_files_read refuses a file over the read cap (no full buffering)", async () => {
     const id = await createSandbox()

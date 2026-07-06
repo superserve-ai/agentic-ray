@@ -107,3 +107,60 @@ Sandbox.kill_by_id("7a3f2b8c-1234-...")
 ```
 </CodeGroup>
 
+
+## Auto-delete
+
+By default a paused sandbox is kept forever. Set `autoDeleteSeconds` to have the platform delete it once it has been **continuously paused** for that long — useful for short-lived or unattended sandboxes: scheduled jobs, one-off experiments, or agent sessions that never get an explicit `kill()`.
+
+<CodeGroup>
+```typescript TypeScript {5}
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "scratch-job",
+  autoDeleteSeconds: 3600, // delete after 1h of continuous pause
+})
+```
+
+```python Python {5}
+from superserve import Sandbox
+
+sandbox = Sandbox.create(
+    name="scratch-job",
+    auto_delete_seconds=3600,  # delete after 1h of continuous pause
+)
+```
+</CodeGroup>
+
+The timer is tied to the paused state itself:
+
+- **Pause** arms the countdown; **resume** cancels it. Pausing again later starts a fresh window, so a sandbox in use is never deleted.
+- `0` deletes the sandbox as soon as it pauses.
+- While the sandbox is paused, its info includes `autoDeleteAt` — the exact deletion time.
+- Maximum window: 30 days.
+
+You can also set or clear the window on an existing sandbox:
+
+<CodeGroup>
+```typescript TypeScript
+// Arm: delete after 1h of continuous pause. On an already-paused sandbox
+// the countdown starts now, so you always get the full window.
+await sandbox.update({ autoDeleteSeconds: 3600 })
+
+// Disarm: keep the sandbox until explicitly killed.
+await sandbox.update({ autoDeleteSeconds: null })
+```
+
+```python Python
+# Arm: delete after 1h of continuous pause. On an already-paused sandbox
+# the countdown starts now, so you always get the full window.
+sandbox.update(auto_delete_seconds=3600)
+
+# Disarm: keep the sandbox until explicitly killed.
+sandbox.update(auto_delete_seconds=None)
+```
+</CodeGroup>
+
+<Tip>
+Pair `autoDeleteSeconds` with `timeoutSeconds`: the timeout pauses an idle sandbox, then the auto-delete window cleans it up. A sandbox that never pauses is never auto-deleted.
+</Tip>

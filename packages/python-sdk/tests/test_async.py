@@ -47,6 +47,9 @@ class TestAsyncStaticMethodsAreAsync:
     def test_kill_by_id_is_coroutine(self) -> None:
         assert inspect.iscoroutinefunction(AsyncSandbox.kill_by_id)
 
+    def test_update_by_id_is_coroutine(self) -> None:
+        assert inspect.iscoroutinefunction(AsyncSandbox.update_by_id)
+
 
 class TestAsyncSandboxSmoke:
     async def test_create_returns_instance(self) -> None:

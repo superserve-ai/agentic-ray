@@ -103,6 +103,85 @@ describe("Sandbox statics", () => {
     expect(body).toEqual({ name: "my-sandbox", metadata: { env: "test" } })
   })
 
+  it("Sandbox.create sends auto_delete_seconds when set", async () => {
+    const mock = vi.fn(async () => jsonResponse(baseSandbox))
+    vi.stubGlobal("fetch", mock)
+
+    await Sandbox.create({
+      ...commonOpts,
+      name: "my-sandbox",
+      autoDeleteSeconds: 3600,
+    })
+
+    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body).toEqual({ name: "my-sandbox", auto_delete_seconds: 3600 })
+  })
+
+  it("sandbox.update sets and clears auto_delete_seconds", async () => {
+    const mock = vi.fn(async () => jsonResponse(baseSandbox))
+    vi.stubGlobal("fetch", mock)
+    const sandbox = await Sandbox.create({ ...commonOpts, name: "my-sandbox" })
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 204 })),
+    )
+    const patchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+
+    await sandbox.update({ autoDeleteSeconds: 600 })
+    let [url, init] = patchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe("https://api.superserve.ai/sandboxes/sbx-1")
+    expect(init.method).toBe("PATCH")
+    expect(JSON.parse(init.body as string)).toEqual({
+      auto_delete_seconds: 600,
+    })
+
+    await sandbox.update({ autoDeleteSeconds: null })
+    ;[url, init] = patchMock.mock.calls[1] as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({
+      auto_delete_seconds: null,
+    })
+  })
+
+  it("sandbox.update sets and clears timeout_seconds", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(baseSandbox)),
+    )
+    const sandbox = await Sandbox.create({ ...commonOpts, name: "my-sandbox" })
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 204 })),
+    )
+    const patchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+
+    await sandbox.update({ timeoutSeconds: 900 })
+    let [, init] = patchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({ timeout_seconds: 900 })
+
+    await sandbox.update({ timeoutSeconds: null })
+    ;[, init] = patchMock.mock.calls[1] as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({ timeout_seconds: null })
+  })
+
+  it("Sandbox.updateById PATCHes directly without activating", async () => {
+    const mock = vi.fn(async () => new Response(null, { status: 204 }))
+    vi.stubGlobal("fetch", mock)
+
+    await Sandbox.updateById("sbx-9", { autoDeleteSeconds: 3600 }, commonOpts)
+
+    expect(mock).toHaveBeenCalledOnce()
+    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    // The whole point: no /activate call, so a paused sandbox stays paused.
+    expect(url).toBe("https://api.superserve.ai/sandboxes/sbx-9")
+    expect(init.method).toBe("PATCH")
+    expect(JSON.parse(init.body as string)).toEqual({
+      auto_delete_seconds: 3600,
+    })
+  })
+
   it("Sandbox.create throws when access_token missing", async () => {
     vi.stubGlobal(
       "fetch",

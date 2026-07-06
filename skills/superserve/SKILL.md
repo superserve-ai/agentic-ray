@@ -14,8 +14,8 @@ TypeScript or Python.
 
 Two flagship uses:
 
-- **Agent runtime** — run an AI agent *inside* the box (e.g. boot `superserve/claude-code`
-  and run `claude`), or give an agent *hosted elsewhere* a sandboxed shell / file tool.
+- **Agent runtime** — run an AI agent _inside_ the box (e.g. boot `superserve/claude-code`
+  and run `claude`), or give an agent _hosted elsewhere_ a sandboxed shell / file tool.
 - **Persistent execution / dev environment** — a box that survives across processes and
   sessions; pause it to stop compute billing, and it auto-resumes on the next exec or connect.
 
@@ -25,7 +25,7 @@ plane** (rotating access token) — you never build data-plane URLs or manage to
 
 ## When this skill wins
 
-- **Agent runtime** — run an AI coding agent (Claude Code, OpenClaw, a custom loop) *inside* a sandbox
+- **Agent runtime** — run an AI coding agent (Claude Code, OpenClaw, a custom loop) _inside_ a sandbox
 - **Sandboxed tool for a hosted agent** — back a Claude Agent SDK / OpenAI Agents SDK `bash` or file tool with the box
 - **Persistent execution / dev environment** — create once, reconnect by id across sessions, pause/resume with full state
 - A remote shell / command runner with file I/O and controlled network egress
@@ -44,7 +44,7 @@ plane** (rotating access token) — you never build data-plane URLs or manage to
    - Python: `pip install superserve` (Python ≥ 3.9; uv/poetry also work)
 2. **Set `SUPERSERVE_API_KEY`** (key prefix `ss_live_`) in the environment — get it
    from the Superserve console. With it set, `create()` needs no other config.
-3. *(Optional)* Override the API base with `SUPERSERVE_BASE_URL` (default `https://api.superserve.ai`).
+3. _(Optional)_ Override the API base with `SUPERSERVE_BASE_URL` (default `https://api.superserve.ai`).
 
 ## Quickstart
 
@@ -88,7 +88,7 @@ For async Python, use `AsyncSandbox` and `await` every call.
 
 The primary use case, in two shapes.
 
-**A — Agent runs *inside* the box.** Boot a template with the agent preinstalled and pass its
+**A — Agent runs _inside_ the box.** Boot a template with the agent preinstalled and pass its
 model key as a secret; its shell commands and edits stay isolated, and `pause()` / `resume()`
 checkpoint and restore the whole session.
 
@@ -110,7 +110,7 @@ sandbox = Sandbox.create(
 )
 ```
 
-**B — Agent *hosted elsewhere* calls into the box.** Expose `sandbox.commands.run` as a single
+**B — Agent _hosted elsewhere_ calls into the box.** Expose `sandbox.commands.run` as a single
 `bash` tool, so every command the model emits runs in the VM, not on your machine (Claude
 Agent SDK shown; OpenAI Agents SDK is analogous):
 
@@ -118,12 +118,20 @@ Agent SDK shown; OpenAI Agents SDK is analogous):
 import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk"
 import { z } from "zod"
 // assumes an active Sandbox instance `sandbox`
-const bash = tool("bash", "Run a shell command in the sandbox.", { command: z.string() },
+const bash = tool(
+  "bash",
+  "Run a shell command in the sandbox.",
+  { command: z.string() },
   async ({ command }) => {
     const r = await sandbox.commands.run(command, { timeoutMs: 60_000 })
     return { content: [{ type: "text", text: `${r.stdout}\n${r.stderr}` }] }
-  })
-const superserve = createSdkMcpServer({ name: "superserve", version: "1.0.0", tools: [bash] })
+  },
+)
+const superserve = createSdkMcpServer({
+  name: "superserve",
+  version: "1.0.0",
+  tools: [bash],
+})
 // query(..., { mcpServers: { superserve }, allowedTools: ["mcp__superserve__bash"] })
 ```
 
@@ -147,8 +155,13 @@ Key behaviors:
   and processes pick up where they left off.
 - **Exec auto-resumes.** Running a command or file op (or `connect()`) on a `paused`
   sandbox transparently resumes it first — you do **not** call `resume()` yourself.
-- **`timeoutSeconds` / `timeout_seconds` caps active lifetime, then auto-*pauses*** —
+- **`timeoutSeconds` / `timeout_seconds` caps active lifetime, then auto-_pauses_** —
   state is preserved, it is **not** deleted. (Bounded by an API-side upper limit.)
+- **`autoDeleteSeconds` / `auto_delete_seconds` garbage-collects paused sandboxes** — the box
+  is deleted once continuously paused for that long (resume cancels the countdown; `0` =
+  delete on pause; unset = kept forever). Set it for scratch work you won't `kill()` yourself,
+  and pair it with `timeoutSeconds` so the box actually pauses. Both are settable after
+  creation via `update()`; pass `null`/`None` to clear.
 - `resume()` rotates the per-sandbox access token; the SDK re-injects it into
   `sandbox.files` for you — keep using the **same** object after resume.
 - `kill()` is **idempotent** (a 404 is swallowed). `pause()`/`resume()`/`kill()` return nothing.
@@ -188,11 +201,11 @@ or `disk` argument on `create()`**. To change the shape, boot from (or build) a 
 template. The default template `superserve/base` (`ubuntu:24.04`) is **1 vCPU · 1024 MiB
 memory · 4096 MiB disk**.
 
-| Shape field | Min | Max (platform ceiling) | Default |
-|---|---|---|---|
-| `vcpu` | 1 | 4 | 1 |
-| `memoryMib` | 256 | 4096 | 1024 |
-| `diskMib` | 1024 | 8192 | 4096 |
+| Shape field | Min  | Max (platform ceiling) | Default |
+| ----------- | ---- | ---------------------- | ------- |
+| `vcpu`      | 1    | 4                      | 1       |
+| `memoryMib` | 256  | 4096                   | 1024    |
+| `diskMib`   | 1024 | 8192                   | 4096    |
 
 - **New teams are capped at 2 vCPU / 2048 MiB** — email support@superserve.ai to raise it.
 - Heavier system templates (`superserve/python-ml`, `code-interpreter`, `claude-code`,
@@ -202,23 +215,23 @@ memory · 4096 MiB disk**.
 
 ## Common operations
 
-| Task | TypeScript | Python (sync) | Returns / notes |
-|---|---|---|---|
-| Create | `Sandbox.create({ name })` | `Sandbox.create(name=...)` | `Sandbox`; opts: `timeoutSeconds`, `metadata`, `envVars`, `network`, `fromTemplate`, `fromSnapshot` (snapshot UUID) |
-| Reconnect | `Sandbox.connect(id)` | `Sandbox.connect(id)` | `Sandbox`; auto-resumes if paused |
-| List | `Sandbox.list({ metadata })` | `Sandbox.list(metadata=...)` | `SandboxInfo[]` (no live instance); metadata filters combine with AND |
-| Delete by id | `Sandbox.killById(id)` | `Sandbox.kill_by_id(id)` | idempotent |
-| Fresh info | `sandbox.getInfo()` | `sandbox.get_info()` | `SandboxInfo` |
-| Pause | `sandbox.pause()` | `sandbox.pause()` | — |
-| Resume | `sandbox.resume()` | `sandbox.resume()` | rotates access token |
-| Delete | `sandbox.kill()` | `sandbox.kill()` | idempotent |
-| Update | `sandbox.update({ metadata, network })` | `sandbox.update(metadata=..., network=...)` | patches tags / egress; **metadata is replaced, not merged — pass the full map** |
-| Run command | `sandbox.commands.run(cmd, opts)` | `sandbox.commands.run(cmd, ...)` | `{ stdout, stderr, exitCode }` / `CommandResult`; opts: `cwd`, `env`, timeout |
-| Stream output | `run(cmd, { onStdout, onStderr })` | `run(cmd, on_stdout=..., on_stderr=...)` | chunks via callbacks; result still holds full buffer |
-| Interactive process | `sandbox.commands.spawn(cmd, opts)` | `AsyncSandbox(...).commands.spawn(...)` | full-duplex session (sync Python raises — use async) |
-| Write file | `sandbox.files.write(path, content)` | `sandbox.files.write(path, content)` | parent dirs auto-created |
-| Read bytes | `sandbox.files.read(path)` | `sandbox.files.read(path)` | `Uint8Array` / `bytes` |
-| Read text | `sandbox.files.readText(path)` | `sandbox.files.read_text(path)` | UTF-8 string |
+| Task                | TypeScript                                                                 | Python (sync)                                                                             | Returns / notes                                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Create              | `Sandbox.create({ name })`                                                 | `Sandbox.create(name=...)`                                                                | `Sandbox`; opts: `timeoutSeconds`, `autoDeleteSeconds`, `metadata`, `envVars`, `network`, `fromTemplate`, `fromSnapshot` (snapshot UUID) |
+| Reconnect           | `Sandbox.connect(id)`                                                      | `Sandbox.connect(id)`                                                                     | `Sandbox`; auto-resumes if paused                                                                                                        |
+| List                | `Sandbox.list({ metadata })`                                               | `Sandbox.list(metadata=...)`                                                              | `SandboxInfo[]` (no live instance); metadata filters combine with AND                                                                    |
+| Delete by id        | `Sandbox.killById(id)`                                                     | `Sandbox.kill_by_id(id)`                                                                  | idempotent                                                                                                                               |
+| Fresh info          | `sandbox.getInfo()`                                                        | `sandbox.get_info()`                                                                      | `SandboxInfo`                                                                                                                            |
+| Pause               | `sandbox.pause()`                                                          | `sandbox.pause()`                                                                         | —                                                                                                                                        |
+| Resume              | `sandbox.resume()`                                                         | `sandbox.resume()`                                                                        | rotates access token                                                                                                                     |
+| Delete              | `sandbox.kill()`                                                           | `sandbox.kill()`                                                                          | idempotent                                                                                                                               |
+| Update              | `sandbox.update({ metadata, network, autoDeleteSeconds, timeoutSeconds })` | `sandbox.update(metadata=..., network=..., auto_delete_seconds=..., timeout_seconds=...)` | patches tags / egress / auto-delete / timeout; **metadata is replaced, not merged**; pass `null`/`None` to clear auto-delete or timeout  |
+| Run command         | `sandbox.commands.run(cmd, opts)`                                          | `sandbox.commands.run(cmd, ...)`                                                          | `{ stdout, stderr, exitCode }` / `CommandResult`; opts: `cwd`, `env`, timeout                                                            |
+| Stream output       | `run(cmd, { onStdout, onStderr })`                                         | `run(cmd, on_stdout=..., on_stderr=...)`                                                  | chunks via callbacks; result still holds full buffer                                                                                     |
+| Interactive process | `sandbox.commands.spawn(cmd, opts)`                                        | `AsyncSandbox(...).commands.spawn(...)`                                                   | full-duplex session (sync Python raises — use async)                                                                                     |
+| Write file          | `sandbox.files.write(path, content)`                                       | `sandbox.files.write(path, content)`                                                      | parent dirs auto-created                                                                                                                 |
+| Read bytes          | `sandbox.files.read(path)`                                                 | `sandbox.files.read(path)`                                                                | `Uint8Array` / `bytes`                                                                                                                   |
+| Read text           | `sandbox.files.readText(path)`                                             | `sandbox.files.read_text(path)`                                                           | UTF-8 string                                                                                                                             |
 
 **Unit footgun:** the command timeout is **`timeoutMs` (milliseconds) in TS** but
 **`timeout_seconds` (seconds) in Python**. `run("…", { timeoutMs: 10000 })` ≈ `run("…", timeout_seconds=10)`.
@@ -252,7 +265,7 @@ event, `run()` **throws** — but the command keeps running in the sandbox, so r
 `Sandbox.connect(id)` if you saved the ID.
 
 Use **`spawn()`** when you need to send stdin, signal the process, or keep a REPL open. It
-resolves once the process is *running* and hands back a session: `stdin.write(data)`,
+resolves once the process is _running_ and hands back a session: `stdin.write(data)`,
 `stdin.close()` (EOF), `kill(signal?)` (default `SIGTERM`), `wait()` (resolves on exit;
 rejects if the socket drops first). `spawn()` is **async-only in Python** (`AsyncSandbox`;
 sync raises and points you there) and needs **Node 22+** in TS (or a `ws` polyfill).
@@ -290,12 +303,12 @@ import { Template, Sandbox } from "@superserve/sdk"
 
 const template = await Template.create({
   name: "my-python-env",
-  from: "python:3.11",           // linux/amd64 OCI image; Alpine & distroless are rejected
+  from: "python:3.11", // linux/amd64 OCI image; Alpine & distroless are rejected
   vcpu: 2,
   memoryMib: 2048,
   steps: [{ run: "pip install numpy pandas" }, { workdir: "/app" }],
 }) // resolves once the build is QUEUED, not finished
-await template.waitUntilReady()  // blocks until the build finishes (throws BuildError on failure)
+await template.waitUntilReady() // blocks until the build finishes (throws BuildError on failure)
 const sandbox = await Sandbox.create({ name: "run-1", fromTemplate: template })
 ```
 
@@ -352,7 +365,11 @@ a prompt-injected agent, or a leaked log exposes nothing usable.
 import { Secret, Sandbox } from "@superserve/sdk"
 
 // 1. Store the credential once — a provider shortcut sets the auth scheme + allowed hosts.
-await Secret.create({ name: "anthropic-prod", value: process.env.ANTHROPIC_API_KEY!, provider: "anthropic" })
+await Secret.create({
+  name: "anthropic-prod",
+  value: process.env.ANTHROPIC_API_KEY!,
+  provider: "anthropic",
+})
 
 // 2. Bind it: env var → secret name. Pair with egress lockdown for defense in depth.
 const sandbox = await Sandbox.create({
@@ -389,13 +406,13 @@ sandbox = Sandbox.create(
 ## Network egress control
 
 By default a sandbox reaches any **public** IP; the platform **always** blocks private,
-link-local, and loopback ranges (non-overridable). `network` rules only *narrow* egress —
+link-local, and loopback ranges (non-overridable). `network` rules only _narrow_ egress —
 ideal for restricting what an agent or untrusted code can reach.
 
-| Field | Accepts | Notes |
-|---|---|---|
+| Field                    | Accepts             | Notes                                                                                                      |
+| ------------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `allowOut` / `allow_out` | CIDRs **+ domains** | Wildcards (`*.example.com`) match subdomains at any depth but **not the apex** — list both if you need it. |
-| `denyOut` / `deny_out` | **CIDRs only** | `0.0.0.0/0` denies the whole internet; allow exceptions via `allowOut`. |
+| `denyOut` / `deny_out`   | **CIDRs only**      | `0.0.0.0/0` denies the whole internet; allow exceptions via `allowOut`.                                    |
 
 Allow rules win over deny on overlap, so the strict pattern is **deny-all + allowlist**.
 Egress is editable live via `update({ network })`. **Never block `*.superserve.ai`** — it
@@ -404,7 +421,10 @@ breaks the SDK↔sandbox connection.
 ```ts
 await Sandbox.create({
   name: "restricted",
-  network: { allowOut: ["api.openai.com", "*.github.com", "140.82.112.0/20"], denyOut: ["0.0.0.0/0"] },
+  network: {
+    allowOut: ["api.openai.com", "*.github.com", "140.82.112.0/20"],
+    denyOut: ["0.0.0.0/0"],
+  },
 })
 ```
 
@@ -418,7 +438,7 @@ Sandbox.create(name="restricted", network=NetworkConfig(
 ## Preview URLs — expose a port publicly
 
 Run a server in the box (a dev server, the agent's web UI, an API) and hand out a **public
-URL** (also called a *tunnel URL*) that routes to it. `getPreviewUrl(port)` / `get_preview_url(port)` is pure string
+URL** (also called a _tunnel URL_) that routes to it. `getPreviewUrl(port)` / `get_preview_url(port)` is pure string
 construction — no network call — returning `https://{port}-{id}.{host}`; the edge proxy
 forwards that subdomain straight to the port on the VM.
 
@@ -447,26 +467,28 @@ url = sandbox.get_preview_url(8000)  # https://8000-<id>.sandbox.superserve.ai
 Every SDK call throws a typed error extending `SandboxError`. Catch the base, or
 narrow to a subclass. A **non-zero `exitCode` is a normal result, not a thrown error.**
 
-| Error | Thrown when |
-|---|---|
-| `SandboxError` | Base class for all SDK errors (carries `statusCode`, `code`) |
-| `AuthenticationError` | API key missing / invalid / forbidden (401/403) |
-| `ValidationError` | Bad request or invalid arguments (400) |
-| `NotFoundError` | Sandbox / template / resource does not exist (404) |
-| `ConflictError` | Invalid state transition, e.g. an unsupported lifecycle change (409) |
-| `TimeoutError` | A request timed out — **Python: `SandboxTimeoutError`** (avoids shadowing the builtin) |
-| `RateLimitError` | Quota / rate limit exceeded (429); `code` names which limit (`too_many_builds`, `too_many_templates`, `too_many_sandboxes`) |
-| `ServerError` | Platform error (500+) |
-| `BuildError` | Template build failed (carries `buildId`, `templateId`, `code`) |
+| Error                 | Thrown when                                                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `SandboxError`        | Base class for all SDK errors (carries `statusCode`, `code`)                                                                |
+| `AuthenticationError` | API key missing / invalid / forbidden (401/403)                                                                             |
+| `ValidationError`     | Bad request or invalid arguments (400)                                                                                      |
+| `NotFoundError`       | Sandbox / template / resource does not exist (404)                                                                          |
+| `ConflictError`       | Invalid state transition, e.g. an unsupported lifecycle change (409)                                                        |
+| `TimeoutError`        | A request timed out — **Python: `SandboxTimeoutError`** (avoids shadowing the builtin)                                      |
+| `RateLimitError`      | Quota / rate limit exceeded (429); `code` names which limit (`too_many_builds`, `too_many_templates`, `too_many_sandboxes`) |
+| `ServerError`         | Platform error (500+)                                                                                                       |
+| `BuildError`          | Template build failed (carries `buildId`, `templateId`, `code`)                                                             |
 
 ```ts
 import { Sandbox, NotFoundError, AuthenticationError } from "@superserve/sdk"
 try {
   const sandbox = await Sandbox.connect(id)
 } catch (e) {
-  if (e instanceof NotFoundError) { /* gone — create a fresh one */ }
-  else if (e instanceof AuthenticationError) { /* fix SUPERSERVE_API_KEY */ }
-  else throw e
+  if (e instanceof NotFoundError) {
+    /* gone — create a fresh one */
+  } else if (e instanceof AuthenticationError) {
+    /* fix SUPERSERVE_API_KEY */
+  } else throw e
 }
 ```
 
@@ -479,7 +501,7 @@ try {
 - Use `getInfo()` for current state — the instance `status`/`metadata` are stale snapshots.
 - `update({ metadata })` **replaces** the whole map; omitted keys are dropped.
 - No `vcpu`/`memory`/`disk` on `create()` — size the VM via the template.
-- `Template.create()` returns when the build is *queued*; boot a sandbox only **after**
+- `Template.create()` returns when the build is _queued_; boot a sandbox only **after**
   `waitUntilReady()` resolves.
 - Streaming `run()` uses an idle timeout (resets per chunk) and throws if the stream ends
   without a `finished` event; the command keeps running — reconnect via `connect(id)`.

@@ -70,6 +70,7 @@ sandbox = Sandbox.create(
 | `fromTemplate` / `from_template` | `string \| Template` | Template name, UUID, or `Template` instance to boot from. Defaults to `superserve/base`. |
 | `fromSnapshot` / `from_snapshot` | `string` | Snapshot UUID to boot from. |
 | `timeoutSeconds` / `timeout_seconds` | `number` | Max active lifetime before auto-pause. API-side upper bound (subject to change). |
+| `autoDeleteSeconds` / `auto_delete_seconds` | `number` | Delete the sandbox once continuously paused for this many seconds (max 30 days, `0` = delete on pause). See [Lifecycle](/sandbox/lifecycle#auto-delete). |
 | `metadata` | `Record<string, string>` | String tags. |
 | `envVars` / `env_vars` | `Record<string, string>` | Env vars injected into every process. |
 | `secrets` | `Record<string, string>` | Bind secrets to env vars (`ENV_VAR → secret name`). The agent sees a stand-in token; the real credential is attached to outbound requests. See [Secrets](/secrets/overview). |
@@ -121,6 +122,24 @@ await Sandbox.killById("7a3f2b8c-1234-...")
 
 ```python Python
 Sandbox.kill_by_id("7a3f2b8c-1234-...")
+```
+</CodeGroup>
+
+### `Sandbox.updateById` / `Sandbox.update_by_id`
+
+Update a sandbox by ID without instantiating it. Unlike `connect(id)` followed
+by `update(...)`, this does **not** resume a paused sandbox — so it's the right
+way to arm auto-delete or change the auto-pause timeout on a box you want to
+leave paused.
+Same fields and clear-with-`null`/`None` semantics as [`update`](#update).
+
+<CodeGroup>
+```typescript TypeScript
+await Sandbox.updateById("7a3f2b8c-1234-...", { autoDeleteSeconds: 3600 })
+```
+
+```python Python
+Sandbox.update_by_id("7a3f2b8c-1234-...", auto_delete_seconds=3600)
 ```
 </CodeGroup>
 
@@ -186,7 +205,7 @@ sandbox.kill()
 
 ### `update`
 
-Patch `metadata` and/or `network` on a live sandbox.
+Patch `metadata`, `network`, `autoDeleteSeconds`, and/or `timeoutSeconds` on a sandbox.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -194,6 +213,14 @@ await sandbox.update({
   metadata: { env: "staging" },
   network: { allowOut: ["api.openai.com"] },
 })
+
+// Auto-delete: a number arms the window, null disarms it.
+await sandbox.update({ autoDeleteSeconds: 3600 })
+await sandbox.update({ autoDeleteSeconds: null })
+
+// Auto-pause timeout: same set/clear contract.
+await sandbox.update({ timeoutSeconds: 900 })
+await sandbox.update({ timeoutSeconds: null })
 ```
 
 ```python Python
@@ -201,8 +228,18 @@ sandbox.update(
     metadata={"env": "staging"},
     network=NetworkConfig(allow_out=["api.openai.com"]),
 )
+
+# Auto-delete: a number arms the window, None disarms it.
+sandbox.update(auto_delete_seconds=3600)
+sandbox.update(auto_delete_seconds=None)
+
+# Auto-pause timeout: same set/clear contract.
+sandbox.update(timeout_seconds=900)
+sandbox.update(timeout_seconds=None)
 ```
 </CodeGroup>
+
+On an already-paused sandbox, arming `autoDeleteSeconds` starts the countdown from the moment of the call — never retroactively from when the sandbox paused. See [Lifecycle](/sandbox/lifecycle#auto-delete).
 
 ### `attachSecret` / `attach_secret`
 
@@ -312,6 +349,8 @@ interface SandboxInfo {
   memoryMib: number
   createdAt: Date
   timeoutSeconds?: number
+  autoDeleteSeconds?: number
+  autoDeleteAt?: Date // present only while paused with autoDeleteSeconds set
   network?: NetworkConfig
   metadata: Record<string, string>
 }
@@ -329,6 +368,9 @@ class SandboxInfo(BaseModel):
     memory_mib: int
     created_at: datetime
     timeout_seconds: int | None = None
+    auto_delete_seconds: int | None = None
+    # Set only while paused with auto_delete_seconds configured.
+    auto_delete_at: datetime | None = None
     network: NetworkConfig | None = None
     metadata: dict[str, str]
 ```

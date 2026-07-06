@@ -10,7 +10,9 @@ import { z } from "zod"
 import type { SandboxClient } from "../client.js"
 import {
   DEFAULT_NETWORK_LOG_LIMIT,
+  MAX_AUTO_DELETE_SECONDS,
   MAX_NETWORK_LOG_LIMIT,
+  MAX_TIMEOUT_SECONDS,
 } from "../constants.js"
 import { formatSdkError } from "../lib/errors.js"
 import { toolError, toolOk } from "../lib/result.js"
@@ -35,6 +37,7 @@ interface CreateArgs {
   from_template?: string
   from_snapshot?: string
   timeout_seconds?: number
+  auto_delete_seconds?: number
   metadata?: Record<string, string>
   env_vars?: Record<string, string>
   secrets?: Record<string, string>
@@ -47,6 +50,8 @@ interface UpdateArgs {
   metadata?: Record<string, string>
   allow_out?: string[]
   deny_out?: string[]
+  auto_delete_seconds?: number | null
+  timeout_seconds?: number | null
 }
 
 interface TemplateCreateArgs {
@@ -128,8 +133,22 @@ export function registerLifecycleTools(
           .number()
           .int()
           .positive()
+          .max(MAX_TIMEOUT_SECONDS)
           .optional()
-          .describe("Idle timeout before the sandbox is auto-paused."),
+          .describe(
+            "Idle timeout before the sandbox is auto-paused (max 604800 = 7 days).",
+          ),
+        auto_delete_seconds: z
+          .number()
+          .int()
+          .min(0)
+          .max(MAX_AUTO_DELETE_SECONDS)
+          .optional()
+          .describe(
+            "Delete the sandbox once continuously paused for this many seconds (0 = delete on " +
+              "pause, max 2592000 = 30 days). Resume cancels the countdown. Omit to keep paused " +
+              "sandboxes forever.",
+          ),
         metadata: stringRecord()
           .optional()
           .describe("Arbitrary key/value tags for filtering in sandbox_list."),
@@ -172,6 +191,7 @@ export function registerLifecycleTools(
       from_template,
       from_snapshot,
       timeout_seconds,
+      auto_delete_seconds,
       metadata,
       env_vars,
       secrets,
@@ -184,6 +204,7 @@ export function registerLifecycleTools(
           fromTemplate: from_template,
           fromSnapshot: from_snapshot,
           timeoutSeconds: timeout_seconds,
+          autoDeleteSeconds: auto_delete_seconds,
           metadata,
           envVars: env_vars,
           secrets,
@@ -415,6 +436,12 @@ export function registerLifecycleTools(
         if (i.timeoutSeconds !== undefined) {
           structured.timeout_seconds = i.timeoutSeconds
         }
+        if (i.autoDeleteSeconds !== undefined) {
+          structured.auto_delete_seconds = i.autoDeleteSeconds
+        }
+        if (i.autoDeleteAt !== undefined) {
+          structured.auto_delete_at = toIsoOrUndefined(i.autoDeleteAt)
+        }
         if (i.network) {
           structured.network = {
             allow_out: i.network.allowOut,
@@ -535,9 +562,9 @@ export function registerLifecycleTools(
     {
       title: "Update a sandbox",
       description:
-        "Change a sandbox's metadata or egress network rules after creation. Use this to lock down or open up " +
-        "outbound network access on an existing sandbox (the rules apply to new connections). Only the fields " +
-        "you pass are changed; omit allow_out/deny_out to leave network rules untouched.",
+        "Change a sandbox's metadata, egress network rules, auto-delete window, or auto-pause timeout after " +
+        "creation. Use this to lock down or open up outbound network access (rules apply to new connections), " +
+        "or to schedule cleanup of a sandbox you no longer need running. Only the fields you pass are changed.",
       inputSchema: {
         sandbox_id: z.string().describe("ID of the sandbox to update."),
         metadata: stringRecord()
@@ -554,19 +581,56 @@ export function registerLifecycleTools(
           .describe(
             "Egress deny rules — CIDRs only ('0.0.0.0/0' denies all egress). Combine with allow_out to lock down egress.",
           ),
+        auto_delete_seconds: z
+          .number()
+          .int()
+          .min(0)
+          .max(MAX_AUTO_DELETE_SECONDS)
+          .nullable()
+          .optional()
+          .describe(
+            "Delete the sandbox once continuously paused for this many seconds (max 2592000 = 30 " +
+              "days); the countdown starts now if it is already paused. Pass null to disable " +
+              "auto-delete. Omit to leave unchanged.",
+          ),
+        timeout_seconds: z
+          .number()
+          .int()
+          .positive()
+          .max(MAX_TIMEOUT_SECONDS)
+          .nullable()
+          .optional()
+          .describe(
+            "Idle timeout before the sandbox is auto-paused (max 604800 = 7 days). Pass null to " +
+              "disable auto-pause. Omit to leave unchanged.",
+          ),
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
+        // auto_delete_seconds can schedule (or, at 0 on a paused sandbox,
+        // effectively trigger) deletion, so this tool is destructive.
+        destructiveHint: true,
+        // Re-arming auto_delete_seconds on a paused sandbox restarts the
+        // countdown from now, so the same call repeated moves the deadline —
+        // not idempotent.
+        idempotentHint: false,
         openWorldHint: true,
       },
     },
-    async ({ sandbox_id, metadata, allow_out, deny_out }) => {
+    async ({
+      sandbox_id,
+      metadata,
+      allow_out,
+      deny_out,
+      auto_delete_seconds,
+      timeout_seconds,
+    }) => {
       try {
         await client.update(sandbox_id, {
           metadata,
           network: toNetwork(allow_out, deny_out),
+          autoDeleteSeconds: auto_delete_seconds,
+          timeoutSeconds: timeout_seconds,
         })
         return toolOk(`updated ${sandbox_id}`, { id: sandbox_id })
       } catch (e) {

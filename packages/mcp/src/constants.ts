@@ -88,3 +88,12 @@ export const DEFAULT_NETWORK_LOG_LIMIT = 50
 
 /** Hard cap on `sandbox_network_log` rows per call (bounds output + API load). */
 export const MAX_NETWORK_LOG_LIMIT = 200
+
+/**
+ * Hard caps for lifecycle windows, mirroring the control-plane API limits so an
+ * over-limit value is rejected at the tool boundary instead of after a round
+ * trip. Keep in sync with the API (`auto_delete_seconds` ≤ 30d, `timeout_seconds`
+ * ≤ 7d); the API remains the source of truth and re-validates.
+ */
+export const MAX_AUTO_DELETE_SECONDS = 30 * 24 * 60 * 60 // 2592000 (30 days)
+export const MAX_TIMEOUT_SECONDS = 7 * 24 * 60 * 60 // 604800 (7 days)

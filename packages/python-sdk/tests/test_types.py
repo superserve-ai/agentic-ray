@@ -51,6 +51,15 @@ class TestToSandboxInfo:
         assert info.memory_mib == 1024
         assert info.timeout_seconds == 600
         assert info.metadata == {"key": "value"}
+
+    def test_auto_delete_fields_parse(self) -> None:
+        raw = _valid_raw()
+        raw["auto_delete_seconds"] = 3600
+        raw["auto_delete_at"] = "2026-01-01T13:00:00Z"
+        info = to_sandbox_info(raw)
+        assert info.auto_delete_seconds == 3600
+        assert isinstance(info.auto_delete_at, datetime)
+        assert info.auto_delete_at.hour == 13
         assert info.network is not None
         assert info.network.allow_out == ["1.2.3.4"]
         assert info.network.deny_out == []
@@ -78,6 +87,8 @@ class TestToSandboxInfo:
         assert info.vcpu_count == 0
         assert info.memory_mib == 0
         assert info.timeout_seconds is None
+        assert info.auto_delete_seconds is None
+        assert info.auto_delete_at is None
         assert info.network is None
         assert info.metadata == {}
 

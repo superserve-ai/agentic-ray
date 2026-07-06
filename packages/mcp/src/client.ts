@@ -123,6 +123,8 @@ export interface CreateInput {
   fromTemplate?: string
   fromSnapshot?: string
   timeoutSeconds?: number
+  /** Delete the sandbox once continuously paused for this many seconds. */
+  autoDeleteSeconds?: number
   metadata?: Record<string, string>
   envVars?: Record<string, string>
   /** Bind team-stored secrets to env vars: `{ ENV_VAR: secretName }`. */
@@ -134,6 +136,10 @@ export interface CreateInput {
 export interface UpdateInput {
   metadata?: Record<string, string>
   network?: NetworkConfig
+  /** A number (re)arms the auto-delete window; null disarms it. */
+  autoDeleteSeconds?: number | null
+  /** A number sets the auto-pause timeout; null disables it. */
+  timeoutSeconds?: number | null
 }
 
 export interface ExecInput {
@@ -254,6 +260,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         fromTemplate: input.fromTemplate,
         fromSnapshot: input.fromSnapshot,
         timeoutSeconds: input.timeoutSeconds,
+        autoDeleteSeconds: input.autoDeleteSeconds,
         metadata: input.metadata,
         envVars: input.envVars,
         secrets: input.secrets,
@@ -269,8 +276,18 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
     },
 
     async update(id, input) {
-      const sb = await Sandbox.connect(id, conn)
-      await sb.update({ metadata: input.metadata, network: input.network })
+      // updateById (not connect().update()) so patching a paused sandbox —
+      // e.g. arming auto-delete — does not resume it.
+      await Sandbox.updateById(
+        id,
+        {
+          metadata: input.metadata,
+          network: input.network,
+          autoDeleteSeconds: input.autoDeleteSeconds,
+          timeoutSeconds: input.timeoutSeconds,
+        },
+        conn,
+      )
     },
 
     async list(metadata) {
