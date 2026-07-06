@@ -1,17 +1,15 @@
 "use server"
 
-import { createAdminClient } from "@/lib/supabase/admin"
+import {
+  listTeamMembershipsForUser,
+  type TeamMembership,
+} from "@/lib/api/team-directory"
+import { cellFor } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
-async function getTeamId(userId: string): Promise<string | null> {
-  const admin = createAdminClient()
-  const { data } = await admin
-    .from("team_member")
-    .select("team_id")
-    .eq("profile_id", userId)
-    .limit(1)
-    .single()
-  return data?.team_id ?? null
+async function getTeam(userId: string): Promise<TeamMembership | null> {
+  const memberships = await listTeamMembershipsForUser(userId).catch(() => [])
+  return memberships[0] ?? null
 }
 
 export async function listActivityBySandboxAction(
@@ -24,17 +22,17 @@ export async function listActivityBySandboxAction(
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const teamId = await getTeamId(user.id)
-  if (!teamId) return []
+  const team = await getTeam(user.id)
+  if (!team) return []
 
-  const admin = createAdminClient()
+  const admin = cellFor(team.region).createAdminClient()
   const { data, error } = await admin
     .from("activity")
     .select(
       "id, sandbox_id, category, action, status, sandbox_name, secret_id, secret_name, duration_ms, error, metadata, created_at",
     )
     .eq("sandbox_id", sandboxId)
-    .eq("team_id", teamId)
+    .eq("team_id", team.teamId)
     .order("created_at", { ascending: false })
     .limit(limit)
 
@@ -63,16 +61,16 @@ export async function listActivityAction(limit = 100) {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const teamId = await getTeamId(user.id)
-  if (!teamId) return []
+  const team = await getTeam(user.id)
+  if (!team) return []
 
-  const admin = createAdminClient()
+  const admin = cellFor(team.region).createAdminClient()
   const { data, error } = await admin
     .from("activity")
     .select(
       "id, sandbox_id, category, action, status, sandbox_name, secret_id, secret_name, duration_ms, error, metadata, created_at",
     )
-    .eq("team_id", teamId)
+    .eq("team_id", team.teamId)
     .order("created_at", { ascending: false })
     .limit(limit)
 

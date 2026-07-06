@@ -3,7 +3,11 @@ import crypto from "node:crypto"
 import type { User } from "@supabase/supabase-js"
 
 import { getProxySecret, hashKey } from "@/lib/api/proxy-secret"
-import { createAdminClient } from "@/lib/supabase/admin"
+import {
+  listTeamMembershipsForUser,
+  type TeamMembership,
+} from "@/lib/api/team-directory"
+import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 export { getProxySecret, hashKey } from "@/lib/api/proxy-secret"
@@ -25,11 +29,12 @@ export function deriveRawKey(userId: string): string {
 // This is not a secret cache — losing it only costs one extra idempotent
 // INSERT. Safe across instances because the DB write is idempotent.
 const ensuredUsers = new Set<string>()
-// team_id is stable per user and not a secret; safe to cache in-process.
-const teamIdCache = new Map<string, string>()
+// The team (and its home cell) is stable per user and not a secret; safe to
+// cache in-process.
+const teamCache = new Map<string, TeamMembership>()
 
 async function ensureProfile(userId: string, email: string): Promise<void> {
-  const admin = createAdminClient()
+  const admin = cellFor(DEFAULT_REGION).createAdminClient()
   const { data: existing } = await admin
     .from("profile")
     .select("id")
@@ -48,26 +53,22 @@ async function ensureProfile(userId: string, email: string): Promise<void> {
   }
 }
 
-async function getTeamForUser(userId: string, email: string): Promise<string> {
-  const cached = teamIdCache.get(userId)
+async function getTeamForUser(
+  userId: string,
+  email: string,
+): Promise<TeamMembership> {
+  const cached = teamCache.get(userId)
   if (cached) return cached
-
-  const admin = createAdminClient()
 
   await ensureProfile(userId, email)
 
-  const { data: membership } = await admin
-    .from("team_member")
-    .select("team_id")
-    .eq("profile_id", userId)
-    .limit(1)
-    .single()
-
-  if (membership?.team_id) {
-    teamIdCache.set(userId, membership.team_id as string)
-    return membership.team_id as string
+  const membership = (await listTeamMembershipsForUser(userId))[0]
+  if (membership) {
+    teamCache.set(userId, membership)
+    return membership
   }
 
+  const admin = cellFor(DEFAULT_REGION).createAdminClient()
   const { data: team, error: teamErr } = await admin
     .from("team")
     .insert({ name: email })
@@ -85,18 +86,31 @@ async function getTeamForUser(userId: string, email: string): Promise<string> {
   if (memberErr)
     throw new Error(`Failed to add team member: ${memberErr.message}`)
 
-  teamIdCache.set(userId, team.id as string)
-  return team.id as string
+  const created = { teamId: team.id as string, region: DEFAULT_REGION }
+  teamCache.set(userId, created)
+  return created
 }
 
 export async function getTeamIdForUser(user: User): Promise<string> {
-  return getTeamForUser(user.id, user.email ?? user.id)
+  const { teamId } = await getTeamForUser(user.id, user.email ?? user.id)
+  return teamId
 }
 
 /**
- * Ensure the derived proxy key's hash exists in the api_key table.
- * Idempotent: does an INSERT ... ON CONFLICT (key_hash) DO NOTHING, so
- * concurrent callers across multiple instances cannot stomp each other.
+ * Base URL of the control-plane API serving the user's team. Proxied
+ * requests must go to the team's home cell — that's the only control plane
+ * whose database holds the proxy key row.
+ */
+export async function getApiBaseUrlForUser(user: User): Promise<string> {
+  const { region } = await getTeamForUser(user.id, user.email ?? user.id)
+  return cellFor(region).apiBaseUrl
+}
+
+/**
+ * Ensure the derived proxy key's hash exists in the api_key table of the
+ * team's home cell. Idempotent: does an INSERT ... ON CONFLICT (key_hash)
+ * DO NOTHING, so concurrent callers across multiple instances cannot stomp
+ * each other.
  */
 async function ensureProxyKeyRow(
   userId: string,
@@ -105,12 +119,12 @@ async function ensureProxyKeyRow(
 ): Promise<void> {
   if (ensuredUsers.has(userId)) return
 
-  const teamId = await getTeamForUser(userId, email)
-  const admin = createAdminClient()
+  const team = await getTeamForUser(userId, email)
+  const admin = cellFor(team.region).createAdminClient()
 
   const { error } = await admin.from("api_key").upsert(
     {
-      team_id: teamId,
+      team_id: team.teamId,
       key_hash: keyHash,
       name: PROXY_KEY_NAME,
       scopes: [],

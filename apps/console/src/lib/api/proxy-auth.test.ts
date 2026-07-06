@@ -1,5 +1,5 @@
 /**
- * proxy-auth — pure helpers.
+ * proxy-auth — pure helpers and cell targeting.
  *
  * These are the security-critical primitives used by every authenticated
  * request through the API proxy. Tests focus on:
@@ -7,6 +7,7 @@
  *  - Different users → different keys
  *  - CONSOLE_PROXY_SECRET length guard
  *  - hashKey stability
+ *  - Proxy key row / upstream URL resolving to the team's home cell
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -21,7 +22,51 @@ vi.mock("@/lib/supabase/server", () => ({
   createServerClient: vi.fn(),
 }))
 
-import { deriveRawKey, getProxySecret, hashKey } from "./proxy-auth"
+// The user's team lives in the usw cell — used by the cell-targeting tests.
+vi.mock("@/lib/api/team-directory", () => ({
+  listTeamMembershipsForUser: vi.fn(async () => [
+    { teamId: "team-west", region: "usw" },
+  ]),
+}))
+
+const uswApiKeyUpserts: Array<Record<string, unknown>> = []
+vi.mock("@/lib/cells", () => ({
+  DEFAULT_REGION: "use",
+  configuredRegions: () => ["use", "usw"],
+  cellFor: (region: string) => ({
+    region,
+    apiBaseUrl: `https://api-${region}.test`,
+    createAdminClient: () =>
+      region === "usw"
+        ? {
+            // Captures the proxy key upsert.
+            from: (table: string) => ({
+              upsert: async (row: Record<string, unknown>) => {
+                uswApiKeyUpserts.push({ table, ...row })
+                return { error: null }
+              },
+            }),
+          }
+        : {
+            // ensureProfile only reads: the profile already exists.
+            from: () => ({
+              select: () => ({
+                eq: () => ({
+                  single: async () => ({ data: { id: "u1" }, error: null }),
+                }),
+              }),
+            }),
+          },
+  }),
+}))
+
+import {
+  deriveRawKey,
+  getApiBaseUrlForUser,
+  getAuthApiKeyForUser,
+  getProxySecret,
+  hashKey,
+} from "./proxy-auth"
 
 const ORIGINAL_SECRET = process.env.CONSOLE_PROXY_SECRET
 
@@ -95,5 +140,31 @@ describe("proxy-auth.hashKey", () => {
 
   it("produces different hashes for different inputs", () => {
     expect(hashKey("a")).not.toBe(hashKey("b"))
+  })
+})
+
+describe("proxy-auth cell targeting", () => {
+  const user = { id: "cell-user", email: "pavitra@superserve.ai" }
+
+  it("ensures the proxy key row in the team's home cell", async () => {
+    const key = await getAuthApiKeyForUser(user as never)
+
+    expect(key).toMatch(/^ss_live_/)
+    expect(uswApiKeyUpserts).toEqual([
+      {
+        table: "api_key",
+        team_id: "team-west",
+        key_hash: hashKey(key as string),
+        name: "__console_proxy__",
+        scopes: [],
+        created_by: "cell-user",
+      },
+    ])
+  })
+
+  it("resolves the proxy upstream to the team's home cell API", async () => {
+    expect(await getApiBaseUrlForUser(user as never)).toBe(
+      "https://api-usw.test",
+    )
   })
 })

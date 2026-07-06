@@ -40,7 +40,12 @@ vi.mock("@/lib/supabase/admin", () => ({
         case "profile":
           return chain({ data: { id: "a1" }, error: null })
         case "team_member":
-          return chain({ data: { team_id: "team-1" }, error: null })
+          // The membership fan-out awaits the filter directly (no single()).
+          return {
+            select: () => ({
+              eq: async () => ({ data: [{ team_id: "team-1" }], error: null }),
+            }),
+          }
         case "team":
           return chain(homeRegionResult)
         case "api_key": {

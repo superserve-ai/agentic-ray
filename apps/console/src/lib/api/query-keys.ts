@@ -102,3 +102,8 @@ export const quotaKeys = {
   all: ["quota"] as const,
   usage: () => [...quotaKeys.all, "usage"] as const,
 }
+
+export const teamKeys = {
+  all: ["teams"] as const,
+  directory: () => [...teamKeys.all, "directory"] as const,
+}
