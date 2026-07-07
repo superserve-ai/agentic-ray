@@ -40,7 +40,7 @@ vi.mock("@/lib/supabase/server", () => ({
             app_metadata: {
               permissions: ["platform:sandbox:read"],
             },
-          } as User,
+          } as unknown as User,
         },
       })),
     },
@@ -84,12 +84,12 @@ const platformUser = {
   app_metadata: {
     permissions: ["platform:sandbox:read"],
   },
-} as User
+} as unknown as User
 const unauthorizedUser = {
   id: "c1",
   email: "joe@gmail.com",
   app_metadata: { permissions: [] },
-} as User
+} as unknown as User
 
 afterEach(() => {
   cookieStore.value = undefined
