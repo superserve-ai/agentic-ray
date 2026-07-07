@@ -39,6 +39,8 @@ vi.mock("@/lib/supabase/admin", () => ({
       switch (table) {
         case "profile":
           return chain({ data: { id: "a1" }, error: null })
+        case "team_memberships":
+          return chain({ data: [], error: null })
         case "team_member":
           // The membership fan-out awaits the filter directly (no single()).
           return {

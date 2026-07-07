@@ -53,6 +53,11 @@ function recordingCellClient() {
             record(table, row)
             return { error: null }
           },
+          // The directory's RBAC-authoritative lookup also selects from
+          // team_memberships; empty = legacy-discovery path.
+          select: () => ({
+            eq: async () => ({ data: [], error: null }),
+          }),
         }
       case "roles":
         return {

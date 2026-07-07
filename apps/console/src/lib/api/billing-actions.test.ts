@@ -154,6 +154,10 @@ describe("billing actions", () => {
       return featureFlagResult(false)
     })
     from.mockImplementation((table: string) => {
+      if (table === "team_memberships")
+        return {
+          select: () => ({ eq: async () => ({ data: [], error: null }) }),
+        }
       if (table === "team_member") return singleTeamResult()
       if (table === "team_pricing_plan") return teamPricingPlanQuery()
       if (table === "pricing_plan") return pricingPlanQuery()

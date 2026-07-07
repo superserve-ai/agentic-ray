@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js"
+
 import { cellFor, configuredRegions, DEFAULT_REGION } from "@/lib/cells"
 
 export interface TeamMembership {
@@ -63,19 +65,52 @@ export async function listTeamMembershipsForUserDetailed(
 ): Promise<MembershipDirectory> {
   const { items, degradedRegions } = await acrossCells(async (region) => {
     const admin = cellFor(region).createAdminClient()
-    const { data, error } = await admin
-      .from("team_member")
-      .select("team_id")
-      .eq("profile_id", userId)
-
-    if (error) throw new Error(error.message)
-
-    return (data ?? [])
-      .map((row) => row.team_id)
-      .filter((teamId): teamId is string => typeof teamId === "string")
-      .map((teamId) => ({ teamId, region }))
+    return membershipTeamIdsInCell(admin, userId).then((teamIds) =>
+      teamIds.map((teamId) => ({ teamId, region })),
+    )
   })
   return { memberships: items, degradedRegions }
+}
+
+/**
+ * Team ids the user is authorized for in one cell. RBAC `team_memberships`
+ * is authoritative whenever a row exists — only `status = 'active'` passes,
+ * so a user deactivated through the backend user-management endpoints loses
+ * console access too (the console's service-role reads bypass backend RBAC,
+ * so this lookup is the console's authorization boundary). Legacy
+ * `team_member` rows count only for members with no RBAC row at all: those
+ * are pre-RBAC memberships that were never migrated (10 exist in prod as of
+ * 2026-07), and treating the legacy table as a discovery hint — never as an
+ * override — keeps them working without letting it resurrect revoked access.
+ */
+async function membershipTeamIdsInCell(
+  admin: SupabaseClient,
+  userId: string,
+): Promise<string[]> {
+  const [rbac, legacy] = await Promise.all([
+    admin
+      .from("team_memberships")
+      .select("team_id, status")
+      .eq("user_id", userId),
+    admin.from("team_member").select("team_id").eq("profile_id", userId),
+  ])
+  if (rbac.error) throw new Error(rbac.error.message)
+  if (legacy.error) throw new Error(legacy.error.message)
+
+  const rbacRows = (rbac.data ?? []).filter(
+    (row): row is { team_id: string; status: string } =>
+      typeof row.team_id === "string",
+  )
+  const rbacByTeam = new Map(rbacRows.map((row) => [row.team_id, row.status]))
+
+  const allowed = new Set<string>(
+    rbacRows.filter((row) => row.status === "active").map((row) => row.team_id),
+  )
+  for (const row of legacy.data ?? []) {
+    if (typeof row.team_id !== "string") continue
+    if (!rbacByTeam.has(row.team_id)) allowed.add(row.team_id)
+  }
+  return [...allowed]
 }
 
 /**
@@ -99,20 +134,9 @@ export async function listTeamsForUser(
 ): Promise<TeamDirectoryEntry[]> {
   const { items } = await acrossCells(async (region) => {
     const admin = cellFor(region).createAdminClient()
-    const { data: memberships, error } = await admin
-      .from("team_member")
-      .select("team_id")
-      .eq("profile_id", userId)
-
-    if (error) throw new Error(error.message)
-
-    const teamIds = [
-      ...new Set(
-        (memberships ?? [])
-          .map((row) => row.team_id)
-          .filter((teamId): teamId is string => typeof teamId === "string"),
-      ),
-    ]
+    // Same authorization boundary as the membership lookup — a deactivated
+    // member must not see the team in the directory either.
+    const teamIds = await membershipTeamIdsInCell(admin, userId)
     if (!teamIds.length) return []
 
     const { data: teams, error: teamErr } = await admin

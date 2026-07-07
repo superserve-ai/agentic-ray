@@ -25,6 +25,13 @@ const useClient = {
         }),
       }
     }
+    if (table === "team_memberships") {
+      return {
+        select: () => ({
+          eq: async () => ({ data: [], error: null }),
+        }),
+      }
+    }
     if (table === "team_member") {
       return {
         select: () => ({ eq: async () => ({ data: [], error: null }) }),
@@ -37,6 +44,13 @@ const useClient = {
 // usw cell: holds the membership, the team row, and receives the key insert.
 const uswClient = {
   from: vi.fn((table: string) => {
+    if (table === "team_memberships") {
+      return {
+        select: () => ({
+          eq: async () => ({ data: [], error: null }),
+        }),
+      }
+    }
     if (table === "team_member") {
       return {
         select: () => ({

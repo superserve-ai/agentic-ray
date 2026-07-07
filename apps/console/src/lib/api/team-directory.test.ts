@@ -8,8 +8,16 @@ let cellClients: Record<string, ReturnType<typeof cellClient>> = {}
 function cellClient(
   memberships: Array<{ team_id: string }>,
   teams: Array<{ id: string; name: string }> = [],
+  rbac: Array<{ team_id: string; status: string }> = [],
 ) {
   const from = vi.fn((table: string) => {
+    if (table === "team_memberships") {
+      return {
+        select: () => ({
+          eq: async () => ({ data: rbac, error: null }),
+        }),
+      }
+    }
     if (table === "team_member") {
       return {
         select: () => ({
@@ -57,7 +65,8 @@ describe("team directory fan-out", () => {
     const memberships = await listTeamMembershipsForUser("u1")
 
     expect(memberships).toEqual([{ teamId: "team-1", region: "use" }])
-    expect(cellClients.use.from).toHaveBeenCalledTimes(1)
+    // RBAC + legacy membership queries — still a single cell touched.
+    expect(cellClients.use.from).toHaveBeenCalledTimes(2)
   })
 
   it("merges memberships across cells, tagged with each cell's region", async () => {
@@ -111,8 +120,8 @@ describe("team directory fan-out", () => {
     const teams = await listTeamsForUser("u1")
 
     expect(teams).toEqual([{ id: "team-1", name: "east team", region: "use" }])
-    // Only the membership query hit the empty cell.
-    expect(cellClients.usw.from).toHaveBeenCalledTimes(1)
+    // Only the membership queries hit the empty cell — no team lookup.
+    expect(cellClients.usw.from).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -201,5 +210,42 @@ describe("degradation visibility", () => {
     const { degradedRegions } = await listTeamMembershipsForUserDetailed("u1")
 
     expect(degradedRegions).toEqual([])
+  })
+})
+
+describe("RBAC-authoritative membership", () => {
+  beforeEach(() => {
+    regions = ["use"]
+    cellClients = {}
+  })
+
+  it("denies a member whose RBAC membership is inactive, even with a legacy row", async () => {
+    cellClients.use = cellClient(
+      [{ team_id: "team-1" }],
+      [],
+      [{ team_id: "team-1", status: "inactive" }],
+    )
+
+    expect(await listTeamMembershipsForUser("u1")).toEqual([])
+  })
+
+  it("keeps a pure-legacy member with no RBAC row at all", async () => {
+    cellClients.use = cellClient([{ team_id: "team-1" }], [], [])
+
+    expect(await listTeamMembershipsForUser("u1")).toEqual([
+      { teamId: "team-1", region: "use" },
+    ])
+  })
+
+  it("accepts an active RBAC membership without a legacy row", async () => {
+    cellClients.use = cellClient(
+      [],
+      [],
+      [{ team_id: "team-2", status: "active" }],
+    )
+
+    expect(await listTeamMembershipsForUser("u1")).toEqual([
+      { teamId: "team-2", region: "use" },
+    ])
   })
 })
