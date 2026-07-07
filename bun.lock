@@ -144,7 +144,7 @@
     },
     "packages/mcp": {
       "name": "@superserve/mcp",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
         "superserve-mcp": "./dist/index.js",
         "superserve-mcp-http": "./dist/httpServer.js",
@@ -169,7 +169,7 @@
     },
     "packages/sdk": {
       "name": "@superserve/sdk",
-      "version": "0.7.7",
+      "version": "0.7.8",
       "devDependencies": {
         "@superserve/typescript-config": "workspace:*",
         "@types/node": "^25.5.2",

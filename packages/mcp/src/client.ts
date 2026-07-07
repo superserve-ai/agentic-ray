@@ -277,7 +277,8 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
 
     async update(id, input) {
       // updateById (not connect().update()) so patching a paused sandbox —
-      // e.g. arming auto-delete — does not resume it.
+      // e.g. arming auto-delete — does not resume it. Requires @superserve/sdk
+      // >= 0.7.8; MIN_SDK_VERSION in mcp-publish.yml tracks this floor.
       await Sandbox.updateById(
         id,
         {
@@ -405,9 +406,8 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
     },
 
     // Zips + streams the dir from the data plane (VM must be up, so connect's
-    // resume is intrinsic, like readFile). Requires @superserve/sdk >= 0.7.7
-    // (downloadDir landed in #221). The publish workflow enforces this floor via
-    // MIN_SDK_VERSION in .github/workflows/mcp-publish.yml — bump both together.
+    // resume is intrinsic, like readFile). downloadDir landed in @superserve/sdk
+    // 0.7.7; the MCP floor (MIN_SDK_VERSION) is the max across features.
     async downloadDir(id, path, maxBytes) {
       const sb = await Sandbox.connect(id, conn)
       return sb.files.downloadDir(
