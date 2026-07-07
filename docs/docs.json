@@ -224,7 +224,7 @@
         "groups": [
           {
             "group": "Recipes",
-            "pages": ["cookbook/pr-loop", "cookbook/software-factory"]
+            "pages": ["cookbook/pr-loop"]
           },
           {
             "group": "MCP",
