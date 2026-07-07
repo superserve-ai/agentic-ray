@@ -35,8 +35,12 @@ async function getTeamHomeRegion(team: TeamMembership): Promise<string> {
     .select("home_region")
     .eq("id", team.teamId)
     .single()
+  // Fall back to the cell the team was discovered in, not DEFAULT_REGION:
+  // a transient read failure for a usw team must not mint a use-prefixed
+  // key that the edge would route to the wrong cell. team.region is always
+  // a configured region, so it is a safe routing prefix.
   if (error || !data?.home_region || !REGION_CODES.has(data.home_region)) {
-    return DEFAULT_REGION
+    return team.region
   }
   return data.home_region as string
 }

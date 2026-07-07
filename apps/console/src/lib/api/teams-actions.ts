@@ -82,49 +82,84 @@ export async function createTeamAction(
     .single()
   if (teamErr) throw new Error(`Failed to create team: ${teamErr.message}`)
 
-  const { error: memberErr } = await admin.from("team_member").insert({
-    team_id: team.id,
-    profile_id: user.id,
-    role: "owner",
-  })
-  if (memberErr) {
-    throw new Error(`Failed to add team member: ${memberErr.message}`)
-  }
-
-  // Membership must exist (and be active) before the role assignment — the
-  // control-plane schema enforces that ordering with a trigger.
-  const { error: membershipErr } = await admin.from("team_memberships").insert({
-    team_id: team.id,
-    user_id: user.id,
-    status: "active",
-  })
-  if (membershipErr) {
-    throw new Error(
-      `Failed to create team membership: ${membershipErr.message}`,
-    )
-  }
-
-  const { data: role, error: roleErr } = await admin
-    .from("roles")
-    .select("id")
-    .eq("name", TEAM_OWNER_ROLE)
-    .single()
-  if (roleErr || !role) {
-    throw new Error(
-      `Failed to look up ${TEAM_OWNER_ROLE} role: ${roleErr?.message ?? "not found"}`,
-    )
-  }
-
-  const { error: assignErr } = await admin
-    .from("user_role_assignments")
-    .insert({
-      user_id: user.id,
-      role_id: role.id,
-      scope_type: "team",
+  // Postgrest calls aren't a transaction, so a failure mid-chain would leave
+  // a team the console can list but the control plane rejects (no RBAC
+  // chain). Compensate by unwinding what was written; a per-cell RPC that
+  // does the whole chain in one transaction is the durable replacement.
+  try {
+    const { error: memberErr } = await admin.from("team_member").insert({
       team_id: team.id,
+      profile_id: user.id,
+      role: "owner",
     })
-  if (assignErr) {
-    throw new Error(`Failed to assign ${TEAM_OWNER_ROLE}: ${assignErr.message}`)
+    if (memberErr) {
+      throw new Error(`Failed to add team member: ${memberErr.message}`)
+    }
+
+    // Membership must exist (and be active) before the role assignment — the
+    // control-plane schema enforces that ordering with a trigger.
+    const { error: membershipErr } = await admin
+      .from("team_memberships")
+      .insert({
+        team_id: team.id,
+        user_id: user.id,
+        status: "active",
+      })
+    if (membershipErr) {
+      throw new Error(
+        `Failed to create team membership: ${membershipErr.message}`,
+      )
+    }
+
+    const { data: role, error: roleErr } = await admin
+      .from("roles")
+      .select("id")
+      .eq("name", TEAM_OWNER_ROLE)
+      .single()
+    if (roleErr || !role) {
+      throw new Error(
+        `Failed to look up ${TEAM_OWNER_ROLE} role: ${roleErr?.message ?? "not found"}`,
+      )
+    }
+
+    const { error: assignErr } = await admin
+      .from("user_role_assignments")
+      .insert({
+        user_id: user.id,
+        role_id: role.id,
+        scope_type: "team",
+        team_id: team.id,
+      })
+    if (assignErr) {
+      throw new Error(
+        `Failed to assign ${TEAM_OWNER_ROLE}: ${assignErr.message}`,
+      )
+    }
+  } catch (chainErr) {
+    // Best-effort unwind in reverse dependency order, so a mid-chain failure
+    // can't leave a team the console lists but the control plane rejects.
+    // Failures here are logged and the original error is surfaced with the
+    // team id for manual repair.
+    for (const [table, column] of [
+      ["user_role_assignments", "team_id"],
+      ["team_memberships", "team_id"],
+      ["team_member", "team_id"],
+      ["team", "id"],
+    ] as const) {
+      const { error: unwindErr } = await admin
+        .from(table)
+        .delete()
+        .eq(column, team.id)
+      if (unwindErr) {
+        console.error(
+          `create-team unwind: failed to delete from ${table} for team ${team.id}: ${unwindErr.message}`,
+        )
+      }
+    }
+    throw new Error(
+      `${chainErr instanceof Error ? chainErr.message : String(chainErr)} (team ${team.id})`,
+      { cause: chainErr },
+    )
   }
 
   return {

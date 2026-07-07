@@ -25,13 +25,38 @@ export function deriveRawKey(userId: string): string {
   return `ss_live_${mac.toString("base64url")}`
 }
 
-// Tracks which users have had their api_key row ensured in this process.
-// This is not a secret cache — losing it only costs one extra idempotent
-// INSERT. Safe across instances because the DB write is idempotent.
-const ensuredUsers = new Set<string>()
-// The team (and its home cell) is stable per user and not a secret; safe to
-// cache in-process.
-const teamCache = new Map<string, TeamMembership>()
+// Authorization state is cached with a short TTL, never indefinitely: a
+// user removed from a team (or moved between cells) must lose proxy access
+// within a bounded window, not at the next process recycle. The TTL bounds
+// staleness to one minute; every entry costs one membership read per user
+// per minute to refresh, which is noise.
+const AUTHZ_CACHE_TTL_MS = 60_000
+
+interface Expiring<T> {
+  value: T
+  expires: number
+}
+
+function getFresh<T>(map: Map<string, Expiring<T>>, key: string): T | null {
+  const entry = map.get(key)
+  if (!entry) return null
+  if (Date.now() > entry.expires) {
+    map.delete(key)
+    return null
+  }
+  return entry.value
+}
+
+function setFresh<T>(map: Map<string, Expiring<T>>, key: string, value: T) {
+  map.set(key, { value, expires: Date.now() + AUTHZ_CACHE_TTL_MS })
+}
+
+// Users whose api_key row was ensured recently — re-ensuring is one
+// idempotent upsert, so the TTL also heals a server-side key-row deletion.
+const ensuredUsers = new Map<string, Expiring<true>>()
+// The user's team + home cell. Stable in practice, but it IS authorization
+// state, hence the TTL.
+const teamCache = new Map<string, Expiring<TeamMembership>>()
 
 async function ensureProfile(userId: string, email: string): Promise<void> {
   const admin = cellFor(DEFAULT_REGION).createAdminClient()
@@ -57,14 +82,14 @@ async function getTeamForUser(
   userId: string,
   email: string,
 ): Promise<TeamMembership> {
-  const cached = teamCache.get(userId)
+  const cached = getFresh(teamCache, userId)
   if (cached) return cached
 
   await ensureProfile(userId, email)
 
   const membership = (await listTeamMembershipsForUser(userId))[0]
   if (membership) {
-    teamCache.set(userId, membership)
+    setFresh(teamCache, userId, membership)
     return membership
   }
 
@@ -87,7 +112,7 @@ async function getTeamForUser(
     throw new Error(`Failed to add team member: ${memberErr.message}`)
 
   const created = { teamId: team.id as string, region: DEFAULT_REGION }
-  teamCache.set(userId, created)
+  setFresh(teamCache, userId, created)
   return created
 }
 
@@ -117,7 +142,7 @@ async function ensureProxyKeyRow(
   email: string,
   keyHash: string,
 ): Promise<void> {
-  if (ensuredUsers.has(userId)) return
+  if (getFresh(ensuredUsers, userId)) return
 
   const team = await getTeamForUser(userId, email)
   const admin = cellFor(team.region).createAdminClient()
@@ -135,7 +160,7 @@ async function ensureProxyKeyRow(
 
   if (error) throw new Error(`Failed to ensure proxy key: ${error.message}`)
 
-  ensuredUsers.add(userId)
+  setFresh(ensuredUsers, userId, true)
 }
 
 export async function getAuthApiKeyForUser(
