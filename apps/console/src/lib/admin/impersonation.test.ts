@@ -1,6 +1,10 @@
 import type { User } from "@supabase/supabase-js"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+const mockHeaders = vi.hoisted(() => ({
+  host: "console.superserve.ai",
+}))
+
 const cookieStore = {
   value: undefined as string | undefined,
   lastSet: null as null | {
@@ -22,6 +26,7 @@ vi.mock("next/headers", () => ({
       cookieStore.value = undefined
     },
   }),
+  headers: async () => new Headers({ host: mockHeaders.host }),
 }))
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -90,6 +95,7 @@ afterEach(() => {
   cookieStore.value = undefined
   cookieStore.lastSet = null
   teamLookup.result = { data: { name: "Acme Corp" }, error: null }
+  mockHeaders.host = "console.superserve.ai"
   delete process.env.NEXT_PUBLIC_COOKIE_DOMAIN
 })
 
@@ -167,6 +173,19 @@ describe("impersonation cookie", () => {
       sameSite: "lax",
       path: "/",
     })
+  })
+
+  it("omits an incompatible cookie domain on preview hosts", async () => {
+    process.env.NEXT_PUBLIC_COOKIE_DOMAIN = ".superserve.ai"
+    mockHeaders.host = "console-git-aw-fixadminpage-superserve.vercel.app"
+
+    await setImpersonationCookie(TEAM)
+
+    expect(cookieStore.lastSet?.options).toMatchObject({
+      path: "/",
+      maxAge: expect.any(Number),
+    })
+    expect(cookieStore.lastSet?.options.domain).toBeUndefined()
   })
 
   it("expires the cookie with matching path + domain when NEXT_PUBLIC_COOKIE_DOMAIN is set", async () => {

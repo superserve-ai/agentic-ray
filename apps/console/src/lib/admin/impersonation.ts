@@ -1,7 +1,7 @@
 import crypto from "node:crypto"
 
 import type { User } from "@supabase/supabase-js"
-import { cookies } from "next/headers"
+import { cookies, headers } from "next/headers"
 
 import { canReadPlatformSandboxes } from "@/lib/admin/permissions"
 import { getProxySecret } from "@/lib/api/proxy-secret"
@@ -78,13 +78,28 @@ export async function getImpersonationTeamId(
   return readImpersonationTeamId()
 }
 
+async function cookieDomainForRequest(): Promise<string | undefined> {
+  const cookieDomain = process.env.NEXT_PUBLIC_COOKIE_DOMAIN?.trim()
+  if (!cookieDomain) return undefined
+
+  const host = (await headers()).get("host")?.split(":")[0]?.toLowerCase()
+  if (!host) return undefined
+
+  const normalizedDomain = cookieDomain.replace(/^\./, "").toLowerCase()
+  if (host === normalizedDomain || host.endsWith(`.${normalizedDomain}`)) {
+    return cookieDomain
+  }
+
+  return undefined
+}
+
 export async function setImpersonationCookie(teamId: string): Promise<void> {
   const store = await cookies()
   const token = signImpersonationToken(
     teamId,
     Date.now() + impersonationTtlMs(),
   )
-  const cookieDomain = process.env.NEXT_PUBLIC_COOKIE_DOMAIN
+  const cookieDomain = await cookieDomainForRequest()
 
   store.set(IMPERSONATION_COOKIE, token, {
     httpOnly: true,
@@ -98,7 +113,7 @@ export async function setImpersonationCookie(teamId: string): Promise<void> {
 
 export async function clearImpersonationCookie(): Promise<void> {
   const store = await cookies()
-  const cookieDomain = process.env.NEXT_PUBLIC_COOKIE_DOMAIN
+  const cookieDomain = await cookieDomainForRequest()
   store.set(IMPERSONATION_COOKIE, "", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
