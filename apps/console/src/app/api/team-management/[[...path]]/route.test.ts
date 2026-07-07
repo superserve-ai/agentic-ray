@@ -8,6 +8,7 @@ vi.mock("@/lib/admin/permissions", () => ({
   canViewOtherUsersAccount: vi.fn(),
 }))
 vi.mock("@/lib/api/proxy-auth", () => ({
+  getApiBaseUrlForUser: vi.fn(),
   getAuthApiKeyForUser: vi.fn(),
   getTeamIdForUser: vi.fn(),
 }))
@@ -16,7 +17,11 @@ const fetchSpy = vi.fn()
 vi.stubGlobal("fetch", fetchSpy)
 
 import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
-import { getAuthApiKeyForUser, getTeamIdForUser } from "@/lib/api/proxy-auth"
+import {
+  getApiBaseUrlForUser,
+  getAuthApiKeyForUser,
+  getTeamIdForUser,
+} from "@/lib/api/proxy-auth"
 import { createServerClient } from "@/lib/supabase/server"
 
 import { DELETE, GET, POST } from "./route"
@@ -56,6 +61,9 @@ describe("api proxy /api/team-management", () => {
     vi.mocked(canViewOtherUsersAccount).mockReturnValue(true)
     vi.mocked(getTeamIdForUser).mockResolvedValue("team-1")
     vi.mocked(getAuthApiKeyForUser).mockResolvedValue("ss_live_test_key")
+    vi.mocked(getApiBaseUrlForUser).mockResolvedValue(
+      "https://api.test.superserve.ai",
+    )
     fetchSpy.mockImplementation(() =>
       Promise.resolve(
         new Response(JSON.stringify({ members: [] }), {

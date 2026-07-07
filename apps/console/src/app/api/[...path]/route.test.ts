@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mocks declared BEFORE the module under test is imported.
 vi.mock("@/lib/api/proxy-auth", () => ({
+  getApiBaseUrlForUser: vi.fn(),
   getAuthApiKeyForUser: vi.fn(),
 }))
 vi.mock("@/lib/supabase/server", () => ({
@@ -24,10 +25,13 @@ vi.mock("@/lib/supabase/server", () => ({
 const fetchSpy = vi.fn()
 vi.stubGlobal("fetch", fetchSpy)
 
-// SANDBOX_API_URL is pre-stubbed in src/test/setup.ts before the route
-// module is imported (route reads it at module load).
+// SANDBOX_API_URL is pre-stubbed in src/test/setup.ts; the route resolves
+// the upstream per request via the cell registry / proxy-auth.
 
-import { getAuthApiKeyForUser } from "@/lib/api/proxy-auth"
+import {
+  getApiBaseUrlForUser,
+  getAuthApiKeyForUser,
+} from "@/lib/api/proxy-auth"
 import { createServerClient } from "@/lib/supabase/server"
 
 import { DELETE, GET, POST, PUT } from "./route"
@@ -59,6 +63,10 @@ describe("api proxy /api/[...path]", () => {
     } as never)
     vi.mocked(getAuthApiKeyForUser).mockReset()
     vi.mocked(getAuthApiKeyForUser).mockResolvedValue("ss_live_test_key")
+    vi.mocked(getApiBaseUrlForUser).mockReset()
+    vi.mocked(getApiBaseUrlForUser).mockResolvedValue(
+      "https://api.test.superserve.ai",
+    )
   })
 
   it("returns 404 for a path outside the allowed prefixes", async () => {
@@ -119,6 +127,16 @@ describe("api proxy /api/[...path]", () => {
     expect(url).toBe(
       "https://api.test.superserve.ai/sandboxes?status=active&q=foo",
     )
+  })
+
+  it("forwards to the team's home cell base URL", async () => {
+    vi.mocked(getApiBaseUrlForUser).mockResolvedValue(
+      "https://api-usw.test.superserve.ai",
+    )
+    fetchSpy.mockResolvedValue(new Response("[]", { status: 200 }))
+    await GET(req("GET", ["sandboxes"]), params(["sandboxes"]))
+    const [url] = fetchSpy.mock.calls[0]
+    expect(url).toBe("https://api-usw.test.superserve.ai/sandboxes")
   })
 
   it("skips X-API-Key injection on /v1/auth/ paths and preserves Authorization", async () => {

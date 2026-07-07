@@ -1,11 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
-import { getAuthApiKeyForUser, getTeamIdForUser } from "@/lib/api/proxy-auth"
+import {
+  getApiBaseUrlForUser,
+  getAuthApiKeyForUser,
+  getTeamIdForUser,
+} from "@/lib/api/proxy-auth"
 import { createServerClient } from "@/lib/supabase/server"
-
-const SANDBOX_API_URL =
-  process.env.SANDBOX_API_URL ?? "https://api.superserve.ai"
 
 const FORWARD_REQUEST_HEADERS = new Set([
   "accept",
@@ -84,7 +85,9 @@ async function proxyTeamManagementRequest(
     )
   }
 
-  const url = new URL(`${SANDBOX_API_URL}${targetPath}`)
+  // Team management lives in the team's home cell's control plane.
+  const apiBaseUrl = await getApiBaseUrlForUser(user)
+  const url = new URL(`${apiBaseUrl}${targetPath}`)
   if (request.method === "GET" || request.method === "HEAD") {
     url.search = request.nextUrl.search
   }

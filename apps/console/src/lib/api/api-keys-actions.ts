@@ -2,7 +2,11 @@
 
 import crypto from "node:crypto"
 
-import { createAdminClient } from "@/lib/supabase/admin"
+import {
+  listTeamMembershipsForUser,
+  type TeamMembership,
+} from "@/lib/api/team-directory"
+import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 // Region codes embedded in new API keys (ss_live_<region>_...). Must stay in
@@ -12,7 +16,6 @@ import { createServerClient } from "@/lib/supabase/server"
 // without a region segment keep working: the control plane hashes the whole
 // string, so the format is opaque to auth.
 const REGION_CODES = new Set(["use", "usw"])
-const DEFAULT_REGION = "use"
 
 function generateRawKey(region: string): string {
   const bytes = crypto.randomBytes(24)
@@ -25,15 +28,19 @@ function generateRawKey(region: string): string {
  * home_region migration hasn't been applied yet or the value is unknown, so
  * key creation never breaks on schema skew.
  */
-async function getTeamHomeRegion(teamId: string): Promise<string> {
-  const admin = createAdminClient()
+async function getTeamHomeRegion(team: TeamMembership): Promise<string> {
+  const admin = cellFor(team.region).createAdminClient()
   const { data, error } = await admin
     .from("team")
     .select("home_region")
-    .eq("id", teamId)
+    .eq("id", team.teamId)
     .single()
+  // Fall back to the cell the team was discovered in, not DEFAULT_REGION:
+  // a transient read failure for a usw team must not mint a use-prefixed
+  // key that the edge would route to the wrong cell. team.region is always
+  // a configured region, so it is a safe routing prefix.
   if (error || !data?.home_region || !REGION_CODES.has(data.home_region)) {
-    return DEFAULT_REGION
+    return team.region
   }
   return data.home_region as string
 }
@@ -43,11 +50,17 @@ function hashKey(key: string): string {
 }
 
 /**
- * Ensure a profile row exists for the authenticated user.
- * The Go backend schema requires profile(id) to match auth.users(id).
+ * Ensure a profile row exists for the authenticated user in the given cell.
+ * The Go backend schema requires profile(id) to match auth.users(id), and
+ * profile rows are per-cell — a row must exist in whichever cell a write
+ * references it from.
  */
-async function ensureProfile(userId: string, email: string): Promise<void> {
-  const admin = createAdminClient()
+async function ensureProfile(
+  region: string,
+  userId: string,
+  email: string,
+): Promise<void> {
+  const admin = cellFor(region).createAdminClient()
   const { data: existing } = await admin
     .from("profile")
     .select("id")
@@ -68,29 +81,23 @@ async function ensureProfile(userId: string, email: string): Promise<void> {
 }
 
 /**
- * Look up the user's team via team_member. If no team exists,
- * auto-create one (named after their email) and add them as owner.
+ * Look up the user's team across configured cells. If no team exists,
+ * auto-create one (named after their email) in the default cell and add
+ * them as owner.
  */
 async function getOrCreateTeamForUser(
   userId: string,
   email: string,
-): Promise<string> {
-  const admin = createAdminClient()
-
+): Promise<TeamMembership> {
   // Ensure profile exists first (FK target for team_member and api_key)
-  await ensureProfile(userId, email)
+  await ensureProfile(DEFAULT_REGION, userId, email)
 
-  // Try to find existing team membership
-  const { data: membership } = await admin
-    .from("team_member")
-    .select("team_id")
-    .eq("profile_id", userId)
-    .limit(1)
-    .single()
+  // Try to find existing team membership in any configured cell
+  const memberships = await listTeamMembershipsForUser(userId)
+  if (memberships[0]) return memberships[0]
 
-  if (membership?.team_id) return membership.team_id
-
-  // No team — create one and add user as owner
+  // No team — create one in the default cell and add user as owner
+  const admin = cellFor(DEFAULT_REGION).createAdminClient()
   const { data: team, error: teamErr } = await admin
     .from("team")
     .insert({ name: email })
@@ -108,7 +115,7 @@ async function getOrCreateTeamForUser(
   if (memberErr)
     throw new Error(`Failed to add team member: ${memberErr.message}`)
 
-  return team.id as string
+  return { teamId: team.id as string, region: DEFAULT_REGION }
 }
 
 export async function listApiKeysAction() {
@@ -118,13 +125,13 @@ export async function listApiKeysAction() {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const teamId = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
+  const team = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
 
-  const admin = createAdminClient()
+  const admin = cellFor(team.region).createAdminClient()
   const { data, error } = await admin
     .from("api_key")
     .select("id, name, key_hash, created_at, last_used_at")
-    .eq("team_id", teamId)
+    .eq("team_id", team.teamId)
     .is("revoked_at", null)
     .neq("name", "__console_proxy__")
     .order("created_at", { ascending: false })
@@ -147,9 +154,9 @@ export async function createApiKeyAction(name: string) {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const teamId = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
+  const team = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
 
-  const region = await getTeamHomeRegion(teamId)
+  const region = await getTeamHomeRegion(team)
   const rawKey = generateRawKey(region)
   const keyHash = hashKey(rawKey)
   // ss_live_<region>_ plus the first 8 random chars, e.g. "ss_live_use_AbCdEfGh..."
@@ -157,11 +164,17 @@ export async function createApiKeyAction(name: string) {
   // different length still shows exactly 8 random chars.
   const keyPrefix = `${rawKey.slice(0, `ss_live_${region}_`.length + 8)}...`
 
-  const admin = createAdminClient()
+  // The key row must live in the team's cell — that's the database the
+  // team's control plane authenticates against. The creator's profile row
+  // (created_by FK target) must exist in that same cell: today only
+  // createTeamAction guarantees it, and a membership provisioned any other
+  // way (seed, admin tooling, migration) would otherwise FK-violate here.
+  await ensureProfile(team.region, user.id, user.email ?? user.id)
+  const admin = cellFor(team.region).createAdminClient()
   const { data, error } = await admin
     .from("api_key")
     .insert({
-      team_id: teamId,
+      team_id: team.teamId,
       key_hash: keyHash,
       name,
       scopes: [],
@@ -188,14 +201,14 @@ export async function revokeApiKeyAction(id: string) {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const teamId = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
+  const team = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
 
-  const admin = createAdminClient()
+  const admin = cellFor(team.region).createAdminClient()
   const { error } = await admin
     .from("api_key")
     .update({ revoked_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("team_id", teamId)
+    .eq("team_id", team.teamId)
 
   if (error) throw new Error(error.message)
 }

@@ -1,10 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-import { getAuthApiKeyForUser } from "@/lib/api/proxy-auth"
+import {
+  getApiBaseUrlForUser,
+  getAuthApiKeyForUser,
+} from "@/lib/api/proxy-auth"
+import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
-
-const SANDBOX_API_URL =
-  process.env.SANDBOX_API_URL ?? "https://api.superserve.ai"
 
 const ALLOWED_PREFIXES = [
   "sandboxes",
@@ -56,15 +57,16 @@ async function proxyRequest(
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
-  const url = new URL(`${SANDBOX_API_URL}/${joinedPath}`)
-  url.search = request.nextUrl.search
-
   const headers = new Headers()
   for (const [key, value] of request.headers.entries()) {
     if (FORWARD_REQUEST_HEADERS.has(key.toLowerCase())) {
       headers.set(key, value)
     }
   }
+
+  // Paths that carry their own auth (no key injection) go to the default
+  // cell; authenticated requests go to the user's team's home cell.
+  let apiBaseUrl = cellFor(DEFAULT_REGION).apiBaseUrl
 
   // Inject server-side API key for authenticated requests
   if (!shouldSkipKeyInjection(joinedPath)) {
@@ -74,14 +76,18 @@ async function proxyRequest(
     } = await supabase.auth.getUser()
     const apiKey = await getAuthApiKeyForUser(user)
 
-    if (!apiKey) {
+    if (!apiKey || !user) {
       return NextResponse.json(
         { error: { code: "unauthorized", message: "Not authenticated" } },
         { status: 401 },
       )
     }
     headers.set("X-API-Key", apiKey)
+    apiBaseUrl = await getApiBaseUrlForUser(user)
   }
+
+  const url = new URL(`${apiBaseUrl}/${joinedPath}`)
+  url.search = request.nextUrl.search
 
   const body =
     request.method !== "GET" && request.method !== "HEAD"
