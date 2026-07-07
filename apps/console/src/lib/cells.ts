@@ -77,8 +77,8 @@ export function cellFor(region: string): Cell {
   return cell
 }
 
-// Multi-cell UI allowlist. Region choice (and later the team switcher,
-// SS-162) rolls out person-by-person, independent of which cells are
+// Multi-cell UI allowlist. Region choice (and later the team switcher)
+// rolls out person-by-person, independent of which cells are
 // configured: MULTI_CELL_UI_ALLOWLIST is a comma-separated list of email
 // addresses and/or @domain entries (e.g. "@superserve.ai,pilot@acme.com").
 // Absent or unmatched, users see only the default region even when other
