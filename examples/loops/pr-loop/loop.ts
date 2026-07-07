@@ -159,12 +159,23 @@ function iterateScript(claudeMode: ClaudeMode, pr?: number): string {
     // default branch: `-f -B` fast-forwards it to origin and drops any stray change,
     // while leaving the untracked .pr-loop-state.md (loop memory) untouched.
     'git checkout -f -q -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"',
-    `claude -p "/pr-loop ${task}" \\`,
-    "  --permission-mode dontAsk \\",
-    // Allow gh/git + the common test runners so the verifier can actually run the
-    // project's checks inside the microVM (safe — it's an isolated box).
-    '  --allowedTools "Bash(gh *),Bash(git *),Bash(npm *),Bash(npx *),Bash(node *),Bash(bun *),Bash(pnpm *),Bash(yarn *),Bash(make *),Bash(pytest *),Bash(python3 *),Bash(go *),Bash(cargo *),Read,Edit,Write,Glob,Grep" \\',
-    // Hard-block the dangerous ops at the tool layer, beyond the skill's rules.
+    // IS_SANDBOX=1 lifts Claude Code's refusal to run --dangerously-skip-permissions
+    // (what bypassPermissions maps to) as root: the box runs as root, and without this
+    // the tick dies with "cannot be used with root/sudo privileges" before reviewing
+    // anything. Truthful here — we ARE inside a Firecracker microVM.
+    `IS_SANDBOX=1 claude -p "/pr-loop ${task}" \\`,
+    // Headless in an isolated microVM → bypassPermissions. An allowlist can't work
+    // here: dontAsk silently DENIES any command shape not on the list, and the model
+    // picks the shape at runtime — a narrow allowlist made reviews never post because
+    // Claude built the body with a `cat <<EOF` heredoc and diffed via `VAR=$(...) &&
+    // git diff`, neither of which matched `Bash(gh *)`/`Bash(git *)`. Arbitrary bash is
+    // safe ONLY because of the sandbox boundary (per Anthropic's own guidance). The
+    // load-bearing "propose, never merge/push" guarantee is the WORKFLOW TOKEN SCOPE
+    // (contents:read → both `git push` and `gh pr merge` fail at the GitHub API), NOT
+    // the in-box mode. The deny list + skill rules below are defense-in-depth.
+    "  --permission-mode bypassPermissions \\",
+    // Defense-in-depth only (the token scope above is the real block; bypass may not
+    // enforce this): keep merge/push off the menu so a prompt-injected tick can't try.
     '  --disallowedTools "Bash(gh pr merge*),Bash(git push*)" \\',
     "  --output-format json \\",
     "  --max-turns 50",
