@@ -362,14 +362,17 @@ export async function runLoopCli(argv: string[]): Promise<void> {
   // Watch mode logs-and-continues: one bad tick must not kill a long-running
   // watcher, so the exit code is intentionally ignored here (the .catch below
   // handles a thrown tick). Only the one-shot path above maps it to the exit.
-  await runTick(spec)
+  const logTickFailure = (err: unknown): void =>
+    console.error(`[pr-loop] tick failed: ${err}`)
   const scheduleNext = (): void => {
     setTimeout(() => {
-      void runTick(spec)
-        .catch((err) => console.error(`[pr-loop] tick failed: ${err}`))
-        .finally(scheduleNext)
+      void runTick(spec).catch(logTickFailure).finally(scheduleNext)
     }, intervalMs)
   }
+  // The first tick gets the same treatment as every scheduled one — otherwise a
+  // transient failure here throws past this function and kills the watcher
+  // before it ever schedules a retry.
+  await runTick(spec).catch(logTickFailure)
   scheduleNext()
 }
 

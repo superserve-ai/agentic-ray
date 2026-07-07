@@ -106,6 +106,9 @@ function promptHidden(query: string): Promise<string> {
       }
     }
     stdin.on("data", onData)
+    // Without this, a mid-prompt disconnect (pipe break, SSH drop) leaves the
+    // promise never settling and the installer hanging indefinitely.
+    stdin.once("error", () => fail("stdin closed while waiting for input"))
   })
 }
 
