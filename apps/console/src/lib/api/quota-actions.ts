@@ -1,7 +1,7 @@
 "use server"
 
 import {
-  listTeamMembershipsForUser,
+  listTeamMembershipsForUserDetailed,
   type TeamMembership,
 } from "@/lib/api/team-directory"
 import { cellFor } from "@/lib/cells"
@@ -14,7 +14,13 @@ export interface QuotaUsageResponse {
 }
 
 async function getTeam(userId: string): Promise<TeamMembership | null> {
-  const memberships = await listTeamMembershipsForUser(userId)
+  const { memberships, degradedRegions } =
+    await listTeamMembershipsForUserDetailed(userId)
+
+  // A partial directory read makes the membership shape untrustworthy — the
+  // banner renders nothing rather than showing a possibly-wrong team's quota.
+  if (degradedRegions.length > 0) return null
+
   if (!memberships.length) return null
 
   const uniqueTeams = new Map(memberships.map((m) => [m.teamId, m]))

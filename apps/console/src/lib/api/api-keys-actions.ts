@@ -50,11 +50,17 @@ function hashKey(key: string): string {
 }
 
 /**
- * Ensure a profile row exists for the authenticated user in the default
- * cell. The Go backend schema requires profile(id) to match auth.users(id).
+ * Ensure a profile row exists for the authenticated user in the given cell.
+ * The Go backend schema requires profile(id) to match auth.users(id), and
+ * profile rows are per-cell — a row must exist in whichever cell a write
+ * references it from.
  */
-async function ensureProfile(userId: string, email: string): Promise<void> {
-  const admin = cellFor(DEFAULT_REGION).createAdminClient()
+async function ensureProfile(
+  region: string,
+  userId: string,
+  email: string,
+): Promise<void> {
+  const admin = cellFor(region).createAdminClient()
   const { data: existing } = await admin
     .from("profile")
     .select("id")
@@ -84,7 +90,7 @@ async function getOrCreateTeamForUser(
   email: string,
 ): Promise<TeamMembership> {
   // Ensure profile exists first (FK target for team_member and api_key)
-  await ensureProfile(userId, email)
+  await ensureProfile(DEFAULT_REGION, userId, email)
 
   // Try to find existing team membership in any configured cell
   const memberships = await listTeamMembershipsForUser(userId)
@@ -159,7 +165,11 @@ export async function createApiKeyAction(name: string) {
   const keyPrefix = `${rawKey.slice(0, `ss_live_${region}_`.length + 8)}...`
 
   // The key row must live in the team's cell — that's the database the
-  // team's control plane authenticates against.
+  // team's control plane authenticates against. The creator's profile row
+  // (created_by FK target) must exist in that same cell: today only
+  // createTeamAction guarantees it, and a membership provisioned any other
+  // way (seed, admin tooling, migration) would otherwise FK-violate here.
+  await ensureProfile(team.region, user.id, user.email ?? user.id)
   const admin = cellFor(team.region).createAdminClient()
   const { data, error } = await admin
     .from("api_key")

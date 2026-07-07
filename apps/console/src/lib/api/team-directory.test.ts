@@ -39,7 +39,11 @@ vi.mock("@/lib/cells", () => ({
   }),
 }))
 
-import { listTeamMembershipsForUser, listTeamsForUser } from "./team-directory"
+import {
+  listTeamMembershipsForUser,
+  listTeamMembershipsForUserDetailed,
+  listTeamsForUser,
+} from "./team-directory"
 
 describe("team directory fan-out", () => {
   beforeEach(() => {
@@ -162,5 +166,40 @@ describe("cell failure isolation", () => {
 
     expect(teams).toEqual([{ id: "team-1", name: "Alpha", region: "use" }])
     errSpy.mockRestore()
+  })
+})
+
+describe("degradation visibility", () => {
+  beforeEach(() => {
+    regions = ["use", "usw"]
+    cellClients = {}
+  })
+
+  it("reports which secondary cells were dropped", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    cellClients.use = cellClient([{ team_id: "team-1" }])
+    cellClients.usw = {
+      from: vi.fn(() => ({
+        select: () => ({
+          eq: async () => ({ data: null, error: { message: "usw down" } }),
+        }),
+      })),
+    } as unknown as ReturnType<typeof cellClient>
+
+    const { memberships, degradedRegions } =
+      await listTeamMembershipsForUserDetailed("u1")
+
+    expect(memberships).toEqual([{ teamId: "team-1", region: "use" }])
+    expect(degradedRegions).toEqual(["usw"])
+    errSpy.mockRestore()
+  })
+
+  it("reports no degradation when every cell answers", async () => {
+    cellClients.use = cellClient([{ team_id: "team-1" }])
+    cellClients.usw = cellClient([])
+
+    const { degradedRegions } = await listTeamMembershipsForUserDetailed("u1")
+
+    expect(degradedRegions).toEqual([])
   })
 })

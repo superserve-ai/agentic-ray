@@ -10,6 +10,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }))
 
+let uswProfileChecked = false
 let insertedApiKeyRow: Record<string, unknown> | null = null
 
 // Default cell: the user's profile exists, but their team lives elsewhere.
@@ -55,6 +56,18 @@ const uswClient = {
         }),
       }
     }
+    if (table === "profile") {
+      // ensureProfile now runs in the team's cell before the key insert —
+      // report the profile as present so the write path proceeds.
+      uswProfileChecked = true
+      return {
+        select: () => ({
+          eq: () => ({
+            single: async () => ({ data: { id: "u1" }, error: null }),
+          }),
+        }),
+      }
+    }
     if (table === "api_key") {
       return {
         insert: (row: Record<string, unknown>) => {
@@ -91,6 +104,7 @@ describe("createApiKeyAction cell targeting", () => {
     const res = await createApiKeyAction("test")
 
     expect(res.key).toMatch(/^ss_live_usw_/)
+    expect(uswProfileChecked).toBe(true)
     expect(insertedApiKeyRow).toMatchObject({
       team_id: "team-west",
       name: "test",

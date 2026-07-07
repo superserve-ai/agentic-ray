@@ -23,35 +23,45 @@ export interface TeamDirectoryEntry {
  */
 async function acrossCells<T>(
   lookup: (region: string) => Promise<T[]>,
-): Promise<T[]> {
+): Promise<{ items: T[]; degradedRegions: string[] }> {
   const regions = configuredRegions()
   const settled = await Promise.allSettled(regions.map(lookup))
 
-  const merged: T[] = []
+  const items: T[] = []
+  const degradedRegions: string[] = []
   settled.forEach((result, i) => {
     const region = regions[i]
     if (result.status === "fulfilled") {
-      merged.push(...result.value)
+      items.push(...result.value)
       return
     }
     if (region === DEFAULT_REGION) throw result.reason
+    degradedRegions.push(region)
     console.error(
       `team directory: cell ${region} lookup failed, serving without it:`,
       result.reason,
     )
   })
-  return merged
+  return { items, degradedRegions }
+}
+
+export interface MembershipDirectory {
+  memberships: TeamMembership[]
+  // Secondary cells whose lookup failed and whose memberships are therefore
+  // missing from the list. Callers that infer anything from the SHAPE of the
+  // membership set (e.g. "exactly one team") must treat a degraded read as
+  // ambiguous rather than authoritative.
+  degradedRegions: string[]
 }
 
 /**
- * The user's team memberships across every configured cell, tagged with the
- * cell's region. With a single configured cell this is exactly the one
- * team_member query the console has always made.
+ * Membership lookup that also reports which cells could not be read. Use
+ * this wherever "how many teams does this user have" changes behavior.
  */
-export async function listTeamMembershipsForUser(
+export async function listTeamMembershipsForUserDetailed(
   userId: string,
-): Promise<TeamMembership[]> {
-  return acrossCells(async (region) => {
+): Promise<MembershipDirectory> {
+  const { items, degradedRegions } = await acrossCells(async (region) => {
     const admin = cellFor(region).createAdminClient()
     const { data, error } = await admin
       .from("team_member")
@@ -65,6 +75,19 @@ export async function listTeamMembershipsForUser(
       .filter((teamId): teamId is string => typeof teamId === "string")
       .map((teamId) => ({ teamId, region }))
   })
+  return { memberships: items, degradedRegions }
+}
+
+/**
+ * The user's team memberships across every configured cell, tagged with the
+ * cell's region. With a single configured cell this is exactly the one
+ * team_member query the console has always made.
+ */
+export async function listTeamMembershipsForUser(
+  userId: string,
+): Promise<TeamMembership[]> {
+  const { memberships } = await listTeamMembershipsForUserDetailed(userId)
+  return memberships
 }
 
 /**
@@ -74,7 +97,7 @@ export async function listTeamMembershipsForUser(
 export async function listTeamsForUser(
   userId: string,
 ): Promise<TeamDirectoryEntry[]> {
-  return acrossCells(async (region) => {
+  const { items } = await acrossCells(async (region) => {
     const admin = cellFor(region).createAdminClient()
     const { data: memberships, error } = await admin
       .from("team_member")
@@ -105,4 +128,5 @@ export async function listTeamsForUser(
       region,
     }))
   })
+  return items
 }

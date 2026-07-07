@@ -3,7 +3,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import {
-  listTeamMembershipsForUser,
+  listTeamMembershipsForUserDetailed,
   type TeamMembership,
 } from "@/lib/api/team-directory"
 import { cellFor } from "@/lib/cells"
@@ -54,7 +54,19 @@ export interface BillingSettingsResponse {
 }
 
 async function getTeam(userId: string): Promise<TeamMembership | null> {
-  const memberships = await listTeamMembershipsForUser(userId)
+  const { memberships, degradedRegions } =
+    await listTeamMembershipsForUserDetailed(userId)
+
+  // Fail closed on a partial directory read: with a cell unreachable,
+  // "exactly one membership" may just mean the other team's cell is down —
+  // billing must never show a different team's numbers because a sibling
+  // region blinked.
+  if (degradedRegions.length > 0) {
+    throw new Error(
+      "Billing is temporarily unavailable while part of the team directory is unreachable — retry shortly",
+    )
+  }
+
   if (!memberships.length) return null
 
   const uniqueTeams = new Map(memberships.map((m) => [m.teamId, m]))
