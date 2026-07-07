@@ -26,6 +26,8 @@ class FakeBox implements SandboxHandle {
   readonly id: string
   writes: Array<{ path: string; content: string }> = []
   runs: string[] = []
+  /** Per-command env passed at run time, keyed by command (last write wins). */
+  runEnv: Record<string, Record<string, string> | undefined> = {}
   paused = false
   killed = false
   /** Per-command exit codes; any command not listed exits 0 (clean). */
@@ -44,8 +46,10 @@ class FakeBox implements SandboxHandle {
   commands = {
     run: async (
       command: string,
+      options?: { env?: Record<string, string> },
     ): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
       this.runs.push(command)
+      this.runEnv[command] = options?.env
       return { stdout: "", stderr: "", exitCode: this.exitCodes[command] ?? 0 }
     },
   }
@@ -143,6 +147,19 @@ describe("runLoop", () => {
     expect(box?.writes).toEqual([])
     expect(box?.runs).toEqual(["ITERATE"])
     expect(box?.paused).toBe(true)
+  })
+
+  it("re-injects envVars into the iterate command on a warm tick (rotating creds)", async () => {
+    // The GitHub Actions `github.token` is minted per-run and dies with that run.
+    // A warm resume binds nothing new at create, so iterate MUST receive the
+    // current run's envVars or it 401s against the first tick's expired token.
+    const ops = new FakeOps()
+    ops.seed(spec.metadata)
+    const envVars = { GITHUB_TOKEN: "fresh-token", TARGET_REPO: "o/r" }
+    const result = await runLoop({ ...spec, envVars }, ops, noop)
+
+    const box = ops.boxesById.get(result.sandboxId)
+    expect(box?.runEnv["ITERATE"]).toEqual(envVars)
   })
 
   it("respects pauseWhenDone: false", async () => {
