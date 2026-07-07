@@ -13,6 +13,8 @@ const SANDBOX_API_URL =
 const PLATFORM_READ_KEY_NAME = "__console_platform_sandbox_read__"
 const PLATFORM_READ_KEY_PURPOSE = "v1:platform-sandbox-read"
 const platformReadKeyExpiryCache = new Map<string, number>()
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 async function ensurePlatformReadKey(
   user: User,
@@ -101,6 +103,9 @@ async function proxyPlatformSandboxRead(
   const teamId = request.nextUrl.searchParams.get("team_id")
   if (!teamId) {
     return badRequest("team_id is required")
+  }
+  if (!UUID_RE.test(teamId)) {
+    return badRequest("Invalid team_id")
   }
 
   const { path = [] } = await params

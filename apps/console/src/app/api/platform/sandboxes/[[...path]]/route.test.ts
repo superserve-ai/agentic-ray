@@ -42,8 +42,13 @@ const mockUser = {
   app_metadata: { permissions: ["platform:sandbox:read"] },
 }
 
+const TEAM_ID = "11111111-1111-1111-1111-111111111111"
+const TTL_TEAM_ID = "22222222-2222-2222-2222-222222222222"
+const CACHE_TEAM_ID = "33333333-3333-3333-3333-333333333333"
+const DETAIL_TEAM_ID = "44444444-4444-4444-4444-444444444444"
+
 function req(
-  path = "/api/platform/sandboxes?team_id=team-1",
+  path = `/api/platform/sandboxes?team_id=${TEAM_ID}`,
   method = "GET",
 ): NextRequest {
   return new NextRequest(new URL(`https://console.test${path}`), {
@@ -113,7 +118,7 @@ describe("api proxy /api/platform/sandboxes", () => {
     expect(mocks.apiKeyUpsert).toHaveBeenCalledTimes(1)
     expect(mocks.apiKeyUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        team_id: "team-1",
+        team_id: TEAM_ID,
         name: "__console_platform_sandbox_read__",
         created_by: "platform-user-1",
         revoked_at: null,
@@ -135,7 +140,7 @@ describe("api proxy /api/platform/sandboxes", () => {
   it("caps platform read key expiry at the impersonation TTL limit", async () => {
     vi.stubEnv("IMPERSONATION_TTL_MINUTES", "99999")
 
-    await GET(req("/api/platform/sandboxes?team_id=ttl-team"), params())
+    await GET(req(`/api/platform/sandboxes?team_id=${TTL_TEAM_ID}`), params())
 
     const upsertRow = mocks.apiKeyUpsert.mock.calls[0][0]
     const expiresAt = new Date(upsertRow.expires_at).getTime()
@@ -144,28 +149,39 @@ describe("api proxy /api/platform/sandboxes", () => {
   })
 
   it("reuses the cached platform read key row while the cached expiry is fresh", async () => {
-    await GET(req("/api/platform/sandboxes?team_id=cache-team"), params())
-    await GET(req("/api/platform/sandboxes?team_id=cache-team"), params())
+    await GET(req(`/api/platform/sandboxes?team_id=${CACHE_TEAM_ID}`), params())
+    await GET(req(`/api/platform/sandboxes?team_id=${CACHE_TEAM_ID}`), params())
     expect(mocks.apiKeyUpsert).toHaveBeenCalledTimes(1)
+  })
+
+  it("rejects invalid team_id before creating a platform read key", async () => {
+    const res = await GET(
+      req("/api/platform/sandboxes?team_id=not-a-uuid"),
+      params(),
+    )
+
+    expect(res.status).toBe(400)
+    expect(mocks.apiKeyUpsert).not.toHaveBeenCalled()
+    expect(fetchSpy).not.toHaveBeenCalled()
   })
 
   it("proxies detail reads with encoded ids", async () => {
     await GET(
-      req("/api/platform/sandboxes/sandbox/1?team_id=team 1"),
+      req(`/api/platform/sandboxes/sandbox/1?team_id=${DETAIL_TEAM_ID}`),
       params(["sandbox/1"]),
     )
 
     const [url] = fetchSpy.mock.calls[0]
     expect(url).toBe("https://api.test.superserve.ai/sandboxes/sandbox%2F1")
     const upsertRow = mocks.apiKeyUpsert.mock.calls[0][0]
-    expect(upsertRow.team_id).toBe("team 1")
+    expect(upsertRow.team_id).toBe(DETAIL_TEAM_ID)
   })
 
   it("supports HEAD without reading a body", async () => {
     fetchSpy.mockResolvedValue(new Response(null, { status: 204 }))
 
     const res = await HEAD(
-      req("/api/platform/sandboxes?team_id=team-1", "HEAD"),
+      req(`/api/platform/sandboxes?team_id=${TEAM_ID}`, "HEAD"),
       params(),
     )
 

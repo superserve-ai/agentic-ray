@@ -77,8 +77,11 @@ function KeyValueGrid({
 
   return (
     <div className="space-y-3 px-4 py-4">
-      {rows.map((row) => (
-        <div key={row.label} className="grid grid-cols-[140px_1fr] gap-4">
+      {rows.map((row, index) => (
+        <div
+          key={`${row.label}-${row.value}-${index}`}
+          className="grid grid-cols-[140px_1fr] gap-4"
+        >
           <span className="font-mono text-[11px] tracking-wider text-muted uppercase">
             {row.label}
           </span>

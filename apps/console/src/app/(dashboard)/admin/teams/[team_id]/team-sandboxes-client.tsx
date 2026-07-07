@@ -18,6 +18,7 @@ import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableSkeleton } from "@/components/table-skeleton"
 import { usePlatformTeamSandboxes } from "@/hooks/use-platform-sandboxes"
 import type { PlatformSandboxRead } from "@/lib/api/platform-sandboxes"
+import { formatMemory } from "@/lib/format"
 import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 
 function ReadOnlyBadge() {
@@ -60,7 +61,7 @@ function SandboxRow({
         </Badge>
       </TableCell>
       <TableCell className="font-mono text-xs text-muted tabular-nums">
-        {sandbox.vcpu_count}CPU | {sandbox.memory_mib}MB
+        {sandbox.vcpu_count}CPU | {formatMemory(sandbox.memory_mib)}
       </TableCell>
       <TableCell className="text-right">
         <ReadOnlyBadge />

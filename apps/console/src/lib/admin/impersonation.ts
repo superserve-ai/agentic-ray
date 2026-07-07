@@ -61,6 +61,11 @@ export async function readImpersonationTeamId(): Promise<string | null> {
   return verifyImpersonationToken(store.get(IMPERSONATION_COOKIE)?.value)
 }
 
+export async function hasImpersonationCookie(): Promise<boolean> {
+  const store = await cookies()
+  return Boolean(store.get(IMPERSONATION_COOKIE)?.value)
+}
+
 /**
  * The team the current request should act as: the target team only when the
  * user has platform sandbox read access AND a valid impersonation cookie is
