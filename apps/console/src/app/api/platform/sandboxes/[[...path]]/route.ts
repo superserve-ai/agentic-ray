@@ -1,59 +1,13 @@
-import type { User } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 
-import { impersonationTtlMs } from "@/lib/admin/impersonation"
-import { deriveConsoleKey } from "@/lib/admin/impersonation-key"
 import { canReadPlatformSandboxes } from "@/lib/admin/permissions"
-import { hashKey } from "@/lib/api/proxy-secret"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { getProxySecret } from "@/lib/api/proxy-secret"
 import { createServerClient } from "@/lib/supabase/server"
 
 const SANDBOX_API_URL =
   process.env.SANDBOX_API_URL ?? "https://api.superserve.ai"
-const PLATFORM_READ_KEY_NAME = "__console_platform_sandbox_read__"
-const PLATFORM_READ_KEY_PURPOSE = "v1:platform-sandbox-read"
-const platformReadKeyExpiryCache = new Map<string, number>()
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-async function ensurePlatformReadKey(
-  user: User,
-  teamId: string,
-): Promise<string> {
-  const rawKey = deriveConsoleKey(PLATFORM_READ_KEY_PURPOSE, user.id, teamId)
-  const keyHash = hashKey(rawKey)
-  const ttlMs = impersonationTtlMs()
-  const now = Date.now()
-
-  const cachedExpiry = platformReadKeyExpiryCache.get(keyHash)
-  if (cachedExpiry !== undefined && cachedExpiry - now > ttlMs / 2) {
-    return rawKey
-  }
-
-  const expiresAtMs = now + ttlMs
-  const admin = createAdminClient()
-  const { error } = await admin.from("api_key").upsert(
-    {
-      team_id: teamId,
-      key_hash: keyHash,
-      name: PLATFORM_READ_KEY_NAME,
-      scopes: [],
-      created_by: user.id,
-      expires_at: new Date(expiresAtMs).toISOString(),
-      revoked_at: null,
-    },
-    { onConflict: "key_hash" },
-  )
-
-  if (error) {
-    throw new Error(
-      `Failed to ensure platform sandbox read key: ${error.message}`,
-    )
-  }
-
-  platformReadKeyExpiryCache.set(keyHash, expiresAtMs)
-  return rawKey
-}
 
 type RouteContext = { params: Promise<{ path?: string[] }> }
 
@@ -70,10 +24,10 @@ function badRequest(message: string): NextResponse {
 
 function targetPath(path: string[]): string | null {
   if (path.length === 0) {
-    return "/sandboxes"
+    return "sandboxes"
   }
   if (path.length === 1) {
-    return `/sandboxes/${encodeURIComponent(path[0])}`
+    return `sandboxes/${encodeURIComponent(path[0])}`
   }
   return null
 }
@@ -114,14 +68,17 @@ async function proxyPlatformSandboxRead(
     return notFound()
   }
 
-  const apiKey = await ensurePlatformReadKey(user, teamId)
-  const url = new URL(`${SANDBOX_API_URL}${upstreamPath}`)
+  const internalSecret = getProxySecret()
+  const url = new URL(
+    `${SANDBOX_API_URL}/internal/teams/${encodeURIComponent(teamId)}/${upstreamPath}`,
+  )
   const response = await fetch(url.toString(), {
     method: request.method,
     headers: {
-      "X-API-Key": apiKey,
-      "X-Actor-User-Id": user.id,
       Accept: request.headers.get("accept") ?? "application/json",
+      Authorization: `Bearer ${internalSecret}`,
+      "X-Actor-User-Id": user.id,
+      "X-Internal-Secret": internalSecret,
     },
   })
 

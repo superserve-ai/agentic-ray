@@ -128,6 +128,14 @@ describe("platform sandbox read permission", () => {
     ).toBe(true)
   })
 
+  it("temporarily accepts the platform teams read bridge permission", () => {
+    expect(
+      canReadPlatformSandboxes(
+        user("person@example.com", "email", ["email"], ["platform:teams:read"]),
+      ),
+    ).toBe(true)
+  })
+
   it("does not trust permissions from user_metadata", () => {
     expect(
       canReadPlatformSandboxes(

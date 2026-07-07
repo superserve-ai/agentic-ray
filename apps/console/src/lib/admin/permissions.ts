@@ -48,7 +48,8 @@ export function canReadPlatformSandboxes(
   const permissions = userPermissions(user)
   return (
     permissions.includes(PLATFORM_SANDBOX_READ_PERMISSION) ||
-    permissions.includes(PLATFORM_SANDBOXES_READ_PERMISSION)
+    permissions.includes(PLATFORM_SANDBOXES_READ_PERMISSION) ||
+    permissions.includes(PLATFORM_TEAMS_READ_PERMISSION)
   )
 }
 
