@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { execFileSync, spawn } from "node:child_process"
 import { mkdirSync, writeFileSync } from "node:fs"
-import { dirname, join } from "node:path"
+import { dirname, join, relative } from "node:path"
 
 import { Secret } from "@superserve/sdk"
 
@@ -22,8 +22,9 @@ import { runLoopCli } from "../pr-loop/loop"
  * workflow invokes; it drives ../pr-loop/loop.ts from inside the package.
  *
  * Tokens you provide are turned into Superserve secrets (swapped in at egress,
- * never committed, never seen by the box). Only the workflow file and the
- * encrypted `SUPERSERVE_API_KEY` Actions secret touch your repo.
+ * never committed, never seen by the box). The workflow file is committed and
+ * pushed for you — without that push, GitHub never sees the workflow and the
+ * loop never runs — plus the encrypted `SUPERSERVE_API_KEY` Actions secret.
  */
 
 // The workflow pins a Superserve-gated dist-tag, NOT a semver range or `@latest`:
@@ -317,6 +318,59 @@ function writeWorkflow(
   return path
 }
 
+/**
+ * Commit and push the workflow file. Without this, the file only exists in the
+ * local working tree — GitHub never sees it, no run is registered, and the loop
+ * silently never fires. Falls back to printing the manual commands on any
+ * failure (no repo write access, nothing to commit, no upstream configured, …).
+ */
+function commitAndPushWorkflow(
+  repoRoot: string,
+  path: string,
+  dryRun: boolean,
+): void {
+  const rel = relative(repoRoot, path)
+  if (dryRun) {
+    c.ok(`would commit and push ${rel}`)
+    return
+  }
+  const manualFallback = (): void => {
+    c.info(
+      `git add ${rel} && git commit -m 'Add pr-loop GitHub Actions workflow' && git push`,
+    )
+  }
+  try {
+    execFileSync("git", ["add", rel], {
+      cwd: repoRoot,
+      stdio: ["ignore", "ignore", "pipe"],
+    })
+    execFileSync(
+      "git",
+      ["commit", "-m", "Add pr-loop GitHub Actions workflow"],
+      { cwd: repoRoot, stdio: ["ignore", "ignore", "pipe"] },
+    )
+    c.ok(`committed ${rel}`)
+  } catch (err) {
+    c.warn(
+      `could not commit automatically (${(err as Error).message.split("\n")[0]}).`,
+    )
+    manualFallback()
+    return
+  }
+  try {
+    execFileSync("git", ["push"], {
+      cwd: repoRoot,
+      stdio: ["ignore", "ignore", "pipe"],
+    })
+    c.ok("pushed to remote")
+  } catch (err) {
+    c.warn(
+      `could not push automatically (${(err as Error).message.split("\n")[0]}).`,
+    )
+    c.info("git push")
+  }
+}
+
 function setActionsSecret(
   repo: string,
   apiKey: string,
@@ -475,24 +529,18 @@ async function main(): Promise<void> {
   }
 
   c.step("2/3  GitHub Actions workflow")
-  writeWorkflow(
+  const workflowPath = writeWorkflow(
     repoRoot,
     { githubSecret: patToken ? GITHUB_SECRET : undefined },
     flags.dryRun,
   )
+  commitAndPushWorkflow(repoRoot, workflowPath, flags.dryRun)
 
   c.step("3/3  GitHub Actions secret")
   setActionsSecret(repo, apiKey, ghAuthToken, flags.dryRun)
 
-  c.step(
-    flags.dryRun
-      ? "Dry run complete — nothing changed."
-      : "Done. Commit + push to go live:",
-  )
+  c.step(flags.dryRun ? "Dry run complete — nothing changed." : "Done.")
   if (!flags.dryRun) {
-    c.info(
-      "git add .github/workflows/loop-pr-loop.yml && git commit -m 'add pr-loop loop' && git push",
-    )
     c.info(
       `gh workflow run loop-pr-loop.yml --repo ${repo}   # trigger the first run now`,
     )
