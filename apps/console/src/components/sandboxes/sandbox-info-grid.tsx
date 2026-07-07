@@ -12,17 +12,20 @@ import { useState } from "react"
 
 import { usePatchSandbox } from "@/hooks/use-sandboxes"
 import type { SandboxResponse } from "@/lib/api/types"
-import { formatDate } from "@/lib/format"
+import { formatDate, formatTime, formatTimeout } from "@/lib/format"
 
 interface SandboxInfoGridProps {
   sandbox: SandboxResponse
 }
 
-function formatTimeout(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`
-  return `${Math.floor(seconds / 86400)}d`
+/** Human label for a sandbox's auto-delete state. */
+function formatAutoDelete(sandbox: SandboxResponse): string {
+  if (sandbox.auto_delete_at) {
+    return formatTime(new Date(sandbox.auto_delete_at)).absolute
+  }
+  if (sandbox.auto_delete_seconds == null) return "None"
+  if (sandbox.auto_delete_seconds === 0) return "On pause"
+  return `${formatTimeout(sandbox.auto_delete_seconds)} after pause`
 }
 
 export function NetworkSection({ sandbox }: { sandbox: SandboxResponse }) {
@@ -348,7 +351,7 @@ export function MetadataSection({ sandbox }: { sandbox: SandboxResponse }) {
 export function SandboxInfoGrid({ sandbox }: SandboxInfoGridProps) {
   return (
     <div className="border-b border-border">
-      <div className="grid grid-cols-4">
+      <div className="grid grid-cols-5">
         <div className="border-r border-border px-4 py-4">
           <p className="text-xs text-muted">Resources</p>
           <p className="mt-2 text-sm text-foreground/80 tabular-nums">
@@ -361,6 +364,12 @@ export function SandboxInfoGrid({ sandbox }: SandboxInfoGridProps) {
             {sandbox.timeout_seconds
               ? formatTimeout(sandbox.timeout_seconds)
               : "None"}
+          </p>
+        </div>
+        <div className="border-r border-border px-4 py-4">
+          <p className="text-xs text-muted">Auto-delete</p>
+          <p className="mt-2 font-mono text-sm text-foreground/80">
+            {formatAutoDelete(sandbox)}
           </p>
         </div>
         <div className="border-r border-border px-4 py-4">

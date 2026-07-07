@@ -40,6 +40,10 @@ class SandboxInfo(BaseModel):
     memory_mib: int = 0
     created_at: datetime
     timeout_seconds: Optional[int] = None
+    # Delete the sandbox after it has been continuously paused for this many seconds.
+    auto_delete_seconds: Optional[int] = None
+    # When the sandbox will be auto-deleted. Set only while paused with auto_delete_seconds configured.
+    auto_delete_at: Optional[datetime] = None
     network: Optional[NetworkConfig] = None
     metadata: dict[str, str] = Field(default_factory=dict)
     # Secrets bound to this sandbox, when any are attached.
@@ -50,6 +54,35 @@ class CommandResult(BaseModel):
     stdout: str = ""
     stderr: str = ""
     exit_code: int = 0
+
+
+# Sentinel distinguishing "argument not provided" from an explicit None in
+# update() kwargs, where None means "clear the setting" on the wire.
+UNSET: Any = object()
+
+
+def build_update_body(
+    *,
+    metadata: dict[str, str] | None,
+    network: "NetworkConfig | None",
+    auto_delete_seconds: int | None,
+    timeout_seconds: int | None,
+) -> dict[str, Any]:
+    """Serialize sandbox update args to the wire body. UNSET fields are omitted;
+    an explicit None for auto_delete_seconds / timeout_seconds clears them."""
+    body: dict[str, Any] = {}
+    if metadata is not None:
+        body["metadata"] = metadata
+    if auto_delete_seconds is not UNSET:
+        body["auto_delete_seconds"] = auto_delete_seconds
+    if timeout_seconds is not UNSET:
+        body["timeout_seconds"] = timeout_seconds
+    if network is not None:
+        body["network"] = {
+            "allow_out": network.allow_out,
+            "deny_out": network.deny_out,
+        }
+    return body
 
 
 def _parse_iso8601(value: str) -> datetime:
@@ -94,6 +127,10 @@ def to_sandbox_info(raw: dict[str, Any]) -> SandboxInfo:
         memory_mib=raw.get("memory_mib", 0),
         created_at=_parse_iso8601(raw["created_at"]),
         timeout_seconds=raw.get("timeout_seconds"),
+        auto_delete_seconds=raw.get("auto_delete_seconds"),
+        auto_delete_at=(
+            _parse_iso8601(raw["auto_delete_at"]) if raw.get("auto_delete_at") else None
+        ),
         network=network,
         metadata=raw.get("metadata", {}),
         secrets=secrets,

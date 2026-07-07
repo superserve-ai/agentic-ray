@@ -13,6 +13,9 @@ export interface SandboxListItem {
   memory_mib: number
   snapshot_id?: string
   timeout_seconds?: number
+  auto_delete_seconds?: number
+  /** Deletion deadline; present only while paused with auto_delete_seconds set. */
+  auto_delete_at?: string
   network?: NetworkConfig
   metadata: Record<string, string>
   created_at: string
@@ -46,6 +49,8 @@ export interface CreateSandboxRequest {
   from_template?: string
   from_snapshot?: string
   timeout_seconds?: number
+  /** Delete the sandbox once continuously paused for this many seconds. */
+  auto_delete_seconds?: number
   env_vars?: Record<string, string>
   /** env-var name → secret name. The agent sees a proxy token under env_key;
    *  the in-host daemon swaps it for the real value at egress. */
@@ -57,6 +62,10 @@ export interface CreateSandboxRequest {
 export interface SandboxPatch {
   network?: NetworkConfig
   metadata?: Record<string, string>
+  /** A number (re)arms the window; null disarms it. */
+  auto_delete_seconds?: number | null
+  /** A number sets the auto-pause timeout; null disables it. */
+  timeout_seconds?: number | null
 }
 
 export type SortDirection = "asc" | "desc"

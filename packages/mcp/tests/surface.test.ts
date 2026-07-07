@@ -47,6 +47,26 @@ describe("network rules + sandbox_update (in-memory, fake client)", () => {
       (info.structured.network as { deny_out: string[] }).deny_out,
     ).toEqual(["evil.example.com"])
   })
+
+  it("sandbox_update arms and clears the auto-delete window", async () => {
+    const created = await callTool(conn.client, "sandbox_create", {
+      name: "gc",
+      auto_delete_seconds: 3600,
+    })
+    const id = created.structured.id as string
+
+    let info = await callTool(conn.client, "sandbox_info", { sandbox_id: id })
+    expect(info.structured.auto_delete_seconds).toBe(3600)
+
+    const upd = await callTool(conn.client, "sandbox_update", {
+      sandbox_id: id,
+      auto_delete_seconds: null,
+    })
+    expect(upd.isError).toBe(false)
+
+    info = await callTool(conn.client, "sandbox_info", { sandbox_id: id })
+    expect(info.structured.auto_delete_seconds).toBeUndefined()
+  })
 })
 
 describe("secrets (in-memory, fake client)", () => {

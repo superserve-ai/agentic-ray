@@ -14,6 +14,7 @@ import { buildCreateSandboxRequest } from "./create-sandbox-dialog"
 const emptyState = {
   name: "",
   timeout: "",
+  autoDelete: "",
   allowRules: [] as string[],
   denyRules: [] as string[],
   secretEntries: [] as { key: string; secret: string }[],
@@ -43,6 +44,60 @@ describe("buildCreateSandboxRequest", () => {
       timeout: "300",
     })
     expect(req.timeout_seconds).toBe(300)
+  })
+
+  it("includes auto_delete_seconds as a number when present", () => {
+    const req = buildCreateSandboxRequest({
+      ...emptyState,
+      name: "x",
+      autoDelete: "3600",
+    })
+    expect(req.auto_delete_seconds).toBe(3600)
+  })
+
+  it("accepts auto_delete_seconds of 0 (delete on pause)", () => {
+    const req = buildCreateSandboxRequest({
+      ...emptyState,
+      name: "x",
+      autoDelete: "0",
+    })
+    expect(req.auto_delete_seconds).toBe(0)
+  })
+
+  it("throws on a non-finite window ('1e309' → Infinity → null)", () => {
+    expect(() =>
+      buildCreateSandboxRequest({
+        ...emptyState,
+        name: "x",
+        autoDelete: "1e309",
+      }),
+    ).toThrow(/whole number/)
+  })
+
+  it("throws on a fractional window", () => {
+    expect(() =>
+      buildCreateSandboxRequest({
+        ...emptyState,
+        name: "x",
+        autoDelete: "1.5",
+      }),
+    ).toThrow(/whole number/)
+  })
+
+  it("throws on an out-of-range window", () => {
+    expect(() =>
+      buildCreateSandboxRequest({
+        ...emptyState,
+        name: "x",
+        autoDelete: "2592001",
+      }),
+    ).toThrow(/whole number/)
+  })
+
+  it("throws when timeout is below its minimum of 1", () => {
+    expect(() =>
+      buildCreateSandboxRequest({ ...emptyState, name: "x", timeout: "0" }),
+    ).toThrow(/whole number/)
   })
 
   it("omits network when all rules are empty strings", () => {
@@ -146,6 +201,7 @@ describe("buildCreateSandboxRequest", () => {
     const req = buildCreateSandboxRequest({
       name: "full",
       timeout: "600",
+      autoDelete: "3600",
       allowRules: ["api.example.com"],
       denyRules: ["malicious.test"],
       secretEntries: [{ key: "GITHUB_TOKEN", secret: "github_pat" }],
@@ -155,6 +211,7 @@ describe("buildCreateSandboxRequest", () => {
     expect(req).toEqual({
       name: "full",
       timeout_seconds: 600,
+      auto_delete_seconds: 3600,
       network: {
         allow_out: ["api.example.com"],
         deny_out: ["malicious.test"],

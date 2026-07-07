@@ -29,6 +29,8 @@ interface FakeSandbox {
   files: Map<string, Uint8Array>
   network?: NetworkConfig
   secrets: SandboxSecretBinding[]
+  autoDeleteSeconds?: number
+  timeoutSeconds?: number
 }
 
 export interface FakeClient {
@@ -75,6 +77,8 @@ export function createFakeClient(): FakeClient {
         metadata: input.metadata ?? {},
         files: new Map(),
         network: input.network,
+        autoDeleteSeconds: input.autoDeleteSeconds,
+        timeoutSeconds: input.timeoutSeconds ?? 3600,
         secrets: Object.entries(input.secrets ?? {}).map(
           ([envKey, secretName]) => ({ envKey, secretName, revoked: false }),
         ),
@@ -87,6 +91,10 @@ export function createFakeClient(): FakeClient {
       const sb = must(id)
       if (input.metadata !== undefined) sb.metadata = input.metadata
       if (input.network !== undefined) sb.network = input.network
+      if (input.autoDeleteSeconds !== undefined)
+        sb.autoDeleteSeconds = input.autoDeleteSeconds ?? undefined
+      if (input.timeoutSeconds !== undefined)
+        sb.timeoutSeconds = input.timeoutSeconds ?? undefined
     },
 
     async list(metadata) {
@@ -126,7 +134,8 @@ export function createFakeClient(): FakeClient {
         vcpuCount: 2,
         memoryMib: 2048,
         createdAt: new Date(0),
-        timeoutSeconds: 3600,
+        timeoutSeconds: sb.timeoutSeconds,
+        autoDeleteSeconds: sb.autoDeleteSeconds,
         network: sb.network,
         metadata: sb.metadata,
         secrets: sb.secrets.length ? sb.secrets : undefined,

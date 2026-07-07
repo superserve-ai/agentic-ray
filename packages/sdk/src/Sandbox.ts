@@ -153,6 +153,8 @@ export class Sandbox {
     const body: Record<string, unknown> = { name: options.name }
     if (options.timeoutSeconds !== undefined)
       body.timeout_seconds = options.timeoutSeconds
+    if (options.autoDeleteSeconds !== undefined)
+      body.auto_delete_seconds = options.autoDeleteSeconds
     if (options.fromTemplate !== undefined) {
       body.from_template =
         typeof options.fromTemplate === "string"
@@ -275,6 +277,29 @@ export class Sandbox {
     }
   }
 
+  /**
+   * Update a sandbox by ID without holding a live instance.
+   *
+   * Unlike `connect(id).then(s => s.update(...))`, this does not activate the
+   * sandbox — a paused sandbox stays paused. Use it to change `metadata`,
+   * `network`, `autoDeleteSeconds`, or `timeoutSeconds` from just an ID.
+   * Pass `null` for `autoDeleteSeconds` / `timeoutSeconds` to clear them.
+   */
+  static async updateById(
+    sandboxId: string,
+    options: SandboxUpdateOptions,
+    connection: ConnectionOptions = {},
+  ): Promise<void> {
+    const config = resolveConfig(connection)
+    await requestVoid({
+      method: "PATCH",
+      url: `${config.baseUrl}/sandboxes/${sandboxId}`,
+      headers: { "X-API-Key": config.apiKey },
+      body: Sandbox.buildUpdateBody(options),
+      signal: connection.signal,
+    })
+  }
+
   // -------------------------------------------------------------------------
   // Instance lifecycle methods
   // -------------------------------------------------------------------------
@@ -335,24 +360,39 @@ export class Sandbox {
   }
 
   /**
-   * Partially update this sandbox (metadata, network rules).
+   * Partially update this sandbox (metadata, network rules, auto-delete,
+   * timeout).
+   *
+   * `autoDeleteSeconds: null` clears the auto-delete window; a number sets
+   * it, counting from now when the sandbox is already paused.
+   * `timeoutSeconds: null` clears the auto-pause timeout.
    */
   async update(options: SandboxUpdateOptions): Promise<void> {
+    await requestVoid({
+      method: "PATCH",
+      url: `${this._config.baseUrl}/sandboxes/${this.id}`,
+      headers: { "X-API-Key": this._config.apiKey },
+      body: Sandbox.buildUpdateBody(options),
+    })
+  }
+
+  /** Serialize update options to the wire body (snake_case, null preserved). */
+  private static buildUpdateBody(
+    options: SandboxUpdateOptions,
+  ): Record<string, unknown> {
     const body: Record<string, unknown> = {}
     if (options.metadata !== undefined) body.metadata = options.metadata
+    if (options.autoDeleteSeconds !== undefined)
+      body.auto_delete_seconds = options.autoDeleteSeconds
+    if (options.timeoutSeconds !== undefined)
+      body.timeout_seconds = options.timeoutSeconds
     if (options.network !== undefined) {
       body.network = {
         allow_out: options.network.allowOut,
         deny_out: options.network.denyOut,
       }
     }
-
-    await requestVoid({
-      method: "PATCH",
-      url: `${this._config.baseUrl}/sandboxes/${this.id}`,
-      headers: { "X-API-Key": this._config.apiKey },
-      body,
-    })
+    return body
   }
 
   /**

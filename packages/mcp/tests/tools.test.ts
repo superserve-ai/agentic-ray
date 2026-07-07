@@ -141,6 +141,16 @@ describe("tool calls (in-memory, fake client)", () => {
     expect(resumed.structured.status).toBe("active")
   })
 
+  it("sandbox_update is flagged destructive and non-idempotent", async () => {
+    // auto_delete_seconds can schedule deletion and re-arming moves the
+    // deadline, so MCP clients must not treat this tool as safe to
+    // auto-approve or auto-retry.
+    const { tools } = await conn.client.listTools()
+    const update = tools.find((t) => t.name === "sandbox_update")
+    expect(update?.annotations?.destructiveHint).toBe(true)
+    expect(update?.annotations?.idempotentHint).toBe(false)
+  })
+
   it("kill is idempotent", async () => {
     const id = await createSandbox()
     const first = await callTool(conn.client, "sandbox_kill", {

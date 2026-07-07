@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 import respx
@@ -290,6 +292,60 @@ class TestInstanceMethods:
                 assert sbx.metadata == {}
             finally:
                 sbx._close_http_client()
+
+    def test_update_auto_delete_set_clear_omit(self) -> None:
+        with respx.mock() as router:
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            route = router.patch(f"{API}/sandboxes/sbx-1").mock(
+                return_value=httpx.Response(204)
+            )
+            sbx = Sandbox.connect("sbx-1")
+            try:
+                sbx.update(auto_delete_seconds=3600)
+                assert json.loads(route.calls[0].request.content) == {
+                    "auto_delete_seconds": 3600
+                }
+                # Explicit None clears the window on the wire.
+                sbx.update(auto_delete_seconds=None)
+                assert json.loads(route.calls[1].request.content) == {
+                    "auto_delete_seconds": None
+                }
+                # Omitted entirely: the field must not appear in the body.
+                sbx.update(metadata={"env": "prod"})
+                assert json.loads(route.calls[2].request.content) == {
+                    "metadata": {"env": "prod"}
+                }
+                # timeout_seconds follows the same set/clear contract.
+                sbx.update(timeout_seconds=900)
+                assert json.loads(route.calls[3].request.content) == {
+                    "timeout_seconds": 900
+                }
+                sbx.update(timeout_seconds=None)
+                assert json.loads(route.calls[4].request.content) == {
+                    "timeout_seconds": None
+                }
+            finally:
+                sbx._close_http_client()
+
+    def test_update_by_id_patches_without_activating(self) -> None:
+        # assert_all_called=False: the activate route is registered only to
+        # prove update_by_id never calls it.
+        with respx.mock(assert_all_called=False) as router:
+            activate = router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            patch = router.patch(f"{API}/sandboxes/sbx-1").mock(
+                return_value=httpx.Response(204)
+            )
+            Sandbox.update_by_id("sbx-1", auto_delete_seconds=3600)
+            # The point of update_by_id: never resume the sandbox.
+            assert not activate.called
+            assert patch.call_count == 1
+            assert json.loads(patch.calls[0].request.content) == {
+                "auto_delete_seconds": 3600
+            }
 
     def test_attach_secret_posts_binding(self) -> None:
         with respx.mock() as router:
