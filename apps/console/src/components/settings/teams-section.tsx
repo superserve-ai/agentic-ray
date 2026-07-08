@@ -14,21 +14,21 @@ import {
 } from "@superserve/ui"
 import { useState } from "react"
 
-import { useCreateTeam, useSwitchTeam, useTeams } from "@/hooks/use-teams"
+import { useCreateTeam, useTeams } from "@/hooks/use-teams"
 import { regionLabel } from "@/lib/format"
 
 /**
  * Team directory + create-team form. The directory renders whenever the
  * user has more than one team or more than one cell is configured — a
- * multi-team user needs the Active marker and Switch buttons regardless of
- * region count. The create-team form stays multi-cell-only: the single-cell
- * console has no team creation surface, and that must stay true until a
- * second region exists to choose from.
+ * multi-team user needs the Active marker regardless of region count
+ * (switching itself lives in the sidebar team dropdown). The create-team
+ * form stays multi-cell-only: the single-cell console has no team creation
+ * surface, and that must stay true until a second region exists to choose
+ * from.
  */
 export function TeamsSection() {
   const { data } = useTeams()
   const createTeam = useCreateTeam()
-  const switchTeam = useSwitchTeam()
   const { addToast } = useToast()
 
   const [name, setName] = useState("")
@@ -82,31 +82,12 @@ export function TeamsSection() {
                     <span className="font-mono text-xs text-muted uppercase">
                       {regionLabel(team.region)}
                     </span>
-                    {isActive ? (
+                    {/* Switching lives in the sidebar team dropdown; this
+                        directory only marks which team is active. */}
+                    {isActive && (
                       <span className="font-mono text-xs text-brand uppercase">
                         Active
                       </span>
-                    ) : !data.switchingEnabled ? null : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={switchTeam.isPending}
-                        onClick={() =>
-                          switchTeam.mutate(
-                            { teamId: team.id, region: team.region },
-                            {
-                              onError: (error) => {
-                                addToast(
-                                  error.message || "Failed to switch team",
-                                  "error",
-                                )
-                              },
-                            },
-                          )
-                        }
-                      >
-                        Switch
-                      </Button>
                     )}
                   </span>
                 </div>
