@@ -113,14 +113,18 @@ Sandbox.kill_by_id("7a3f2b8c-1234-...")
 Set `timeoutSeconds` to auto-pause a sandbox after it has been active for that long. Pausing checkpoints its state and stops compute billing, so a sandbox you forget about won't keep running and billing. It isn't deleted; the next `commands.run()`, file operation, or `connect()` resumes it where it left off.
 
 <CodeGroup>
-```typescript TypeScript {3}
+```typescript TypeScript {5}
+import { Sandbox } from "@superserve/sdk"
+
 const sandbox = await Sandbox.create({
   name: "worker",
   timeoutSeconds: 3600, // auto-pause after 1h of active time
 })
 ```
 
-```python Python {3}
+```python Python {5}
+from superserve import Sandbox
+
 sandbox = Sandbox.create(
     name="worker",
     timeout_seconds=3600,  # auto-pause after 1h of active time
