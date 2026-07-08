@@ -110,7 +110,7 @@ Sandbox.kill_by_id("7a3f2b8c-1234-...")
 
 ## Auto-pause
 
-Set `timeoutSeconds` to have the platform pause a sandbox once it has been **active** for that long — checkpointing its state and stopping compute billing. It's the standard way to keep idle sandboxes from burning compute: the box isn't deleted, and the next `commands.run()`, file op, or `connect()` auto-resumes it right where it left off.
+Set `timeoutSeconds` to have the platform pause a sandbox once it has been **active** for that long — checkpointing its state and stopping compute billing. It bounds how long a sandbox can run (and bill) before it's automatically parked, so a forgotten sandbox doesn't run indefinitely. The box isn't deleted, and the next `commands.run()`, file op, or `connect()` auto-resumes it right where it left off.
 
 <CodeGroup>
 ```typescript TypeScript {3}
@@ -130,7 +130,8 @@ sandbox = Sandbox.create(
 
 The window tracks the **current active session**, not total lifetime:
 
-- It counts active time and **re-arms on each resume** — a resumed sandbox gets a fresh window.
+- It's a cap on active time, **not an idle timer** — running work doesn't reset it, so a task still going when the window elapses is paused mid-run. Size it for your longest expected active session.
+- It **re-arms on each resume** — a resumed sandbox gets a fresh window.
 - The sandbox is **paused, not deleted** — resume (or auto-resume) restores it with full state.
 - Unset (the default) means no auto-pause: the sandbox stays active until you pause or kill it.
 
