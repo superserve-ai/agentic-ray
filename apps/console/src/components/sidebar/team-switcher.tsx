@@ -37,6 +37,9 @@ export function TeamSwitcher() {
   // Region badges only add signal when the directory spans regions.
   const multiRegion = new Set(data.teams.map((t) => t.region)).size > 1
 
+  const teamLabel = (team: { name: string; region: string }) =>
+    multiRegion ? `${team.name} · ${regionLabel(team.region)}` : team.name
+
   const handleSwitch = (value: string) => {
     const team = data.teams.find((t) => optionValue(t) === value)
     if (!team || team === active) return
@@ -58,14 +61,16 @@ export function TeamSwitcher() {
         disabled={switchTeam.isPending}
       >
         <SelectTrigger aria-label="Active team" className="w-full">
-          <SelectValue />
+          {/* Base UI's Value renders the raw option value (`region:id`) by
+              default — the label has to be rendered explicitly. */}
+          <SelectValue className="truncate">
+            {() => (active ? teamLabel(active) : "Select team")}
+          </SelectValue>
         </SelectTrigger>
         <SelectPopup>
           {data.teams.map((team) => (
             <SelectItem key={optionValue(team)} value={optionValue(team)}>
-              {multiRegion
-                ? `${team.name} · ${regionLabel(team.region)}`
-                : team.name}
+              {teamLabel(team)}
             </SelectItem>
           ))}
         </SelectPopup>
