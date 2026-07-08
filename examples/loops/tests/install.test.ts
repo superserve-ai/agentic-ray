@@ -46,6 +46,30 @@ describe("buildWorkflow", () => {
     // Permissions block is still least-privilege regardless of identity path.
     expect(wf).toContain("pull-requests: write")
   })
+
+  it("mints a GitHub App installation token for the branded-bot identity", () => {
+    const wf = buildWorkflow({ githubApp: true })
+
+    // The token-minting step runs before the loop, keyed to app-id/private-key
+    // secrets that resolve from repo OR org scope.
+    expect(wf).toContain("actions/create-github-app-token@v1")
+    expect(wf).toContain("id: app-token")
+    expect(wf).toContain("app-id: ${{ secrets.LOOP_APP_ID }}")
+    expect(wf).toContain("private-key: ${{ secrets.LOOP_APP_PRIVATE_KEY }}")
+
+    // The loop posts with the minted token — not the built-in one or a PAT secret.
+    expect(wf).toContain("GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}")
+    expect(wf).not.toContain("github.token")
+    expect(wf).not.toContain("SUPERSERVE_GITHUB_SECRET")
+
+    // App identity wins over a PAT secret if both are somehow passed.
+    const both = buildWorkflow({
+      githubApp: true,
+      githubSecret: "loop-github-token",
+    })
+    expect(both).toContain("steps.app-token.outputs.token")
+    expect(both).not.toContain("SUPERSERVE_GITHUB_SECRET")
+  })
 })
 
 describe("extractOAuthToken", () => {

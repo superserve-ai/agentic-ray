@@ -34,6 +34,11 @@ import { runLoopCli } from "../pr-loop/loop"
 const PACKAGE_SPEC = "@superserve/loops@stable"
 const CLAUDE_SECRET = "claude-oauth"
 const GITHUB_SECRET = "loop-github-token"
+// GitHub App identity mode: the workflow mints a short-lived installation token
+// from these two GitHub Actions secrets. Referenced by name so they resolve from
+// either repo OR org secrets — set them once org-wide and every repo inherits them.
+const APP_ID_SECRET = "LOOP_APP_ID"
+const APP_KEY_SECRET = "LOOP_APP_PRIVATE_KEY"
 
 const c = {
   ok: (s: string) => console.log(`  \x1b[32m✓\x1b[0m ${s}`),
@@ -117,6 +122,7 @@ interface Flags {
   apiKey?: string
   claudeToken?: string
   githubToken?: string
+  githubApp: boolean
   dryRun: boolean
   yes: boolean
 }
@@ -135,6 +141,7 @@ function parseFlags(args: string[]): Flags {
     apiKey: get("--api-key"),
     claudeToken: get("--claude-token"),
     githubToken: get("--github-token"),
+    githubApp: args.includes("--github-app"),
     dryRun: args.includes("--dry-run"),
     yes: args.includes("--yes"),
   }
@@ -261,12 +268,37 @@ async function upsertSecret(
  * Pass `githubSecret` for the cross-repo / custom-identity fallback: the loop then
  * authenticates with a GitHub PAT stored under that Superserve secret name instead
  * (swapped in at egress), so it can reach other repos or post under a branded account.
+ *
+ * Pass `githubApp: true` for the branded-bot path: the workflow mints a short-lived
+ * installation token from a user-supplied GitHub App (`LOOP_APP_ID` /
+ * `LOOP_APP_PRIVATE_KEY` secrets), so reviews post as that App — its own name and
+ * avatar. This is the recommended identity for a fleet: the App is installed once
+ * (org-wide or on selected repos), the two secrets live at the org level, and every
+ * repo's install inherits them with no per-repo token handling.
  */
-export function buildWorkflow(opts: { githubSecret?: string } = {}): string {
-  const githubAuth = opts.githubSecret
-    ? `          # Cross-repo / custom bot identity: authenticate with a PAT stored as a Superserve secret.
+export function buildWorkflow(
+  opts: { githubSecret?: string; githubApp?: boolean } = {},
+): string {
+  // GitHub App mode needs an extra step: mint the installation token before the run
+  // so its output is available as GITHUB_TOKEN. The other two modes need no step.
+  const tokenStep = opts.githubApp
+    ? `      # Mint a short-lived installation token so reviews post as YOUR GitHub App
+      # (its name + avatar). ${APP_ID_SECRET} / ${APP_KEY_SECRET} resolve from repo OR
+      # org secrets — set them once org-wide and every repo inherits them.
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: \${{ secrets.${APP_ID_SECRET} }}
+          private-key: \${{ secrets.${APP_KEY_SECRET} }}
+`
+    : ""
+  const githubAuth = opts.githubApp
+    ? `          # Posts as your GitHub App via the installation token minted above.
+          GITHUB_TOKEN: \${{ steps.app-token.outputs.token }}`
+    : opts.githubSecret
+      ? `          # Cross-repo / custom bot identity: authenticate with a PAT stored as a Superserve secret.
           SUPERSERVE_GITHUB_SECRET: ${opts.githubSecret}`
-    : `          # Reviews post as github-actions[bot] via the workflow's built-in token.
+      : `          # Reviews post as github-actions[bot] via the workflow's built-in token.
           GITHUB_TOKEN: \${{ github.token }}`
   return `# Installed by \`superserve-loops add pr-loop\`. Runs on every PR code change
 # (a commit pushed to a PR) — no idle cron. One warm-sandbox tick per event, then it sleeps.
@@ -292,7 +324,7 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - uses: oven-sh/setup-bun@v2
+${tokenStep}      - uses: oven-sh/setup-bun@v2
       # Runs the PUBLISHED loop — no loop source is vendored into this repo, and no repo
       # checkout is needed (the sandbox clones the target repo itself). \`@stable\` is a
       # Superserve-gated channel, so blessed updates roll out here without editing this file.
@@ -307,7 +339,7 @@ ${githubAuth}
 
 function writeWorkflow(
   repoRoot: string,
-  opts: { githubSecret?: string },
+  opts: { githubSecret?: string; githubApp?: boolean },
   dryRun: boolean,
 ): string {
   const path = join(repoRoot, ".github", "workflows", "loop-pr-loop.yml")
@@ -430,6 +462,9 @@ Options:
   --claude-token <tok>   Claude subscription token from \`claude setup-token\` (or env CLAUDE_CODE_OAUTH_TOKEN)
   --github-token <tok>   GitHub PAT for cross-repo reviews or a custom bot identity
                          (optional — by default reviews post as github-actions[bot])
+  --github-app           Post reviews as your own GitHub App (its name + avatar). The
+                         workflow mints a per-run installation token from the
+                         ${APP_ID_SECRET} / ${APP_KEY_SECRET} secrets (repo or org).
   --yes                  Non-interactive (fail instead of prompting)
   --dry-run              Show what would happen; change nothing
 `
@@ -513,7 +548,13 @@ async function main(): Promise<void> {
       }),
     flags.dryRun,
   )
-  if (patToken) {
+  if (flags.githubApp) {
+    // App mode owns the identity — no Superserve secret; the workflow mints a
+    // per-run installation token from the two GitHub Actions secrets instead.
+    c.ok(
+      "GitHub: reviews post as your GitHub App — the workflow mints its installation token",
+    )
+  } else if (patToken) {
     await upsertSecret(
       GITHUB_SECRET,
       patToken,
@@ -534,7 +575,11 @@ async function main(): Promise<void> {
   c.step("2/3  GitHub Actions workflow")
   const workflowPath = writeWorkflow(
     repoRoot,
-    { githubSecret: patToken ? GITHUB_SECRET : undefined },
+    {
+      githubApp: flags.githubApp,
+      // PAT and App identity are mutually exclusive; App wins if both are given.
+      githubSecret: !flags.githubApp && patToken ? GITHUB_SECRET : undefined,
+    },
     flags.dryRun,
   )
   commitAndPushWorkflow(repoRoot, workflowPath, flags.dryRun)
@@ -544,13 +589,29 @@ async function main(): Promise<void> {
 
   c.step(flags.dryRun ? "Dry run complete — nothing changed." : "Done.")
   if (!flags.dryRun) {
+    if (flags.githubApp) {
+      c.info(
+        `GitHub App identity needs two secrets (set once as REPO or ORG secrets):`,
+      )
+      c.info(
+        `  gh secret set ${APP_ID_SECRET} --repo ${repo}            # the App's numeric ID`,
+      )
+      c.info(
+        `  gh secret set ${APP_KEY_SECRET} --repo ${repo} < key.pem  # the App's .pem private key`,
+      )
+      c.info(
+        "  Prefer ORG secrets (--org instead of --repo) so every future repo inherits them.",
+      )
+    }
     c.info(
       `gh workflow run loop-pr-loop.yml --repo ${repo}   # trigger the first run now`,
     )
     c.info(
-      patToken
-        ? "Each new commit to a PR is reviewed within seconds (reviews post under your PAT identity)."
-        : "Each new commit to a PR is reviewed within seconds — reviews post as github-actions[bot].",
+      flags.githubApp
+        ? "Each new commit to a PR is reviewed within seconds — reviews post as your GitHub App."
+        : patToken
+          ? "Each new commit to a PR is reviewed within seconds (reviews post under your PAT identity)."
+          : "Each new commit to a PR is reviewed within seconds — reviews post as github-actions[bot].",
     )
   }
 }
