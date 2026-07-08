@@ -9,6 +9,7 @@ import { createServerClient } from "@/lib/supabase/server"
 
 const ALLOWED_PREFIXES = [
   "sandboxes",
+  "activity",
   "health",
   "v1",
   "templates",

@@ -74,7 +74,7 @@ describe("api proxy /api/[...path]", () => {
     expect(res.status).toBe(404)
   })
 
-  it("forwards the secrets and providers prefixes", async () => {
+  it("forwards the secrets, providers, and activity prefixes", async () => {
     fetchSpy.mockImplementation(() =>
       Promise.resolve(
         new Response("[]", {
@@ -84,11 +84,16 @@ describe("api proxy /api/[...path]", () => {
       ),
     )
 
-    for (const path of [["secrets"], ["secrets", "my_key"], ["providers"]]) {
+    for (const path of [
+      ["secrets"],
+      ["secrets", "my_key"],
+      ["providers"],
+      ["activity"],
+    ]) {
       const res = await GET(req("GET", path), params(path))
       expect(res.status).toBe(200)
     }
-    expect(fetchSpy).toHaveBeenCalledTimes(3)
+    expect(fetchSpy).toHaveBeenCalledTimes(4)
   })
 
   it("returns 401 when the user is not authenticated", async () => {
