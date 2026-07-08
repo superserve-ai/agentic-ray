@@ -1,6 +1,18 @@
 "use server"
 
-import { listTeamsForUser } from "@/lib/api/team-directory"
+import { cookies } from "next/headers"
+
+import {
+  ACTIVE_TEAM_COOKIE,
+  pickActiveTeam,
+  readTeamSelection,
+  serializeTeamSelection,
+  type TeamSelection,
+} from "@/lib/api/active-team"
+import {
+  listTeamMembershipsForUser,
+  listTeamsForUser,
+} from "@/lib/api/team-directory"
 import { cellFor, creatableRegions, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -20,6 +32,11 @@ export interface TeamDirectoryResponse {
   // configured AND the user is on the multi-cell UI allowlist — which is
   // what gates the region select in the UI.
   regions: string[]
+  // The team every dashboard surface operates on. Identified by id AND
+  // region: during a cross-cell migration the same team id can appear in
+  // two cells at once, and only one of them is active.
+  activeTeamId: string | null
+  activeRegion: string | null
 }
 
 export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
@@ -29,8 +46,57 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const teams = await listTeamsForUser(user.id)
-  return { teams, regions: creatableRegions(user.email) }
+  const [teams, selection] = await Promise.all([
+    listTeamsForUser(user.id),
+    readTeamSelection(),
+  ])
+  // Resolve the active team from the same list the UI renders, so the
+  // directory can never mark a team it doesn't show.
+  const active = pickActiveTeam(
+    teams.map((t) => ({ teamId: t.id, region: t.region })),
+    selection,
+  )
+  return {
+    teams,
+    regions: creatableRegions(user.email),
+    activeTeamId: active?.teamId ?? null,
+    activeRegion: active?.region ?? null,
+  }
+}
+
+async function storeTeamSelection(selection: TeamSelection): Promise<void> {
+  const store = await cookies()
+  store.set(ACTIVE_TEAM_COOKIE, serializeTeamSelection(selection), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  })
+}
+
+/**
+ * Switch the dashboard to another of the user's teams. Membership is
+ * verified before the cookie is written; reads re-verify on every request,
+ * so the cookie only ever narrows which valid membership is used.
+ */
+export async function setActiveTeamAction(
+  teamId: string,
+  region: string,
+): Promise<void> {
+  const supabase = await createServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error("Not authenticated")
+
+  const memberships = await listTeamMembershipsForUser(user.id)
+  const match = memberships.find(
+    (m) => m.teamId === teamId && m.region === region,
+  )
+  if (!match) throw new Error("You are not a member of that team")
+
+  await storeTeamSelection({ region, teamId })
 }
 
 /**
@@ -161,6 +227,10 @@ export async function createTeamAction(
       { cause: chainErr },
     )
   }
+
+  // Land the creator in the team they just made — the reason to create a
+  // team is almost always to start working in it.
+  await storeTeamSelection({ region: targetRegion, teamId: team.id as string })
 
   return {
     id: team.id as string,

@@ -1,5 +1,6 @@
 "use server"
 
+import { pickActiveTeam, readTeamSelection } from "@/lib/api/active-team"
 import {
   listTeamMembershipsForUserDetailed,
   type TeamMembership,
@@ -21,15 +22,7 @@ async function getTeam(userId: string): Promise<TeamMembership | null> {
   // banner renders nothing rather than showing a possibly-wrong team's quota.
   if (degradedRegions.length > 0) return null
 
-  if (!memberships.length) return null
-
-  const uniqueTeams = new Map(memberships.map((m) => [m.teamId, m]))
-  // Ambient poller with no team-selector: an ambiguous (multi-team) membership
-  // renders nothing rather than throwing on every poll (which would spam logs).
-  if (uniqueTeams.size !== 1) {
-    return null
-  }
-  return [...uniqueTeams.values()][0]
+  return pickActiveTeam(memberships, await readTeamSelection())
 }
 
 // Current team's sandbox usage for the in-product quota banner; null when the

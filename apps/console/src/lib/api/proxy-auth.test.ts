@@ -3,11 +3,11 @@
  *
  * These are the security-critical primitives used by every authenticated
  * request through the API proxy. Tests focus on:
- *  - Deterministic key derivation (same user → same key across instances)
- *  - Different users → different keys
+ *  - Deterministic key derivation (same user+team → same key across instances)
+ *  - Different users or teams → different keys
  *  - CONSOLE_PROXY_SECRET length guard
  *  - hashKey stability
- *  - Proxy key row / upstream URL resolving to the team's home cell
+ *  - Proxy key row / upstream URL resolving to the active team's home cell
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -20,6 +20,11 @@ vi.mock("@/lib/supabase/admin", () => ({
 }))
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: vi.fn(),
+}))
+
+// No cookie set: active-team resolution falls back to the first membership.
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => undefined }),
 }))
 
 // The user's team lives in the usw cell — used by the cell-targeting tests.
@@ -97,33 +102,39 @@ describe("proxy-auth.deriveRawKey", () => {
       "test-secret-must-be-at-least-thirty-two-chars-long-abcdef"
   })
 
-  it("is deterministic: same user id always returns the same key", () => {
-    const k1 = deriveRawKey("user-123")
-    const k2 = deriveRawKey("user-123")
+  it("is deterministic: same user and team always return the same key", () => {
+    const k1 = deriveRawKey("user-123", "team-1")
+    const k2 = deriveRawKey("user-123", "team-1")
     expect(k1).toBe(k2)
   })
 
   it("produces different keys for different user ids", () => {
-    const k1 = deriveRawKey("user-a")
-    const k2 = deriveRawKey("user-b")
+    const k1 = deriveRawKey("user-a", "team-1")
+    const k2 = deriveRawKey("user-b", "team-1")
+    expect(k1).not.toBe(k2)
+  })
+
+  it("produces different keys for the same user's different teams", () => {
+    const k1 = deriveRawKey("user-123", "team-1")
+    const k2 = deriveRawKey("user-123", "team-2")
     expect(k1).not.toBe(k2)
   })
 
   it("prefixes the key with ss_live_", () => {
-    expect(deriveRawKey("user-123")).toMatch(/^ss_live_/)
+    expect(deriveRawKey("user-123", "team-1")).toMatch(/^ss_live_/)
   })
 
   it("uses base64url alphabet (safe for headers/URLs)", () => {
-    const key = deriveRawKey("user-123")
+    const key = deriveRawKey("user-123", "team-1")
     // base64url never uses +, /, or padding =
     expect(key).not.toMatch(/[+/=]/)
   })
 
   it("changes when the secret changes (force rotation)", () => {
-    const a = deriveRawKey("user-123")
+    const a = deriveRawKey("user-123", "team-1")
     process.env.CONSOLE_PROXY_SECRET =
       "different-secret-must-also-be-long-aaaaaaa"
-    const b = deriveRawKey("user-123")
+    const b = deriveRawKey("user-123", "team-1")
     expect(a).not.toBe(b)
   })
 })

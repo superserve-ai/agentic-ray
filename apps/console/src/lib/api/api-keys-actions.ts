@@ -2,10 +2,8 @@
 
 import crypto from "node:crypto"
 
-import {
-  listTeamMembershipsForUser,
-  type TeamMembership,
-} from "@/lib/api/team-directory"
+import { resolveActiveTeam } from "@/lib/api/active-team"
+import type { TeamMembership } from "@/lib/api/team-directory"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -81,7 +79,8 @@ async function ensureProfile(
 }
 
 /**
- * Look up the user's team across configured cells. If no team exists,
+ * The user's active team (their selection when it's a live membership,
+ * otherwise the deterministic default). If no team exists at all,
  * auto-create one (named after their email) in the default cell and add
  * them as owner.
  */
@@ -92,9 +91,8 @@ async function getOrCreateTeamForUser(
   // Ensure profile exists first (FK target for team_member and api_key)
   await ensureProfile(DEFAULT_REGION, userId, email)
 
-  // Try to find existing team membership in any configured cell
-  const memberships = await listTeamMembershipsForUser(userId)
-  if (memberships[0]) return memberships[0]
+  const active = await resolveActiveTeam(userId)
+  if (active) return active
 
   // No team — create one in the default cell and add user as owner
   const admin = cellFor(DEFAULT_REGION).createAdminClient()

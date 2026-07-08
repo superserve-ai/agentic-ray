@@ -93,16 +93,40 @@ vi.mock("@/lib/cells", () => ({
   },
 }))
 
+let directoryTeams: Array<{ id: string; name: string; region: string }> = []
 vi.mock("@/lib/api/team-directory", () => ({
-  listTeamsForUser: async () => [],
+  listTeamsForUser: async () => directoryTeams,
+  listTeamMembershipsForUser: async () =>
+    directoryTeams.map((t) => ({ teamId: t.id, region: t.region })),
 }))
 
-import { createTeamAction, listTeamsAction } from "./teams-actions"
+// Cookie store stub capturing active-team writes.
+let cookieValue: string | undefined
+const cookieSets: Array<{ name: string; value: string }> = []
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) =>
+      cookieValue !== undefined ? { name, value: cookieValue } : undefined,
+    set: (name: string, value: string) => {
+      cookieSets.push({ name, value })
+      cookieValue = value
+    },
+  }),
+}))
+
+import {
+  createTeamAction,
+  listTeamsAction,
+  setActiveTeamAction,
+} from "./teams-actions"
 
 describe("createTeamAction", () => {
   beforeEach(() => {
     regions = ["use", "usw"]
     allowedRegions = null
+    directoryTeams = []
+    cookieValue = undefined
+    cookieSets.length = 0
     cellClients = {
       use: recordingCellClient(),
       usw: recordingCellClient(),
@@ -136,6 +160,11 @@ describe("createTeamAction", () => {
 
     // Nothing leaked into the default cell.
     expect(cellClients.use.from).not.toHaveBeenCalled()
+
+    // The creator lands in the new team.
+    expect(cookieSets).toEqual([
+      { name: "ss-active-team", value: "usw:team-new" },
+    ])
   })
 
   it("defaults to the default region when none is given", async () => {
@@ -178,5 +207,45 @@ describe("multi-cell allowlist enforcement", () => {
     allowedRegions = ["use"]
     const { regions: visible } = await listTeamsAction()
     expect(visible).toEqual(["use"])
+  })
+})
+
+describe("active team", () => {
+  beforeEach(() => {
+    regions = ["use", "usw"]
+    allowedRegions = null
+    cookieValue = undefined
+    cookieSets.length = 0
+    directoryTeams = [
+      { id: "team-a", name: "alpha", region: "use" },
+      { id: "team-w", name: "west", region: "usw" },
+    ]
+  })
+
+  it("directory marks the cookie's team active", async () => {
+    cookieValue = "usw:team-w"
+    const { activeTeamId, activeRegion } = await listTeamsAction()
+    expect(activeTeamId).toBe("team-w")
+    expect(activeRegion).toBe("usw")
+  })
+
+  it("directory falls back to the first team without a cookie", async () => {
+    const { activeTeamId, activeRegion } = await listTeamsAction()
+    expect(activeTeamId).toBe("team-a")
+    expect(activeRegion).toBe("use")
+  })
+
+  it("setActiveTeamAction stores a verified membership", async () => {
+    await setActiveTeamAction("team-w", "usw")
+    expect(cookieSets).toEqual([
+      { name: "ss-active-team", value: "usw:team-w" },
+    ])
+  })
+
+  it("setActiveTeamAction rejects a team the user is not in", async () => {
+    await expect(setActiveTeamAction("intruder", "usw")).rejects.toThrow(
+      "not a member",
+    )
+    expect(cookieSets).toEqual([])
   })
 })

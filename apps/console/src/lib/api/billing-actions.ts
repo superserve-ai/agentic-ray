@@ -2,6 +2,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { pickActiveTeam, readTeamSelection } from "@/lib/api/active-team"
 import {
   listTeamMembershipsForUserDetailed,
   type TeamMembership,
@@ -67,13 +68,7 @@ async function getTeam(userId: string): Promise<TeamMembership | null> {
     )
   }
 
-  if (!memberships.length) return null
-
-  const uniqueTeams = new Map(memberships.map((m) => [m.teamId, m]))
-  if (uniqueTeams.size !== 1) {
-    throw new Error("Select a team before viewing billing usage")
-  }
-  return [...uniqueTeams.values()][0]
+  return pickActiveTeam(memberships, await readTeamSelection())
 }
 
 function normalizePeriod(periodStart: string, periodEnd: string) {

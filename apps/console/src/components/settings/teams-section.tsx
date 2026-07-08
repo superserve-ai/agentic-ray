@@ -14,16 +14,8 @@ import {
 } from "@superserve/ui"
 import { useState } from "react"
 
-import { useCreateTeam, useTeams } from "@/hooks/use-teams"
-
-const REGION_LABELS: Record<string, string> = {
-  use: "US East",
-  usw: "US West",
-}
-
-function regionLabel(region: string): string {
-  return REGION_LABELS[region] ?? region
-}
+import { useCreateTeam, useSwitchTeam, useTeams } from "@/hooks/use-teams"
+import { regionLabel } from "@/lib/format"
 
 /**
  * Team directory + create-team form. Only rendered when more than one cell
@@ -33,6 +25,7 @@ function regionLabel(region: string): string {
 export function TeamsSection() {
   const { data } = useTeams()
   const createTeam = useCreateTeam()
+  const switchTeam = useSwitchTeam()
   const { addToast } = useToast()
 
   const [name, setName] = useState("")
@@ -69,17 +62,50 @@ export function TeamsSection() {
         </div>
         <div className="max-w-md space-y-5">
           <div className="border border-dashed border-border">
-            {data.teams.map((team) => (
-              <div
-                key={`${team.region}:${team.id}`}
-                className="flex items-center justify-between border-b border-dashed border-border px-4 py-3 last:border-b-0"
-              >
-                <span className="text-sm text-foreground">{team.name}</span>
-                <span className="font-mono text-xs text-muted uppercase">
-                  {regionLabel(team.region)}
-                </span>
-              </div>
-            ))}
+            {data.teams.map((team) => {
+              const isActive =
+                team.id === data.activeTeamId &&
+                team.region === data.activeRegion
+              return (
+                <div
+                  key={`${team.region}:${team.id}`}
+                  className="flex items-center justify-between gap-3 border-b border-dashed border-border px-4 py-3 last:border-b-0"
+                >
+                  <span className="text-sm text-foreground">{team.name}</span>
+                  <span className="flex items-center gap-3">
+                    <span className="font-mono text-xs text-muted uppercase">
+                      {regionLabel(team.region)}
+                    </span>
+                    {isActive ? (
+                      <span className="font-mono text-xs text-brand uppercase">
+                        Active
+                      </span>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={switchTeam.isPending}
+                        onClick={() =>
+                          switchTeam.mutate(
+                            { teamId: team.id, region: team.region },
+                            {
+                              onError: (error) => {
+                                addToast(
+                                  error.message || "Failed to switch team",
+                                  "error",
+                                )
+                              },
+                            },
+                          )
+                        }
+                      >
+                        Switch
+                      </Button>
+                    )}
+                  </span>
+                </div>
+              )
+            })}
             {data.teams.length === 0 && (
               <p className="px-4 py-3 text-xs text-muted">No teams yet.</p>
             )}

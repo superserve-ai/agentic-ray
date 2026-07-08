@@ -2,6 +2,11 @@ import crypto from "node:crypto"
 
 import type { User } from "@supabase/supabase-js"
 
+import {
+  pickActiveTeam,
+  readTeamSelection,
+  serializeTeamSelection,
+} from "@/lib/api/active-team"
 import { getProxySecret, hashKey } from "@/lib/api/proxy-secret"
 import {
   listTeamMembershipsForUser,
@@ -13,14 +18,21 @@ import { createServerClient } from "@/lib/supabase/server"
 export { getProxySecret, hashKey } from "@/lib/api/proxy-secret"
 
 const PROXY_KEY_NAME = "__console_proxy__"
-// Bump this when you want to force-rotate every user's proxy key.
-const PROXY_KEY_VERSION = "v1"
+// Bump this when you want to force-rotate every proxy key. v2 added the team
+// id to the derivation (one key per user per team, so switching teams swaps
+// keys instead of re-pointing one row); v1 rows are inert leftovers.
+const PROXY_KEY_VERSION = "v2"
 
-/** @internal — exported for tests. Deterministic per-user key derivation. */
-export function deriveRawKey(userId: string): string {
+/**
+ * @internal — exported for tests. Deterministic per-user-per-team key
+ * derivation. The team id is part of the MAC input so each of a user's teams
+ * gets its own key row in its own cell, and the injected key always
+ * authorizes exactly the active team.
+ */
+export function deriveRawKey(userId: string, teamId: string): string {
   const mac = crypto
     .createHmac("sha256", getProxySecret())
-    .update(`${PROXY_KEY_VERSION}:${userId}`)
+    .update(`${PROXY_KEY_VERSION}:${userId}:${teamId}`)
     .digest()
   return `ss_live_${mac.toString("base64url")}`
 }
@@ -51,11 +63,12 @@ function setFresh<T>(map: Map<string, Expiring<T>>, key: string, value: T) {
   map.set(key, { value, expires: Date.now() + AUTHZ_CACHE_TTL_MS })
 }
 
-// Users whose api_key row was ensured recently — re-ensuring is one
-// idempotent upsert, so the TTL also heals a server-side key-row deletion.
-const ensuredUsers = new Map<string, Expiring<true>>()
-// The user's team + home cell. Stable in practice, but it IS authorization
-// state, hence the TTL.
+// user:team pairs whose api_key row was ensured recently — re-ensuring is
+// one idempotent upsert, so the TTL also heals a server-side key-row
+// deletion.
+const ensuredKeys = new Map<string, Expiring<true>>()
+// The user's active team + home cell, keyed by user AND selection so a team
+// switch takes effect immediately instead of after the TTL.
 const teamCache = new Map<string, Expiring<TeamMembership>>()
 
 async function ensureProfile(userId: string, email: string): Promise<void> {
@@ -82,14 +95,19 @@ async function getTeamForUser(
   userId: string,
   email: string,
 ): Promise<TeamMembership> {
-  const cached = getFresh(teamCache, userId)
+  const selection = await readTeamSelection()
+  const cacheKey = `${userId}|${selection ? serializeTeamSelection(selection) : ""}`
+  const cached = getFresh(teamCache, cacheKey)
   if (cached) return cached
 
   await ensureProfile(userId, email)
 
-  const membership = (await listTeamMembershipsForUser(userId))[0]
+  const membership = pickActiveTeam(
+    await listTeamMembershipsForUser(userId),
+    selection,
+  )
   if (membership) {
-    setFresh(teamCache, userId, membership)
+    setFresh(teamCache, cacheKey, membership)
     return membership
   }
 
@@ -112,7 +130,7 @@ async function getTeamForUser(
     throw new Error(`Failed to add team member: ${memberErr.message}`)
 
   const created = { teamId: team.id as string, region: DEFAULT_REGION }
-  setFresh(teamCache, userId, created)
+  setFresh(teamCache, cacheKey, created)
   return created
 }
 
@@ -139,12 +157,12 @@ export async function getApiBaseUrlForUser(user: User): Promise<string> {
  */
 async function ensureProxyKeyRow(
   userId: string,
-  email: string,
+  team: TeamMembership,
   keyHash: string,
 ): Promise<void> {
-  if (getFresh(ensuredUsers, userId)) return
+  const ensureKey = `${userId}|${team.region}:${team.teamId}`
+  if (getFresh(ensuredKeys, ensureKey)) return
 
-  const team = await getTeamForUser(userId, email)
   const admin = cellFor(team.region).createAdminClient()
 
   const { error } = await admin.from("api_key").upsert(
@@ -160,7 +178,7 @@ async function ensureProxyKeyRow(
 
   if (error) throw new Error(`Failed to ensure proxy key: ${error.message}`)
 
-  setFresh(ensuredUsers, userId, true)
+  setFresh(ensuredKeys, ensureKey, true)
 }
 
 export async function getAuthApiKeyForUser(
@@ -168,8 +186,9 @@ export async function getAuthApiKeyForUser(
 ): Promise<string | null> {
   if (!user) return null
 
-  const rawKey = deriveRawKey(user.id)
-  await ensureProxyKeyRow(user.id, user.email ?? user.id, hashKey(rawKey))
+  const team = await getTeamForUser(user.id, user.email ?? user.id)
+  const rawKey = deriveRawKey(user.id, team.teamId)
+  await ensureProxyKeyRow(user.id, team, hashKey(rawKey))
   return rawKey
 }
 

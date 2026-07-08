@@ -15,6 +15,11 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }))
 
+// No cookie set: active-team resolution falls back to the first membership.
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => undefined }),
+}))
+
 // Per-test knobs read lazily by the admin-client mock.
 let homeRegionResult: { data: unknown; error: unknown } = {
   data: { home_region: "usw" },
