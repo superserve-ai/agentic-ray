@@ -110,7 +110,7 @@ Sandbox.kill_by_id("7a3f2b8c-1234-...")
 
 ## Auto-pause
 
-Set `timeoutSeconds` to have the platform pause a sandbox once it has been **active** for that long — checkpointing its state and stopping compute billing. It bounds how long a sandbox can run (and bill) before it's automatically parked, so a forgotten sandbox doesn't run indefinitely. The box isn't deleted, and the next `commands.run()`, file op, or `connect()` auto-resumes it right where it left off.
+Set `timeoutSeconds` to auto-pause a sandbox after it has been active for that long. Pausing checkpoints its state and stops compute billing, so a sandbox you forget about won't keep running and billing. It isn't deleted; the next `commands.run()`, file operation, or `connect()` resumes it where it left off.
 
 <CodeGroup>
 ```typescript TypeScript {3}
@@ -128,12 +128,12 @@ sandbox = Sandbox.create(
 ```
 </CodeGroup>
 
-The window tracks the **current active session**, not total lifetime:
+The timeout is scoped to the current active session:
 
-- It's a cap on active time, **not an idle timer** — running work doesn't reset it, so a task still going when the window elapses is paused mid-run. Size it for your longest expected active session.
-- It **re-arms on each resume** — a resumed sandbox gets a fresh window.
-- The sandbox is **paused, not deleted** — resume (or auto-resume) restores it with full state.
-- Unset (the default) means no auto-pause: the sandbox stays active until you pause or kill it.
+- It's a cap on active time, not idle time. Running work doesn't reset it, so a task still going when the window elapses is paused mid-run. Size it for your longest active session.
+- Each resume starts a fresh window.
+- The sandbox is paused, not deleted. Resume restores full memory and filesystem.
+- Leave it unset (the default) to disable auto-pause; the sandbox stays active until you pause or kill it.
 
 Set or clear it on an existing sandbox:
 
@@ -151,7 +151,7 @@ sandbox.update(timeout_seconds=None)  # disable auto-pause
 
 ## Auto-delete
 
-By default a paused sandbox is kept forever. Set `autoDeleteSeconds` to have the platform delete it once it has been **continuously paused** for that long — useful for short-lived or unattended sandboxes: scheduled jobs, one-off experiments, or agent sessions that never get an explicit `kill()`.
+By default a paused sandbox is kept forever. Set `autoDeleteSeconds` to delete it once it has been continuously paused for that long. This suits short-lived or unattended sandboxes: scheduled jobs, one-off experiments, or agent sessions that never get an explicit `kill()`.
 
 <CodeGroup>
 ```typescript TypeScript {5}
@@ -173,11 +173,11 @@ sandbox = Sandbox.create(
 ```
 </CodeGroup>
 
-The timer is tied to the paused state itself:
+The countdown is tied to the paused state:
 
-- **Pause** arms the countdown; **resume** cancels it. Pausing again later starts a fresh window, so a sandbox in use is never deleted.
+- Pause starts it and resume cancels it. Pausing again starts a fresh window, so a sandbox in use is never deleted.
 - `0` deletes the sandbox as soon as it pauses.
-- While the sandbox is paused, its info includes `autoDeleteAt` — the exact deletion time.
+- While paused, the sandbox's info includes `autoDeleteAt`, the exact deletion time.
 - Maximum window: 30 days.
 
 You can also set or clear the window on an existing sandbox:
