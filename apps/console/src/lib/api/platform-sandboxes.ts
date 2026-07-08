@@ -1,37 +1,38 @@
-import { apiClient } from "./client"
-import type { NetworkConfig, SandboxStatus } from "./types"
+import { apiClient, apiClientList } from "./client"
+import type { SandboxListItem, SandboxResponse } from "./types"
 
-export interface PlatformSandboxRead {
-  id: string
-  team_id: string
-  name: string
-  status: SandboxStatus
-  vcpu_count: number
-  memory_mib: number
-  snapshot_id?: string | null
-  timeout_seconds?: number | null
-  network?: NetworkConfig | null
-  metadata: Record<string, string>
-  created_at: string
-}
+export type PlatformSandboxRead = SandboxResponse
 
-function teamQuery(teamId: string): string {
-  return `team_id=${encodeURIComponent(teamId)}`
+function sandboxInventoryQuery(): string {
+  const q = new URLSearchParams()
+  q.set("limit", "1000")
+  q.set("offset", "0")
+  q.set("sort", "created_at")
+  q.set("order", "desc")
+  return q.toString()
 }
 
 export async function listPlatformTeamSandboxes(
-  teamId: string,
+  _teamId: string,
 ): Promise<PlatformSandboxRead[]> {
-  return apiClient<PlatformSandboxRead[]>(
-    `/platform/sandboxes?${teamQuery(teamId)}`,
+  // Intentionally use the normal customer sandbox endpoint while impersonating.
+  // The active impersonation cookie makes /api/[...path] mint/use the temporary
+  // team-scoped API key, so sandbox RBAC and response shaping stay on the same
+  // path customers use. Do not call /internal/teams/... here.
+  const page = await apiClientList<SandboxListItem>(
+    `/sandboxes?${sandboxInventoryQuery()}`,
   )
+
+  return page.items as PlatformSandboxRead[]
 }
 
 export async function getPlatformTeamSandbox(
-  teamId: string,
+  _teamId: string,
   sandboxId: string,
 ): Promise<PlatformSandboxRead> {
-  return apiClient<PlatformSandboxRead>(
-    `/platform/sandboxes/${encodeURIComponent(sandboxId)}?${teamQuery(teamId)}`,
+  // Same as above: read through the normal customer endpoint under the
+  // temporary impersonation API key.
+  return apiClient<SandboxResponse>(
+    `/sandboxes/${encodeURIComponent(sandboxId)}`,
   )
 }
