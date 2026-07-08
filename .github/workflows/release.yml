@@ -66,9 +66,11 @@ jobs:
   release-python:
     if: ${{ inputs.package == 'python' || inputs.package == 'both' }}
     runs-on: ubuntu-latest
+    # Must match the environment on the PyPI trusted publisher (OIDC claim).
+    environment: pypi
     permissions:
       id-token: write # PyPI Trusted Publishing (OIDC)
-      contents: write # push the version-bump commit + tag
+      contents: write # push the release tag
     steps:
       - name: Checkout
         uses: actions/checkout@v4
