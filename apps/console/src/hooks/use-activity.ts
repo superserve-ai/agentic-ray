@@ -1,11 +1,15 @@
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 
-import { listActivityAction } from "@/lib/api/activity-actions"
+import { listActivityPaged } from "@/lib/api/activity"
 import { auditLogKeys } from "@/lib/api/query-keys"
+import type { ActivityListParams } from "@/lib/api/types"
 
-export function useActivity(limit = 100) {
+export function useActivityPage(params: ActivityListParams) {
   return useQuery({
-    queryKey: auditLogKeys.all,
-    queryFn: () => listActivityAction(limit),
+    queryKey: auditLogKeys.list(params),
+    queryFn: () => listActivityPaged(params),
+    // Keep the current page on screen while the next page/filter loads so
+    // navigation doesn't flash an empty table.
+    placeholderData: keepPreviousData,
   })
 }
