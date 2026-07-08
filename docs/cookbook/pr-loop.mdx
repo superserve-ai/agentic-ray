@@ -45,16 +45,15 @@ The installer does everything:
 1. Prompts for your Superserve API key (hidden input) and — when the `claude` CLI is installed — runs `claude setup-token` for you to mint the long-lived Claude token.
 2. Stores that token as a Superserve secret (`claude-oauth`) bound to `api.anthropic.com` — it is [swapped in at egress](/secrets/binding) and never enters the sandbox.
 3. Sets `SUPERSERVE_API_KEY` as a GitHub Actions secret on the repo.
-4. Writes `.github/workflows/loop-pr-loop.yml` — the only file added to your repo.
-
-Commit and push the workflow file:
-
-```bash
-git add .github/workflows/loop-pr-loop.yml
-git commit -m "add pr-loop" && git push
-```
+4. Writes `.github/workflows/loop-pr-loop.yml` — the only file added to your repo — then commits and pushes it for you.
 
 Push a commit to any PR and it is reviewed within seconds.
+
+<Note>
+  If the installer can't push the workflow (no write access, detached HEAD, a
+  blocking pre-commit hook), it prints the exact `git add` / `commit` / `push`
+  commands to run yourself.
+</Note>
 
 <Note>
   The workflow runs the published package (`bunx @superserve/loops@stable run
@@ -116,35 +115,24 @@ Reviews now post as that account. The PAT is stored as the Superserve secret `lo
 
 ### A name and an avatar — your own GitHub App
 
-A GitHub App gets you the `[bot]` badge, a profile picture, and short-lived per-repo tokens. The App — and its private key — stay yours, in your own repo's secrets; nothing is shared.
+A GitHub App gets you the `[bot]` badge, a profile picture, and short-lived per-repo tokens. The App — and its private key — stay yours, in your own repo's (or org's) secrets; nothing is shared.
 
 1. **Create the App**: GitHub → **Settings → Developer settings → GitHub Apps → New GitHub App**. The name becomes the handle (`acme-pr-loop` → `acme-pr-loop[bot]`). Uncheck the webhook. Permissions: `Contents: Read-only`, `Pull requests: Read & write`, `Issues: Read & write`.
 2. **Upload a logo** under Display information (this is the avatar), **generate a private key**, and **install** the App on the repo you're reviewing.
-3. **Wire it in**: store the App credentials as Actions secrets, then mint a token each run:
+3. **Store the App credentials** as Actions secrets — repo-level, or **org** secrets so every repo inherits them:
 
 ```bash
 gh secret set LOOP_APP_ID --body "<your App ID>"
 gh secret set LOOP_APP_PRIVATE_KEY < ~/Downloads/your-app.*.private-key.pem
 ```
 
-In `.github/workflows/loop-pr-loop.yml`, add the token-mint step and point the loop at it:
+4. **Install with `--github-app`** — the installer writes the App-token workflow for you, no YAML editing:
 
-```yaml
-steps:
-  - uses: oven-sh/setup-bun@v2
-  - uses: actions/create-github-app-token@v1
-    id: app-token
-    with:
-      app-id: ${{ secrets.LOOP_APP_ID }}
-      private-key: ${{ secrets.LOOP_APP_PRIVATE_KEY }}
-  - run: bunx @superserve/loops@stable run pr-loop --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
-    env:
-      SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}
-      SUPERSERVE_CLAUDE_SECRET: claude-oauth
-      GITHUB_TOKEN: ${{ steps.app-token.outputs.token }} # was ${{ github.token }}
+```bash
+bunx @superserve/loops add pr-loop --github-app
 ```
 
-The token minted each run is scoped to that one repo and expires within an hour.
+The generated workflow mints a fresh installation token each run via `actions/create-github-app-token`, scoped to that one repo and expiring within the hour, and posts reviews as your App. Because the credentials are referenced by secret name, setting `LOOP_APP_ID` / `LOOP_APP_PRIVATE_KEY` as **org** secrets once covers every future repo — install the loop into a new repo and it inherits the identity with no extra token setup.
 
 ## Make it review your way
 
@@ -164,7 +152,7 @@ Deeper changes — your own rubric, MCP servers, models, tool policy — mean ru
 
 ## Safety model
 
-- **Never merges, force-pushes, or edits `.github/workflows`.** The strongest action it takes is a review plus a `ready-to-merge` label — enforced by the skill's rules _and_ by tool-level deny rules in the harness.
+- **Never merges, force-pushes, or edits `.github/workflows`.** The strongest action it takes is a review plus a `ready-to-merge` label — kept in bounds by the skill's rules and, decisively, by the least-privilege token scope below: a `contents: read` token cannot merge or push, no matter what runs in the sandbox.
 - **Prompt-injection firewall.** PR content is treated as data, not instructions. The loop refuses instructions embedded in diffs or comments and only runs the project's own checks, read from the default branch — never commands suggested by the PR.
 - **Least privilege.** The workflow grants `contents: read` and `pull-requests: write`, nothing else. Fork PRs are skipped by default (their token is read-only); review them via the PAT path if you want them covered.
 - **Human gates.** Security, auth, payments, or core-infra changes — and PRs stuck across several runs — get a `needs-human` label and an `@`-mention instead of silent action.
