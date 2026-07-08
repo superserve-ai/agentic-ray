@@ -38,7 +38,11 @@ function SelectPopup({
 }: React.ComponentProps<typeof SelectPrimitive.Popup>) {
   return (
     <SelectPrimitive.Portal>
-      <SelectPrimitive.Positioner>
+      {/* z-index must sit on the Positioner — the fixed-position element that
+          competes at body level. On the Popup alone it only wins inside the
+          Positioner's stacking context, so the popup paints under elevated
+          app surfaces (e.g. a z-40 sidebar) that overlap its anchor. */}
+      <SelectPrimitive.Positioner className="z-50">
         <SelectPrimitive.Popup
           className={cn(
             "ss-select-popup z-50 max-h-72 min-w-[8rem] overflow-auto border border-dashed border-border bg-surface/80 p-1 backdrop-blur-xl",
