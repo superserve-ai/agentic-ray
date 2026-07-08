@@ -13,7 +13,12 @@ import {
   listTeamMembershipsForUser,
   listTeamsForUser,
 } from "@/lib/api/team-directory"
-import { cellFor, creatableRegions, DEFAULT_REGION } from "@/lib/cells"
+import {
+  cellFor,
+  creatableRegions,
+  DEFAULT_REGION,
+  multiCellUiEnabled,
+} from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 // Role granted to a team's creator. Seeded by the control-plane RBAC
@@ -37,6 +42,9 @@ export interface TeamDirectoryResponse {
   // two cells at once, and only one of them is active.
   activeTeamId: string | null
   activeRegion: string | null
+  // Whether this user may switch teams. Rolls out with the multi-cell UI
+  // allowlist, person by person, like region choice.
+  switchingEnabled: boolean
 }
 
 export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
@@ -61,6 +69,7 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
     regions: creatableRegions(user.email),
     activeTeamId: active?.teamId ?? null,
     activeRegion: active?.region ?? null,
+    switchingEnabled: multiCellUiEnabled(user.email),
   }
 }
 
@@ -89,6 +98,12 @@ export async function setActiveTeamAction(
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
+
+  // Server-side enforcement, not just UI hiding: switching rolls out with
+  // the multi-cell allowlist (internal-first), like region choice.
+  if (!multiCellUiEnabled(user.email)) {
+    throw new Error("Team switching is not enabled for your account")
+  }
 
   const memberships = await listTeamMembershipsForUser(user.id)
   const match = memberships.find(

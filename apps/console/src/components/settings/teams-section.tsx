@@ -80,7 +80,7 @@ export function TeamsSection() {
                       <span className="font-mono text-xs text-brand uppercase">
                         Active
                       </span>
-                    ) : (
+                    ) : !data.switchingEnabled ? null : (
                       <Button
                         variant="outline"
                         size="sm"

@@ -13,6 +13,7 @@ vi.mock("@/lib/supabase/server", () => ({
 // Per-test knobs read lazily by the cells mock.
 let regions: string[] = ["use", "usw"]
 let allowedRegions: string[] | null = null
+let switchingAllowed = true
 let cellClients: Record<string, ReturnType<typeof recordingCellClient>> = {}
 
 // Records every write per table so tests can assert the full create chain
@@ -81,6 +82,7 @@ vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
   configuredRegions: () => regions,
   creatableRegions: () => allowedRegions ?? regions,
+  multiCellUiEnabled: () => switchingAllowed,
   cellFor: (region: string) => {
     if (!regions.includes(region)) {
       throw new Error(`Region ${region} is not configured`)
@@ -214,6 +216,7 @@ describe("active team", () => {
   beforeEach(() => {
     regions = ["use", "usw"]
     allowedRegions = null
+    switchingAllowed = true
     cookieValue = undefined
     cookieSets.length = 0
     directoryTeams = [
@@ -247,5 +250,19 @@ describe("active team", () => {
       "not a member",
     )
     expect(cookieSets).toEqual([])
+  })
+
+  it("setActiveTeamAction requires the multi-cell UI allowlist", async () => {
+    switchingAllowed = false
+    await expect(setActiveTeamAction("team-w", "usw")).rejects.toThrow(
+      "not enabled",
+    )
+    expect(cookieSets).toEqual([])
+  })
+
+  it("directory reports switching availability", async () => {
+    switchingAllowed = false
+    const { switchingEnabled } = await listTeamsAction()
+    expect(switchingEnabled).toBe(false)
   })
 })

@@ -20,19 +20,22 @@ function optionValue(team: { id: string; region: string }): string {
 
 /**
  * Sidebar control for the active team — the team every dashboard surface
- * (sandboxes, keys, snapshots, billing) operates on. Hidden for
- * single-team users, who have nothing to switch between.
+ * (sandboxes, keys, snapshots, billing) operates on. Hidden for single-team
+ * users (nothing to switch between) and off the multi-cell UI allowlist
+ * (switching rolls out person-by-person; the server enforces this too).
  */
 export function TeamSwitcher() {
   const { data } = useTeams()
   const switchTeam = useSwitchTeam()
   const { addToast } = useToast()
 
-  if (!data || data.teams.length < 2) return null
+  if (!data || !data.switchingEnabled || data.teams.length < 2) return null
 
   const active = data.teams.find(
     (t) => t.id === data.activeTeamId && t.region === data.activeRegion,
   )
+  // Region badges only add signal when the directory spans regions.
+  const multiRegion = new Set(data.teams.map((t) => t.region)).size > 1
 
   const handleSwitch = (value: string) => {
     const team = data.teams.find((t) => optionValue(t) === value)
@@ -60,7 +63,9 @@ export function TeamSwitcher() {
         <SelectPopup>
           {data.teams.map((team) => (
             <SelectItem key={optionValue(team)} value={optionValue(team)}>
-              {team.name} · {regionLabel(team.region)}
+              {multiRegion
+                ? `${team.name} · ${regionLabel(team.region)}`
+                : team.name}
             </SelectItem>
           ))}
         </SelectPopup>
