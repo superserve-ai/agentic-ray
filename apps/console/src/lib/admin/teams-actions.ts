@@ -11,7 +11,10 @@ import { revokeImpersonationKeyRow } from "@/lib/admin/impersonation-key"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createServerClient } from "@/lib/supabase/server"
 
-import { canReadPlatformSandboxes } from "./permissions"
+import {
+  canReadPlatformTeams,
+  canStartPlatformImpersonation,
+} from "./permissions"
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -26,19 +29,30 @@ export interface AdminTeamRow {
   created_at: string
 }
 
-async function requirePlatformSandboxRead() {
+async function requirePlatformTeamRead() {
   const supabase = await createServerClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user || !canReadPlatformSandboxes(user)) {
-    throw new Error("Forbidden: platform sandbox read access required")
+  if (!user || !canReadPlatformTeams(user)) {
+    throw new Error("Forbidden: platform team read access required")
+  }
+  return user
+}
+
+async function requirePlatformImpersonationAccess() {
+  const supabase = await createServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user || !canStartPlatformImpersonation(user)) {
+    throw new Error("Forbidden: platform impersonation access required")
   }
   return user
 }
 
 export async function listAllTeamsAction(): Promise<AdminTeamRow[]> {
-  await requirePlatformSandboxRead()
+  await requirePlatformTeamRead()
   const admin = createAdminClient()
   const { data, error } = await admin
     .from("team")
@@ -51,7 +65,7 @@ export async function listAllTeamsAction(): Promise<AdminTeamRow[]> {
 }
 
 export async function getTeamAction(teamId: string) {
-  await requirePlatformSandboxRead()
+  await requirePlatformTeamRead()
   if (!UUID_RE.test(teamId)) {
     throw new Error("Invalid team id")
   }
@@ -68,7 +82,7 @@ export async function getTeamAction(teamId: string) {
 }
 
 export async function startImpersonationAction(teamId: string) {
-  await requirePlatformSandboxRead()
+  await requirePlatformImpersonationAccess()
   if (!UUID_RE.test(teamId)) {
     throw new Error("Invalid team id")
   }
@@ -89,7 +103,7 @@ export async function stopImpersonationAction() {
   let user
 
   try {
-    user = await requirePlatformSandboxRead()
+    user = await requirePlatformImpersonationAccess()
   } catch {
     redirect("/admin")
   }

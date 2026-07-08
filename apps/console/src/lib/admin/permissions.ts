@@ -1,8 +1,11 @@
 import type { User } from "@supabase/supabase-js"
 
-const PLATFORM_SANDBOX_READ_PERMISSION = "platform:sandbox:read"
-const PLATFORM_SANDBOXES_READ_PERMISSION = "platform:sandboxes:read"
-const PLATFORM_TEAMS_READ_PERMISSION = "platform:teams:read"
+export const PLATFORM_SANDBOX_READ_PERMISSION = "platform:sandbox:read"
+export const PLATFORM_TEMPLATE_READ_PERMISSION = "platform:template:read"
+export const PLATFORM_TEAMS_READ_PERMISSION = "platform:teams:read"
+export type PlatformImpersonationReadScope =
+  | typeof PLATFORM_SANDBOX_READ_PERMISSION
+  | typeof PLATFORM_TEMPLATE_READ_PERMISSION
 const DEFAULT_STAFF_DOMAIN = "superserve.ai"
 
 function staffDomain(): string {
@@ -45,19 +48,45 @@ function userPermissions(user: User | null | undefined): string[] {
 export function canReadPlatformSandboxes(
   user: User | null | undefined,
 ): boolean {
-  const permissions = userPermissions(user)
-  return (
-    permissions.includes(PLATFORM_SANDBOX_READ_PERMISSION) ||
-    permissions.includes(PLATFORM_SANDBOXES_READ_PERMISSION) ||
-    permissions.includes(PLATFORM_TEAMS_READ_PERMISSION)
-  )
+  return userPermissions(user).includes(PLATFORM_SANDBOX_READ_PERMISSION)
 }
 
-export function canViewOtherUsersAccount(
+export function canReadPlatformTemplates(
+  user: User | null | undefined,
+): boolean {
+  return userPermissions(user).includes(PLATFORM_TEMPLATE_READ_PERMISSION)
+}
+
+export function canReadPlatformTeams(
   user: User | null | undefined,
 ): boolean {
   return (
     isGoogleStaffUser(user) &&
     userPermissions(user).includes(PLATFORM_TEAMS_READ_PERMISSION)
   )
+}
+
+export function platformImpersonationReadScopes(
+  user: User | null | undefined,
+): PlatformImpersonationReadScope[] {
+  const scopes: PlatformImpersonationReadScope[] = []
+  if (canReadPlatformSandboxes(user)) {
+    scopes.push(PLATFORM_SANDBOX_READ_PERMISSION)
+  }
+  if (canReadPlatformTemplates(user)) {
+    scopes.push(PLATFORM_TEMPLATE_READ_PERMISSION)
+  }
+  return scopes
+}
+
+export function canStartPlatformImpersonation(
+  user: User | null | undefined,
+): boolean {
+  return isGoogleStaffUser(user) && platformImpersonationReadScopes(user).length > 0
+}
+
+export function canViewOtherUsersAccount(
+  user: User | null | undefined,
+): boolean {
+  return canReadPlatformTeams(user)
 }

@@ -18,6 +18,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: vi.fn(),
 }))
+vi.mock("@/lib/admin/permissions", () => ({
+  platformImpersonationReadScopes: vi.fn(),
+}))
+vi.mock("@/lib/admin/impersonation-key", () => ({
+  ensureImpersonationKeyRow: vi.fn(),
+}))
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: vi.fn(),
 }))
@@ -85,6 +91,8 @@ vi.mock("@/lib/cells", () => ({
 
 import { listTeamMembershipsForUser } from "@/lib/api/team-directory"
 import { provisionTeam } from "@/lib/api/team-provisioning"
+import { ensureImpersonationKeyRow } from "@/lib/admin/impersonation-key"
+import { platformImpersonationReadScopes } from "@/lib/admin/permissions"
 
 import {
   deriveRawKey,
@@ -121,6 +129,8 @@ describe("proxy-auth.deriveRawKey", () => {
   beforeEach(() => {
     process.env.CONSOLE_PROXY_SECRET =
       "test-secret-must-be-at-least-thirty-two-chars-long-abcdef"
+    vi.mocked(platformImpersonationReadScopes).mockReturnValue([])
+    vi.mocked(ensureImpersonationKeyRow).mockResolvedValue("ss_live_impersonation")
   })
 
   it("is deterministic: same user and team always return the same key", () => {
@@ -236,5 +246,46 @@ describe("proxy-auth new-user provisioning", () => {
         created_by: "brand-new",
       },
     ])
+  })
+})
+
+describe("proxy-auth impersonation", () => {
+  beforeEach(() => {
+    vi.mocked(platformImpersonationReadScopes).mockReset()
+    vi.mocked(ensureImpersonationKeyRow).mockReset()
+  })
+
+  it("mints an impersonation key with the canonical read scopes", async () => {
+    vi.mocked(platformImpersonationReadScopes).mockReturnValue([
+      "platform:sandbox:read",
+      "platform:template:read",
+    ])
+    vi.mocked(ensureImpersonationKeyRow).mockResolvedValue(
+      "ss_live_impersonation",
+    )
+
+    const key = await getAuthApiKeyForUser(
+      { id: "admin", email: "admin@superserve.ai" } as never,
+      "team-1",
+    )
+
+    expect(key).toBe("ss_live_impersonation")
+    expect(ensureImpersonationKeyRow).toHaveBeenCalledWith(
+      "admin",
+      "team-1",
+      ["platform:sandbox:read", "platform:template:read"],
+      expect.any(Number),
+    )
+  })
+
+  it("rejects impersonation when no supported scopes are available", async () => {
+    vi.mocked(platformImpersonationReadScopes).mockReturnValue([])
+
+    await expect(
+      getAuthApiKeyForUser(
+        { id: "admin", email: "admin@superserve.ai" } as never,
+        "team-1",
+      ),
+    ).rejects.toThrow(/impersonation requires platform sandbox or template read access/)
   })
 })
