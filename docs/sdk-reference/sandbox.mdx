@@ -69,7 +69,7 @@ sandbox = Sandbox.create(
 | `name` | `string` | **Required.** Human-readable sandbox name. |
 | `fromTemplate` / `from_template` | `string \| Template` | Template name, UUID, or `Template` instance to boot from. Defaults to `superserve/base`. |
 | `fromSnapshot` / `from_snapshot` | `string` | Snapshot UUID to boot from. |
-| `timeoutSeconds` / `timeout_seconds` | `number` | Max active lifetime before auto-pause. API-side upper bound (subject to change). |
+| `timeoutSeconds` / `timeout_seconds` | `number` | Auto-pause after this many seconds of active time (per session; re-armed on resume). See [Lifecycle](/sandbox/lifecycle#auto-pause). |
 | `autoDeleteSeconds` / `auto_delete_seconds` | `number` | Delete the sandbox once continuously paused for this many seconds (max 30 days, `0` = delete on pause). See [Lifecycle](/sandbox/lifecycle#auto-delete). |
 | `metadata` | `Record<string, string>` | String tags. |
 | `envVars` / `env_vars` | `Record<string, string>` | Env vars injected into every process. |

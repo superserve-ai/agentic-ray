@@ -67,7 +67,7 @@ Use **`secrets`** for credentials, not `envVars`. A secret binds an env var to a
 | Option | Type | Description |
 |---|---|---|
 | `name` | `string` | **Required.** Human-readable sandbox name. |
-| `timeoutSeconds` / `timeout_seconds` | `number` | Max time the sandbox can stay `active` before auto-pause. |
+| `timeoutSeconds` / `timeout_seconds` | `number` | Auto-pause after this many seconds of active time (per session; re-armed on resume). See [Lifecycle](/sandbox/lifecycle#auto-pause). |
 | `autoDeleteSeconds` / `auto_delete_seconds` | `number` | Delete the sandbox once continuously paused for this many seconds. See [Lifecycle](/sandbox/lifecycle#auto-delete). |
 | `metadata` | `Record<string, string>` | String tags. See [Metadata](/sandbox/metadata). |
 | `envVars` / `env_vars` | `Record<string, string>` | Env vars applied to every process. See [Environment variables](/sandbox/environment-variables). |
