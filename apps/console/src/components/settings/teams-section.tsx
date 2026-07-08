@@ -18,9 +18,12 @@ import { useCreateTeam, useSwitchTeam, useTeams } from "@/hooks/use-teams"
 import { regionLabel } from "@/lib/format"
 
 /**
- * Team directory + create-team form. Only rendered when more than one cell
- * is configured — the single-cell console has no team creation surface, and
- * that must stay true until a second region exists to choose from.
+ * Team directory + create-team form. The directory renders whenever the
+ * user has more than one team or more than one cell is configured — a
+ * multi-team user needs the Active marker and Switch buttons regardless of
+ * region count. The create-team form stays multi-cell-only: the single-cell
+ * console has no team creation surface, and that must stay true until a
+ * second region exists to choose from.
  */
 export function TeamsSection() {
   const { data } = useTeams()
@@ -31,7 +34,10 @@ export function TeamsSection() {
   const [name, setName] = useState("")
   const [region, setRegion] = useState("use")
 
-  if (!data || data.regions.length <= 1) return null
+  if (!data || (data.regions.length <= 1 && data.teams.length <= 1)) {
+    return null
+  }
+  const canCreate = data.regions.length > 1
 
   const handleCreate = () => {
     createTeam.mutate(
@@ -110,39 +116,43 @@ export function TeamsSection() {
               <p className="px-4 py-3 text-xs text-muted">No teams yet.</p>
             )}
           </div>
-          <Field label="New Team Name">
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="my-team"
-            />
-          </Field>
-          <Field label="Region">
-            <Select
-              value={region}
-              onValueChange={(v) => setRegion(v as string)}
-            >
-              <SelectTrigger aria-label="Team region">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectPopup>
-                {data.regions.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {regionLabel(r)}
-                  </SelectItem>
-                ))}
-              </SelectPopup>
-            </Select>
-          </Field>
-          <div>
-            <Button
-              onClick={handleCreate}
-              disabled={!name.trim() || createTeam.isPending}
-              size="sm"
-            >
-              {createTeam.isPending ? "Creating..." : "Create Team"}
-            </Button>
-          </div>
+          {canCreate && (
+            <>
+              <Field label="New Team Name">
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="my-team"
+                />
+              </Field>
+              <Field label="Region">
+                <Select
+                  value={region}
+                  onValueChange={(v) => setRegion(v as string)}
+                >
+                  <SelectTrigger aria-label="Team region">
+                    <SelectValue>{() => regionLabel(region)}</SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup>
+                    {data.regions.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {regionLabel(r)}
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
+              </Field>
+              <div>
+                <Button
+                  onClick={handleCreate}
+                  disabled={!name.trim() || createTeam.isPending}
+                  size="sm"
+                >
+                  {createTeam.isPending ? "Creating..." : "Create Team"}
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
