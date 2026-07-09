@@ -17,9 +17,9 @@
  * `use-sandbox` form; add it here once it does.
  */
 
-const REGION_SANDBOX_HOSTS: Record<string, string> = {
-  usw: "usw-sandbox.superserve.ai",
-}
+const REGION_SANDBOX_HOSTS = new Map<string, string>([
+  ["usw", "usw-sandbox.superserve.ai"],
+])
 
 const DEFAULT_SANDBOX_HOST =
   process.env.NEXT_PUBLIC_SANDBOX_HOST ?? "sandbox.superserve.ai"
@@ -32,5 +32,8 @@ export function regionFromSandboxId(sandboxId: string): string | undefined {
 /** The data-plane host to reach a sandbox, derived from its id's region. */
 export function sandboxHostFor(sandboxId: string): string {
   const region = regionFromSandboxId(sandboxId)
-  return (region && REGION_SANDBOX_HOSTS[region]) ?? DEFAULT_SANDBOX_HOST
+  return (
+    (region ? REGION_SANDBOX_HOSTS.get(region) : undefined) ??
+    DEFAULT_SANDBOX_HOST
+  )
 }

@@ -27,4 +27,11 @@ describe("sandboxHostFor", () => {
     expect(use).toBe(legacy)
     expect(use).not.toBe("usw-sandbox.superserve.ai")
   })
+
+  it("does not resolve an inherited object property as a region", () => {
+    // `constructor` matches the region-token shape and would return
+    // Object.prototype.constructor from a plain-object map; the Map returns
+    // undefined, so it falls through to the default host.
+    expect(sandboxHostFor(`sb-constructor-${UUID}`)).toBe(sandboxHostFor(UUID))
+  })
 })
