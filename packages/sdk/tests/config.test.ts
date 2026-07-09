@@ -87,6 +87,14 @@ describe("resolveConfig", () => {
     expect(cfg.sandboxHost).toBe("staging-sandbox.superserve.ai")
   })
 
+  it("derives sandboxHost for an explicit usw base URL", () => {
+    const cfg = resolveConfig({
+      apiKey: "k",
+      baseUrl: "https://api-usw.superserve.ai",
+    })
+    expect(cfg.sandboxHost).toBe("usw-sandbox.superserve.ai")
+  })
+
   it("derives sandboxHost falls back to default for unknown URL", () => {
     const cfg = resolveConfig({
       apiKey: "k",

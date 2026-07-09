@@ -167,6 +167,12 @@ class TestDeriveSandboxHost:
             == "staging-sandbox.superserve.ai"
         )
 
+    def test_usw(self) -> None:
+        assert (
+            _derive_sandbox_host("https://api-usw.superserve.ai")
+            == "usw-sandbox.superserve.ai"
+        )
+
     def test_other(self) -> None:
         assert (
             _derive_sandbox_host("https://custom.example.com") == DEFAULT_SANDBOX_HOST

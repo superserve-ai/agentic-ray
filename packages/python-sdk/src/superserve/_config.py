@@ -176,6 +176,7 @@ def _derive_sandbox_host(base_url: str) -> str:
 
     https://api.superserve.ai         -> sandbox.superserve.ai
     https://api-staging.superserve.ai -> staging-sandbox.superserve.ai
+    https://api-usw.superserve.ai     -> usw-sandbox.superserve.ai
     Any other URL                      -> sandbox.superserve.ai (safe default)
     """
     try:
@@ -183,6 +184,8 @@ def _derive_sandbox_host(base_url: str) -> str:
         host = parsed.hostname or ""
         if host == "api-staging.superserve.ai":
             return "staging-sandbox.superserve.ai"
+        if host == "api-usw.superserve.ai":
+            return "usw-sandbox.superserve.ai"
         if host == "api.superserve.ai":
             return DEFAULT_SANDBOX_HOST
     except ValueError:

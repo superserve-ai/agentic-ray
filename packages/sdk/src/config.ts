@@ -199,6 +199,7 @@ export function previewUrl(
  *
  * `https://api.superserve.ai`         → `sandbox.superserve.ai`
  * `https://api-staging.superserve.ai` → `staging-sandbox.superserve.ai`
+ * `https://api-usw.superserve.ai`     → `usw-sandbox.superserve.ai`
  * Any other URL                        → `sandbox.superserve.ai` (safe default)
  */
 function deriveSandboxHost(baseUrl: string): string {
@@ -207,6 +208,9 @@ function deriveSandboxHost(baseUrl: string): string {
     const host = url.hostname
     if (host === "api-staging.superserve.ai") {
       return "staging-sandbox.superserve.ai"
+    }
+    if (host === "api-usw.superserve.ai") {
+      return "usw-sandbox.superserve.ai"
     }
     if (host === "api.superserve.ai") {
       return "sandbox.superserve.ai"
