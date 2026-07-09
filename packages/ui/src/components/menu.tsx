@@ -24,6 +24,7 @@ function MenuPopup({
         sideOffset={sideOffset}
         side={side}
         align={align}
+        className="z-50"
       >
         <MenuPrimitive.Popup
           className={cn(

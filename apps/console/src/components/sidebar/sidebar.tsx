@@ -22,6 +22,7 @@ import {
 import { useSidebar } from "./sidebar-context"
 import { SidebarNav } from "./sidebar-nav"
 import { SidebarUserMenu } from "./sidebar-user-menu"
+import { TeamSwitcher } from "./team-switcher"
 
 function openCommandPalette() {
   window.dispatchEvent(
@@ -64,6 +65,9 @@ export function Sidebar() {
           />
         )}
       </div>
+
+      {/* Team Switcher — scopes every view below to the active team */}
+      {!isCollapsed && <TeamSwitcher />}
 
       {/* Search */}
       <div className="mb-2 px-2.5">

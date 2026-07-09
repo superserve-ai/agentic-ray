@@ -28,7 +28,7 @@ function TooltipPopup({
 }) {
   return (
     <TooltipPrimitive.Portal>
-      <TooltipPrimitive.Positioner sideOffset={sideOffset}>
+      <TooltipPrimitive.Positioner sideOffset={sideOffset} className="z-50">
         <TooltipPrimitive.Popup
           className={cn(
             "ss-tooltip-popup z-50 bg-foreground px-2 py-1 text-xs text-background",

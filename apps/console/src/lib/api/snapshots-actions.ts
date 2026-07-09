@@ -1,15 +1,12 @@
 "use server"
 
-import {
-  listTeamMembershipsForUser,
-  type TeamMembership,
-} from "@/lib/api/team-directory"
+import { resolveActiveTeam } from "@/lib/api/active-team"
+import type { TeamMembership } from "@/lib/api/team-directory"
 import { cellFor } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 async function getTeam(userId: string): Promise<TeamMembership | null> {
-  const memberships = await listTeamMembershipsForUser(userId).catch(() => [])
-  return memberships[0] ?? null
+  return resolveActiveTeam(userId).catch(() => null)
 }
 
 export async function listSnapshotsBySandboxAction(sandboxId: string) {

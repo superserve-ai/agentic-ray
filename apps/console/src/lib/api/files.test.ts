@@ -137,7 +137,7 @@ describe("listDir", () => {
     const entries = await listDir(sandbox, "/home/user")
 
     const [url] = fetchSpy.mock.calls[0]
-    expect(url).toBe("/api/sandboxes/sbx-1/files?path=%2Fhome%2Fuser")
+    expect(url).toBe("/api/sandboxes/sbx-1/files/?path=%2Fhome%2Fuser")
     expect(entries.map((e) => e.name)).toEqual(["sub", "b.txt"])
   })
 

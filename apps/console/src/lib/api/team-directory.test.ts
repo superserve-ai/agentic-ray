@@ -48,10 +48,18 @@ vi.mock("@/lib/cells", () => ({
 }))
 
 import {
+  clearMembershipDirectoryCache,
   listTeamMembershipsForUser,
   listTeamMembershipsForUserDetailed,
   listTeamsForUser,
+  membershipExistsInCell,
 } from "./team-directory"
+
+// The membership directory caches per user id and tests reuse ids across
+// cases with different mock data — every case starts cold.
+beforeEach(() => {
+  clearMembershipDirectoryCache()
+})
 
 describe("team directory fan-out", () => {
   beforeEach(() => {
@@ -247,5 +255,85 @@ describe("RBAC-authoritative membership", () => {
     expect(await listTeamMembershipsForUser("u1")).toEqual([
       { teamId: "team-2", region: "use" },
     ])
+  })
+})
+
+describe("membership directory cache", () => {
+  beforeEach(() => {
+    regions = ["use"]
+    cellClients = { use: cellClient([{ team_id: "t1" }]) }
+  })
+
+  it("serves repeat reads within the TTL from cache", async () => {
+    await listTeamMembershipsForUserDetailed("u1")
+    await listTeamMembershipsForUserDetailed("u1")
+    expect(cellClients.use.from).toHaveBeenCalledTimes(2) // one fan-out: rbac + legacy
+  })
+
+  it("collapses concurrent reads into one fan-out", async () => {
+    await Promise.all([
+      listTeamMembershipsForUserDetailed("u1"),
+      listTeamMembershipsForUserDetailed("u1"),
+      listTeamMembershipsForUserDetailed("u1"),
+    ])
+    expect(cellClients.use.from).toHaveBeenCalledTimes(2)
+  })
+
+  it("maxAgeMs 0 always reads fresh", async () => {
+    await listTeamMembershipsForUserDetailed("u1")
+    await listTeamMembershipsForUserDetailed("u1", { maxAgeMs: 0 })
+    expect(cellClients.use.from).toHaveBeenCalledTimes(4)
+  })
+
+  it("does not share entries across users", async () => {
+    await listTeamMembershipsForUserDetailed("u1")
+    await listTeamMembershipsForUserDetailed("u2")
+    expect(cellClients.use.from).toHaveBeenCalledTimes(4)
+  })
+
+  it("invalidateMembershipDirectory forces the next read to fetch", async () => {
+    const { invalidateMembershipDirectory } = await import("./team-directory")
+    await listTeamMembershipsForUserDetailed("u1")
+    invalidateMembershipDirectory("u1")
+    await listTeamMembershipsForUserDetailed("u1")
+    expect(cellClients.use.from).toHaveBeenCalledTimes(4)
+  })
+
+  it("does not cache failures", async () => {
+    const failing = {
+      from: vi.fn(() => {
+        throw new Error("cell down")
+      }),
+    }
+    cellClients = { use: failing as unknown as ReturnType<typeof cellClient> }
+    await expect(listTeamMembershipsForUserDetailed("u1")).rejects.toThrow()
+    cellClients = { use: cellClient([{ team_id: "t1" }]) }
+    const result = await listTeamMembershipsForUserDetailed("u1")
+    expect(result.memberships).toEqual([{ teamId: "t1", region: "use" }])
+  })
+})
+
+describe("membershipExistsInCell", () => {
+  it("checks only the named cell and honors RBAC precedence", async () => {
+    regions = ["use", "usw"]
+    cellClients = {
+      use: cellClient([{ team_id: "t-legacy" }]),
+      usw: cellClient([], [], [{ team_id: "t-west", status: "active" }]),
+    }
+    expect(await membershipExistsInCell("usw", "u1", "t-west")).toBe(true)
+    expect(await membershipExistsInCell("usw", "u1", "t-legacy")).toBe(false)
+    expect(cellClients.use.from).not.toHaveBeenCalled()
+  })
+
+  it("denies an inactive RBAC membership even with a legacy row", async () => {
+    regions = ["use"]
+    cellClients = {
+      use: cellClient(
+        [{ team_id: "t1" }],
+        [],
+        [{ team_id: "t1", status: "inactive" }],
+      ),
+    }
+    expect(await membershipExistsInCell("use", "u1", "t1")).toBe(false)
   })
 })

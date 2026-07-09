@@ -10,6 +10,11 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }))
 
+// No cookie set: active-team resolution falls back to the first membership.
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => undefined }),
+}))
+
 let uswProfileChecked = false
 let insertedApiKeyRow: Record<string, unknown> | null = null
 

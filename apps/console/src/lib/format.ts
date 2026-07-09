@@ -36,6 +36,16 @@ export function formatTime(date: Date): { relative: string; absolute: string } {
   return { relative, absolute }
 }
 
+const REGION_LABELS: Record<string, string> = {
+  use: "US East",
+  usw: "US West",
+}
+
+/** Human label for a cell region code; unknown codes pass through as-is. */
+export function regionLabel(region: string): string {
+  return REGION_LABELS[region] ?? region
+}
+
 /** Compact duration label (s/m/h/d) for timeout and auto-delete windows. */
 export function formatTimeout(seconds: number): string {
   if (seconds < 60) return `${seconds}s`
