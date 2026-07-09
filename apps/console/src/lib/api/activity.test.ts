@@ -74,7 +74,7 @@ describe("listActivityPaged", () => {
     })
 
     const [url] = fetchSpy.mock.calls[0] as [string, RequestInit]
-    expect(url).toContain("/api/activity?")
+    expect(url).toContain("/api/activity/?")
     expect(url).toContain("category=sandbox")
     expect(result.total).toBe(42)
     expect(result.items).toEqual([{ id: "a1" }])
