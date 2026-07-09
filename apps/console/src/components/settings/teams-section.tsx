@@ -79,9 +79,6 @@ export function TeamsSection() {
                 >
                   <span className="text-sm text-foreground">{team.name}</span>
                   <span className="flex items-center gap-3">
-                    <span className="font-mono text-xs text-muted uppercase">
-                      {regionLabel(team.region)}
-                    </span>
                     {/* Switching lives in the sidebar team dropdown; this
                         directory only marks which team is active. */}
                     {isActive && (
@@ -89,6 +86,9 @@ export function TeamsSection() {
                         Active
                       </span>
                     )}
+                    <span className="font-mono text-xs text-muted uppercase">
+                      {regionLabel(team.region)}
+                    </span>
                   </span>
                 </div>
               )
