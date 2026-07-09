@@ -38,9 +38,12 @@ export async function readTeamSelection(): Promise<TeamSelection | null> {
 /**
  * The membership the console operates on. The selection wins when it matches
  * a live membership. The fallback must be deterministic across surfaces and
- * server instances (they resolve the team independently): memberships arrive
- * in cell order already, so only within-cell order needs pinning — the sort
- * is stable and compares nothing across regions.
+ * server instances (they resolve the team independently): regions keep their
+ * incoming (cell) order via a first-appearance rank, and within a region the
+ * team id pins the order. Ranking rather than a conditional comparator keeps
+ * the sort a strict weak ordering — returning 0 across regions while
+ * comparing ids within one is not transitive, and engines may order such
+ * comparators arbitrarily.
  */
 export function pickActiveTeam(
   memberships: TeamMembership[],
@@ -52,8 +55,15 @@ export function pickActiveTeam(
     )
     if (match) return match
   }
-  const ordered = memberships.toSorted((a, b) =>
-    a.region === b.region ? a.teamId.localeCompare(b.teamId) : 0,
+  const regionRank = new Map<string, number>()
+  for (const m of memberships) {
+    if (!regionRank.has(m.region)) regionRank.set(m.region, regionRank.size)
+  }
+  const ordered = memberships.toSorted(
+    (a, b) =>
+      (regionRank.get(a.region) as number) -
+        (regionRank.get(b.region) as number) ||
+      a.teamId.localeCompare(b.teamId),
   )
   return ordered[0] ?? null
 }
