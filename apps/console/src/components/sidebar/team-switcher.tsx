@@ -34,6 +34,17 @@ export function TeamSwitcher() {
   const active = data.teams.find(
     (t) => t.id === data.activeTeamId && t.region === data.activeRegion,
   )
+  // Active team first (it's what the trigger shows, so the list reads as a
+  // continuation), everything else alphabetical.
+  const ordered = [
+    ...(active ? [active] : []),
+    ...data.teams
+      .filter((t) => t !== active)
+      .toSorted(
+        (a, b) =>
+          a.name.localeCompare(b.name) || a.region.localeCompare(b.region),
+      ),
+  ]
   // Region badges only add signal when the directory spans regions.
   const multiRegion = new Set(data.teams.map((t) => t.region)).size > 1
 
@@ -68,7 +79,7 @@ export function TeamSwitcher() {
           </SelectValue>
         </SelectTrigger>
         <SelectPopup dropdown>
-          {data.teams.map((team) => (
+          {ordered.map((team) => (
             <SelectItem key={optionValue(team)} value={optionValue(team)}>
               {teamLabel(team)}
             </SelectItem>

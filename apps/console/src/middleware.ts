@@ -41,7 +41,10 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     // Skip Next internals and common static assets so getUser() isn't called
-    // on every font/css/js request.
-    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf|css|js|map)$).*)",
+    // on every font/css/js request. /api is skipped too: every API route
+    // authenticates its own request (and answers JSON, not a redirect to the
+    // signin page), so the middleware getUser() was a second Supabase auth
+    // round-trip on every API call — including the 10s sandbox list poll.
+    "/((?!api/|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf|css|js|map)$).*)",
   ],
 }

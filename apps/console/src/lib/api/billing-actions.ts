@@ -55,8 +55,11 @@ export interface BillingSettingsResponse {
 }
 
 async function getTeam(userId: string): Promise<TeamMembership | null> {
+  // maxAgeMs 0: billing's fail-closed check below reasons about the
+  // freshness of the read itself, so it must not be served from the
+  // directory cache.
   const { memberships, degradedRegions } =
-    await listTeamMembershipsForUserDetailed(userId)
+    await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 })
 
   // Fail closed on a partial directory read: with a cell unreachable,
   // "exactly one membership" may just mean the other team's cell is down —

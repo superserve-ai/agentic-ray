@@ -87,3 +87,25 @@ describe("TeamSwitcher", () => {
     expect(container).toBeEmptyDOMElement()
   })
 })
+
+describe("TeamSwitcher ordering", () => {
+  it("lists the active team first, the rest alphabetical", async () => {
+    teamsData = {
+      switchingEnabled: true,
+      activeTeamId: "team-m",
+      activeRegion: "use",
+      teams: [
+        { id: "team-z", name: "zeta", region: "use" },
+        { id: "team-m", name: "mango", region: "use" },
+        { id: "team-a", name: "apple", region: "use" },
+      ],
+    }
+    const user = userEvent.setup()
+    render(<TeamSwitcher />)
+    await user.click(screen.getByRole("combobox", { name: "Active team" }))
+    const labels = (await screen.findAllByRole("option")).map(
+      (o) => o.textContent,
+    )
+    expect(labels).toEqual(["mango", "apple", "zeta"])
+  })
+})

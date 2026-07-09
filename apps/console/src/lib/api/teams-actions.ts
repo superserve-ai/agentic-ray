@@ -10,11 +10,13 @@ import {
   type TeamSelection,
 } from "@/lib/api/active-team"
 import {
-  listTeamMembershipsForUser,
+  invalidateMembershipDirectory,
   listTeamsForUser,
+  membershipExistsInCell,
 } from "@/lib/api/team-directory"
 import {
   cellFor,
+  configuredRegions,
   creatableRegions,
   DEFAULT_REGION,
   multiCellUiEnabled,
@@ -105,11 +107,14 @@ export async function setActiveTeamAction(
     throw new Error("Team switching is not enabled for your account")
   }
 
-  const memberships = await listTeamMembershipsForUser(user.id)
-  const match = memberships.find(
-    (m) => m.teamId === teamId && m.region === region,
-  )
-  if (!match) throw new Error("You are not a member of that team")
+  // The target names its cell, so validate the membership there alone — the
+  // every-cell fan-out buys nothing here and doubles the action's latency.
+  if (
+    !configuredRegions().includes(region) ||
+    !(await membershipExistsInCell(region, user.id, teamId))
+  ) {
+    throw new Error("You are not a member of that team")
+  }
 
   await storeTeamSelection({ region, teamId })
 }
@@ -242,6 +247,10 @@ export async function createTeamAction(
       { cause: chainErr },
     )
   }
+
+  // The user just gained a membership; drop their cached directory so the
+  // very next read sees the new team instead of waiting out the TTL.
+  invalidateMembershipDirectory(user.id)
 
   // Land the creator in the team they just made — the reason to create a
   // team is almost always to start working in it.

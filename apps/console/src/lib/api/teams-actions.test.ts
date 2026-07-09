@@ -98,8 +98,12 @@ vi.mock("@/lib/cells", () => ({
 let directoryTeams: Array<{ id: string; name: string; region: string }> = []
 vi.mock("@/lib/api/team-directory", () => ({
   listTeamsForUser: async () => directoryTeams,
-  listTeamMembershipsForUser: async () =>
-    directoryTeams.map((t) => ({ teamId: t.id, region: t.region })),
+  membershipExistsInCell: async (
+    region: string,
+    _userId: string,
+    teamId: string,
+  ) => directoryTeams.some((t) => t.id === teamId && t.region === region),
+  invalidateMembershipDirectory: () => {},
 }))
 
 // Cookie store stub capturing active-team writes.

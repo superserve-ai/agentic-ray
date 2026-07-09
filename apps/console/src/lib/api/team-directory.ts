@@ -62,14 +62,74 @@ export interface MembershipDirectory {
  */
 export async function listTeamMembershipsForUserDetailed(
   userId: string,
+  opts?: { maxAgeMs?: number },
 ): Promise<MembershipDirectory> {
-  const { items, degradedRegions } = await acrossCells(async (region) => {
+  const maxAgeMs = opts?.maxAgeMs ?? DIRECTORY_CACHE_TTL_MS
+  // Strict inequality so maxAgeMs 0 can never hit cache, even for a read in
+  // the same millisecond as the fill.
+  const cached = directoryCache.get(userId)
+  if (cached && Date.now() - cached.fetchedAt < maxAgeMs) {
+    return cached.promise
+  }
+
+  const fetchedAt = Date.now()
+  const promise = acrossCells(async (region) => {
     const admin = cellFor(region).createAdminClient()
     return membershipTeamIdsInCell(admin, userId).then((teamIds) =>
       teamIds.map((teamId) => ({ teamId, region })),
     )
+  }).then(({ items, degradedRegions }) => ({
+    memberships: items,
+    degradedRegions,
+  }))
+
+  // The in-flight promise is cached too, so the burst of parallel server
+  // actions after a page load or team switch collapses into one fan-out.
+  // Failures are evicted rather than cached.
+  directoryCache.set(userId, { promise, fetchedAt })
+  promise.catch(() => {
+    if (directoryCache.get(userId)?.promise === promise) {
+      directoryCache.delete(userId)
+    }
   })
-  return { memberships: items, degradedRegions }
+  return promise
+}
+
+// Membership reads back most server actions, so a fan-out per action call
+// adds two queries per cell before any real work. Same staleness model as
+// proxy-auth's authz cache: this IS authorization state, so it's cached for
+// one bounded minute, never indefinitely. Callers whose correctness depends
+// on a fresh read (billing fails closed on degraded cells) pass maxAgeMs: 0.
+const DIRECTORY_CACHE_TTL_MS = 60_000
+const directoryCache = new Map<
+  string,
+  { promise: Promise<MembershipDirectory>; fetchedAt: number }
+>()
+
+/** Evict a user's cached membership directory (e.g. after creating a team). */
+export function invalidateMembershipDirectory(userId: string): void {
+  directoryCache.delete(userId)
+}
+
+/** @internal — for tests, which reuse user ids across cases. */
+export function clearMembershipDirectoryCache(): void {
+  directoryCache.clear()
+}
+
+/**
+ * Whether the user is authorized for one specific team in one specific cell
+ * — the membership lookup scoped to a single region, for callers that
+ * already know the target (e.g. validating a team switch) and shouldn't pay
+ * the every-cell fan-out. Always a fresh read: it guards writes.
+ */
+export async function membershipExistsInCell(
+  region: string,
+  userId: string,
+  teamId: string,
+): Promise<boolean> {
+  const admin = cellFor(region).createAdminClient()
+  const teamIds = await membershipTeamIdsInCell(admin, userId)
+  return teamIds.includes(teamId)
 }
 
 /**
