@@ -8,11 +8,13 @@ import type {
   SandboxOps,
 } from "../lib/run-loop"
 import {
+  assertTokenScope,
   buildSpec,
   parsePrFlag,
   parseRepoUrl,
   resolveAuth,
   runTick,
+  writeCapableScopes,
 } from "../pr-loop/loop"
 
 // Loop code always passes the same metadata object (stable key order), so a
@@ -265,7 +267,19 @@ describe("pr-loop buildSpec / resolveAuth", () => {
     expect(built.iterate).toContain("set -e")
     expect(built.setup).toContain("git clone")
     expect(built.setup).toContain("credential.helper")
-    expect(built.iterate).toContain("--disallowedTools")
+    // Defense-in-depth deny list: merge/push plus the PR-state mutations the
+    // loop never needs. (`gh pr review`/`gh pr edit` stay allowed — posting the
+    // review and the two loop labels needs them; the skill's hard rules cover
+    // approve / other labels / --base.)
+    for (const denied of [
+      "Bash(gh pr merge*)",
+      "Bash(git push*)",
+      "Bash(gh pr close*)",
+      "Bash(gh pr reopen*)",
+      "Bash(gh pr ready*)",
+    ]) {
+      expect(built.iterate).toContain(denied)
+    }
     // No --pr → sweep every open PR.
     expect(built.iterate).toContain("Review the open PRs in $TARGET_REPO")
   })
@@ -337,6 +351,81 @@ describe("pr-loop one-shot exit propagation", () => {
   it("returns 0 when the tick succeeds", async () => {
     const code = await runTick(spec, async () => fakeResult(0), noop)
     expect(code).toBe(0)
+  })
+})
+
+describe("token scope gate", () => {
+  const fetchWithScopes = (scopes: string | null): typeof fetch =>
+    (async () =>
+      new Response(
+        "",
+        scopes === null ? undefined : { headers: { "x-oauth-scopes": scopes } },
+      )) as unknown as typeof fetch
+
+  const neverFetch = (async () => {
+    throw new Error("must not introspect this token type")
+  }) as unknown as typeof fetch
+
+  it("fails closed on a write-capable classic PAT (repo scope = push + merge)", async () => {
+    await expect(
+      assertTokenScope("ghp_classic", {
+        fetchImpl: fetchWithScopes("repo, read:org"),
+        allowWrite: false,
+      }),
+    ).rejects.toThrow(/write-capable/)
+  })
+
+  it("accepts a read-only classic PAT", async () => {
+    await expect(
+      assertTokenScope("ghp_classic", {
+        fetchImpl: fetchWithScopes("read:org"),
+        allowWrite: false,
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it("skips introspection for per-run Actions/App and fine-grained tokens", async () => {
+    // ghs_ is bounded by the workflow's permissions block; github_pat_ can't
+    // report scopes at all — both are the documented least-privilege paths.
+    await expect(
+      assertTokenScope("ghs_run_token", { fetchImpl: neverFetch }),
+    ).resolves.toBeUndefined()
+    await expect(
+      assertTokenScope("github_pat_fine_grained", { fetchImpl: neverFetch }),
+    ).resolves.toBeUndefined()
+  })
+
+  it("honors the explicit escape hatch", async () => {
+    await expect(
+      assertTokenScope("ghp_classic", {
+        fetchImpl: fetchWithScopes("repo"),
+        allowWrite: true,
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it("does not block when introspection itself fails (offline dev — the API call would fail later anyway)", async () => {
+    const failing = (async () => {
+      throw new Error("network down")
+    }) as unknown as typeof fetch
+    await expect(
+      assertTokenScope("ghp_classic", {
+        fetchImpl: failing,
+        allowWrite: false,
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it("classifies write-capable classic scopes", () => {
+    expect(writeCapableScopes("repo, read:org")).toEqual(["repo"])
+    expect(writeCapableScopes("workflow")).toEqual(["workflow"])
+    expect(writeCapableScopes("admin:org, write:packages")).toEqual([
+      "admin:org",
+      "write:packages",
+    ])
+    expect(writeCapableScopes("read:org, read:user")).toEqual([])
+    expect(writeCapableScopes(null)).toEqual([])
+    expect(writeCapableScopes("")).toEqual([])
   })
 })
 

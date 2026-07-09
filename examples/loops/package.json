@@ -1,6 +1,6 @@
 {
   "name": "@superserve/loops",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Agent loops that run on Superserve sandboxes — a warm, isolated runtime for loop engineering.",
   "bin": {
     "superserve-loops": "install/cli.ts"
@@ -32,6 +32,7 @@
     "@types/node": "^25.5.2",
     "typescript": "^5.7.0",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "yaml": "^2.9.0"
   }
 }

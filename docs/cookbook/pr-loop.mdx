@@ -105,7 +105,7 @@ By default reviews post as `github-actions[bot]` — zero GitHub credentials to 
 
 ### A custom name — machine-user PAT
 
-Create a dedicated GitHub account (e.g. `acme-review-bot`) and mint a fine-grained PAT on the target repo with `Contents: Read`, `Pull requests: Read & write`, `Issues: Read & write` (or a classic token with `repo` scope). Then install with:
+Create a dedicated GitHub account (e.g. `acme-review-bot`) and mint a **fine-grained** PAT on the target repo with `Contents: Read`, `Pull requests: Read & write`, `Issues: Read & write`. Classic `repo`-scope tokens are refused — `repo` includes push and merge rights, which would void the loop's propose-only guarantee. Then install with:
 
 ```bash
 bunx @superserve/loops add pr-loop --github-token <PAT>

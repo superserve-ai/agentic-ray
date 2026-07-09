@@ -5,7 +5,7 @@ import { dirname, join, relative } from "node:path"
 
 import { Secret } from "@superserve/sdk"
 
-import { runLoopCli } from "../pr-loop/loop"
+import { assertTokenScope, runLoopCli } from "../pr-loop/loop"
 
 /**
  * `superserve-loops add pr-loop` — one-command install of a loop into the
@@ -89,19 +89,29 @@ function promptHidden(query: string): Promise<string> {
     stdin.setRawMode(true)
     stdin.resume()
     let buf = ""
+    // Fail fast if stdin dies mid-prompt (pipe break, SSH drop) — without this
+    // the promise never settles and the installer hangs indefinitely. Removed
+    // together with the data listener once the prompt settles, so a later stdin
+    // hiccup can't kill the install halfway through the secret-rotation /
+    // commit / push steps that follow.
+    const onError = (): void => fail("stdin closed while waiting for input")
+    const detach = (): void => {
+      stdin.setRawMode(false)
+      stdin.off("data", onData)
+      stdin.off("error", onError)
+    }
     const onData = (d: Buffer): void => {
       const ch = d.toString("utf8")
       const code = ch.charCodeAt(0)
       if (code === 13 || code === 10 || code === 4) {
         // Enter / Ctrl-D — submit
-        stdin.setRawMode(false)
+        detach()
         stdin.pause()
-        stdin.off("data", onData)
         stdout.write("\n")
         resolve(buf.trim())
       } else if (code === 3) {
         // Ctrl-C — abort
-        stdin.setRawMode(false)
+        detach()
         process.exit(1)
       } else if (code === 127 || code === 8) {
         // Backspace
@@ -111,9 +121,7 @@ function promptHidden(query: string): Promise<string> {
       }
     }
     stdin.on("data", onData)
-    // Without this, a mid-prompt disconnect (pipe break, SSH drop) leaves the
-    // promise never settling and the installer hanging indefinitely.
-    stdin.once("error", () => fail("stdin closed while waiting for input"))
+    stdin.once("error", onError)
   })
 }
 
@@ -354,15 +362,50 @@ function writeWorkflow(
 }
 
 /**
+ * True when both GitHub App secrets are already visible to the repo (repo- or
+ * org-level). Pushing the App-mode workflow before they exist ships a live,
+ * immediately-red workflow: its very first `pull_request` event fails at the
+ * token-mint step. Fail closed — any lookup error (no `gh`, no access, not an
+ * org repo) counts as "not configured".
+ */
+function appSecretsConfigured(
+  repo: string,
+  ghToken: string | undefined,
+): boolean {
+  const env = ghToken ? { ...process.env, GH_TOKEN: ghToken } : process.env
+  const names = new Set<string>()
+  const endpoints = [
+    `repos/${repo}/actions/secrets`, // repo-level
+    `repos/${repo}/actions/organization-secrets`, // org-level, visible to this repo
+  ]
+  for (const endpoint of endpoints) {
+    try {
+      const out = execFileSync(
+        "gh",
+        ["api", endpoint, "--jq", ".secrets[].name"],
+        { encoding: "utf8", env, stdio: ["ignore", "pipe", "ignore"] },
+      )
+      for (const name of out.split("\n")) names.add(name.trim())
+    } catch {
+      // 404 (user-owned repo has no org secrets) or no gh/access — treat as unset.
+    }
+  }
+  return names.has(APP_ID_SECRET) && names.has(APP_KEY_SECRET)
+}
+
+/**
  * Commit and push the workflow file. Without this, the file only exists in the
  * local working tree — GitHub never sees it, no run is registered, and the loop
  * silently never fires. Falls back to printing the manual commands on any
  * failure (no repo write access, nothing to commit, no upstream configured, …).
+ * With `push: false` (App mode before its secrets exist) it commits but leaves
+ * publishing to the user, so a half-configured workflow never goes live.
  */
 function commitAndPushWorkflow(
   repoRoot: string,
   path: string,
   dryRun: boolean,
+  push = true,
 ): void {
   const rel = relative(repoRoot, path)
   if (dryRun) {
@@ -390,6 +433,13 @@ function commitAndPushWorkflow(
       `could not commit automatically (${(err as Error).message.split("\n")[0]}).`,
     )
     manualFallback()
+    return
+  }
+  if (!push) {
+    c.warn(
+      "NOT pushed yet — the workflow references GitHub App secrets that aren't set.",
+    )
+    c.info("Set them (instructions below), then publish with: git push")
     return
   }
   try {
@@ -525,6 +575,14 @@ async function main(): Promise<void> {
   // the workflow's built-in token (no PAT). Pass --github-token to opt into a PAT
   // identity — needed to review a different repo or to post under a branded account.
   const patToken = flags.githubToken
+  // Fail closed on write-capable classic PATs BEFORE storing anything: the loop's
+  // "propose, never merge/push" guarantee is the token scope, and this is the last
+  // point where the raw value is in hand (as a Superserve secret it never is again).
+  if (patToken && !flags.dryRun) {
+    await assertTokenScope(patToken).catch((err: unknown) => {
+      fail((err as Error).message)
+    })
+  }
   // Auth for the one-time `gh secret set` below: the explicit PAT if given, else the
   // user's ambient `gh` login / CI token. This only stores SUPERSERVE_API_KEY — it is
   // NOT the bot identity (that's the workflow token at runtime).
@@ -582,7 +640,13 @@ async function main(): Promise<void> {
     },
     flags.dryRun,
   )
-  commitAndPushWorkflow(repoRoot, workflowPath, flags.dryRun)
+  // App mode: only auto-push once LOOP_APP_ID / LOOP_APP_PRIVATE_KEY exist —
+  // pushing earlier ships a workflow whose first pull_request event fails at
+  // the token-mint step. The default and PAT paths are immune (their credential
+  // exists at push time), so they always push.
+  const appSecretsReady =
+    !flags.githubApp || flags.dryRun || appSecretsConfigured(repo, ghAuthToken)
+  commitAndPushWorkflow(repoRoot, workflowPath, flags.dryRun, appSecretsReady)
 
   c.step("3/3  GitHub Actions secret")
   setActionsSecret(repo, apiKey, ghAuthToken, flags.dryRun)
@@ -602,10 +666,15 @@ async function main(): Promise<void> {
       c.info(
         "  Prefer ORG secrets (--org instead of --repo) so every future repo inherits them.",
       )
+      if (!appSecretsReady) {
+        c.info("Then publish the committed workflow: git push")
+      }
     }
-    c.info(
-      `gh workflow run loop-pr-loop.yml --repo ${repo}   # trigger the first run now`,
-    )
+    if (appSecretsReady) {
+      c.info(
+        `gh workflow run loop-pr-loop.yml --repo ${repo}   # trigger the first run now`,
+      )
+    }
     c.info(
       flags.githubApp
         ? "Each new commit to a PR is reviewed within seconds — reviews post as your GitHub App."

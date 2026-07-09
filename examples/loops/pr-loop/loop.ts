@@ -97,6 +97,66 @@ export function resolveAuth(env: NodeJS.ProcessEnv): ResolvedAuth {
   return { secrets, envVars, claudeMode }
 }
 
+/** Classic-PAT scopes that grant write access somewhere (push, merge, workflow
+ *  edits, admin). Any of these on the loop's token voids the "propose, never
+ *  act" guarantee, which is enforced by token scope — not by the in-box mode. */
+export function writeCapableScopes(scopesHeader: string | null): string[] {
+  if (!scopesHeader) return []
+  return scopesHeader
+    .split(",")
+    .map((s) => s.trim())
+    .filter(
+      (s) =>
+        s === "repo" ||
+        s === "workflow" ||
+        s === "delete_repo" ||
+        s.startsWith("write:") ||
+        s.startsWith("admin:"),
+    )
+}
+
+/**
+ * Fail closed on write-capable GitHub tokens. The load-bearing "propose, never
+ * merge/push" guarantee is the TOKEN SCOPE (the in-box deny list is
+ * defense-in-depth only), so a classic `repo`-scope PAT silently voids it.
+ * Only classic PATs are introspectable — GitHub echoes their scopes in the
+ * `x-oauth-scopes` header; per-run Actions/App tokens (`ghs_`) are bounded by
+ * the workflow's permissions block, and fine-grained PATs (`github_pat_`)
+ * can't be broader than what the README mandates the user mint. If the lookup
+ * itself fails (offline dev) we don't block — every later API call would fail
+ * the same way. Set LOOP_ALLOW_WRITE_TOKEN=1 to accept the risk explicitly.
+ */
+export async function assertTokenScope(
+  token: string,
+  opts: { fetchImpl?: typeof fetch; allowWrite?: boolean } = {},
+): Promise<void> {
+  const allowWrite =
+    opts.allowWrite ?? process.env.LOOP_ALLOW_WRITE_TOKEN === "1"
+  if (allowWrite) return
+  if (token.startsWith("ghs_") || token.startsWith("github_pat_")) return
+  const fetchImpl = opts.fetchImpl ?? fetch
+  let scopes: string | null
+  try {
+    // /rate_limit is free (doesn't consume quota) and echoes the classic
+    // token's scopes in the response headers.
+    const res = await fetchImpl("https://api.github.com/rate_limit", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    scopes = res.headers.get("x-oauth-scopes")
+  } catch {
+    return
+  }
+  const offending = writeCapableScopes(scopes)
+  if (offending.length > 0) {
+    throw new Error(
+      `GITHUB_TOKEN is a write-capable classic PAT (scopes: ${offending.join(", ")}). ` +
+        "The loop must not be able to push or merge — use a fine-grained PAT with " +
+        "Contents: Read + Pull requests: Read & write instead (see the pr-loop README), " +
+        "or set LOOP_ALLOW_WRITE_TOKEN=1 to accept the risk.",
+    )
+  }
+}
+
 /** One-time bootstrap: install `gh` (root-free), place the skill, clone the repo. */
 function setupScript(): string {
   return [
@@ -175,8 +235,14 @@ function iterateScript(claudeMode: ClaudeMode, pr?: number): string {
     // the in-box mode. The deny list + skill rules below are defense-in-depth.
     "  --permission-mode bypassPermissions \\",
     // Defense-in-depth only (the token scope above is the real block; bypass may not
-    // enforce this): keep merge/push off the menu so a prompt-injected tick can't try.
-    '  --disallowedTools "Bash(gh pr merge*),Bash(git push*)" \\',
+    // enforce this, and any regex deny is evadable by command shape): keep merge/push
+    // and the PR-state mutations the loop never needs (close/reopen/ready) off the
+    // menu. `gh pr review` and `gh pr edit` stay allowed — posting the review and the
+    // two loop labels needs them — so the skill's hard rules cover approve /
+    // request-changes / other labels / --base retargeting. Approving with the default
+    // workflow token is additionally blocked by GitHub's "Allow GitHub Actions to
+    // create and approve pull requests" repo setting (off by default — leave it off).
+    '  --disallowedTools "Bash(gh pr merge*),Bash(git push*),Bash(gh pr close*),Bash(gh pr reopen*),Bash(gh pr ready*)" \\',
     "  --output-format json \\",
     "  --max-turns 50",
   ].join("\n")
@@ -338,6 +404,18 @@ export async function runLoopCli(argv: string[]): Promise<void> {
       process.exit(1)
     }
     auth = { secrets: {}, envVars: {}, claudeMode: "subscription" }
+  }
+
+  // Fail closed on a write-capable classic PAT (the raw-token dev/CI path — a
+  // Superserve-secret binding is checked at install time instead, since the
+  // raw value never reaches this process).
+  if (!dryRun && auth.envVars.GITHUB_TOKEN) {
+    try {
+      await assertTokenScope(auth.envVars.GITHUB_TOKEN)
+    } catch (err) {
+      console.error(`error: ${(err as Error).message}`)
+      process.exit(1)
+    }
   }
 
   const pr = parsePrFlag(getFlag(args, "--pr"))

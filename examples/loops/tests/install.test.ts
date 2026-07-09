@@ -1,6 +1,24 @@
 import { describe, expect, it } from "vitest"
+import { parse } from "yaml"
 
 import { buildWorkflow, extractOAuthToken } from "../install/cli"
+
+/** The parsed shape of the generated workflow — just what the tests assert on. */
+interface ParsedWorkflow {
+  on: { pull_request: { types: string[] } }
+  permissions: Record<string, string>
+  jobs: {
+    tick: {
+      steps: Array<{
+        id?: string
+        uses?: string
+        run?: string
+        with?: Record<string, string>
+        env?: Record<string, string>
+      }>
+    }
+  }
+}
 
 describe("buildWorkflow", () => {
   it("defaults to the github-actions[bot] built-in token — no PAT, least-privilege perms", () => {
@@ -69,6 +87,56 @@ describe("buildWorkflow", () => {
     })
     expect(both).toContain("steps.app-token.outputs.token")
     expect(both).not.toContain("SUPERSERVE_GITHUB_SECRET")
+  })
+})
+
+describe("buildWorkflow — structural (parsed YAML)", () => {
+  // The substring assertions above can't catch indentation drift or a dropped
+  // newline that silently joins one step onto another — parse the document and
+  // assert the structure survives in every identity mode.
+  it("parses to a valid least-privilege workflow in every identity mode", () => {
+    for (const opts of [
+      {},
+      { githubSecret: "loop-github-token" },
+      { githubApp: true },
+    ]) {
+      const doc = parse(buildWorkflow(opts)) as ParsedWorkflow
+      expect(doc.on.pull_request.types).toContain("synchronize")
+      expect(doc.permissions).toEqual({
+        contents: "read",
+        "pull-requests": "write",
+      })
+      expect(Array.isArray(doc.jobs.tick.steps)).toBe(true)
+    }
+  })
+
+  it("default mode: two steps, built-in token wired into the run env", () => {
+    const doc = parse(buildWorkflow()) as ParsedWorkflow
+    const steps = doc.jobs.tick.steps
+    expect(steps).toHaveLength(2)
+    expect(steps[0].uses).toBe("oven-sh/setup-bun@v2")
+    expect(steps[1].run).toContain("run pr-loop")
+    expect(steps[1].env?.GITHUB_TOKEN).toBe("${{ github.token }}")
+    expect(steps[1].env?.SUPERSERVE_API_KEY).toBe(
+      "${{ secrets.SUPERSERVE_API_KEY }}",
+    )
+  })
+
+  it("App mode: the token-mint step is a separate FIRST step feeding the run env", () => {
+    const doc = parse(buildWorkflow({ githubApp: true })) as ParsedWorkflow
+    const steps = doc.jobs.tick.steps
+    expect(steps).toHaveLength(3)
+    expect(steps[0].uses).toBe("actions/create-github-app-token@v1")
+    expect(steps[0].id).toBe("app-token")
+    expect(steps[0].with?.["app-id"]).toBe("${{ secrets.LOOP_APP_ID }}")
+    expect(steps[0].with?.["private-key"]).toBe(
+      "${{ secrets.LOOP_APP_PRIVATE_KEY }}",
+    )
+    expect(steps[1].uses).toBe("oven-sh/setup-bun@v2")
+    expect(steps[2].run).toContain("run pr-loop")
+    expect(steps[2].env?.GITHUB_TOKEN).toBe(
+      "${{ steps.app-token.outputs.token }}",
+    )
   })
 })
 

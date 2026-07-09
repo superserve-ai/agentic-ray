@@ -84,8 +84,11 @@ bunx @superserve/loops add pr-loop --github-token <PAT>
 ```
 
 **PAT scopes** (only for the `--github-token` path): a fine-grained PAT on the target repo with
-`Contents: Read`, `Pull requests: Read & write`, `Issues: Read & write` — or a classic token with
-`repo` scope. To post under a custom _name_ without creating a GitHub App, make the PAT from a
+`Contents: Read`, `Pull requests: Read & write`, `Issues: Read & write`. Classic `repo`-scope
+tokens are **refused** (fail closed at install and at each tick): `repo` grants push/merge on
+every repo the account can reach, which voids the loop's "propose, never act" guarantee. Set
+`LOOP_ALLOW_WRITE_TOKEN=1` only if you knowingly accept that risk.
+To post under a custom _name_ without creating a GitHub App, make the PAT from a
 dedicated [machine-user account](https://docs.github.com/en/get-started/learning-about-github/types-of-github-accounts)
 (e.g. `acme-review-bot`); reviews then post as that user. A GitHub App ([below](#give-it-a-branded-avatar))
 additionally gets you the `[bot]` badge, an avatar, and short-lived per-repo tokens.
@@ -346,6 +349,19 @@ loop accepts its Claude credential four ways, checked in this order: `SUPERSERVE
   box; a proxy token is swapped in at egress. The default GitHub identity uses the workflow's
   short-lived, repo-scoped `GITHUB_TOKEN` (it does enter the box, but expires with the run); the
   cross-repo PAT path keeps the same egress-swap as Claude.
+- **Token exposure in the box:** whatever `GITHUB_TOKEN` resolves to is readable by the agent
+  (`echo $GITHUB_TOKEN`), so only least-privilege values are allowed in. Default path: the per-run
+  Actions token — masked in Actions logs, invalidated when the job ends, bounded by the workflow's
+  `contents: read` / `pull-requests: write` block. PAT path: the box sees a Superserve stand-in,
+  never the real PAT. A raw PAT enters the box only on the local-dev env-var fallback — prefer
+  `SUPERSERVE_GITHUB_SECRET` there too. Write-capable classic PATs are refused outright.
+- **Residual PR surface:** `pull-requests: write` (required to post reviews and the two loop
+  labels) also technically allows closing or relabeling a PR. Approving is additionally blocked
+  for the default token by GitHub's **"Allow GitHub Actions to create and approve pull requests"**
+  setting — off by default; leave it off so the loop's reviews can never satisfy branch
+  protection. The skill forbids all of these and close/reopen/ready are on the deny list, but
+  under `bypassPermissions` those are guardrails, not guarantees — the guarantee is that the
+  token can never merge or push.
 
 ## How it maps to the loop-engineering primitives
 

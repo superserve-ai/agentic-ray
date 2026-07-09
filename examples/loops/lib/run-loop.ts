@@ -141,12 +141,13 @@ export async function runLoop(
       }
     }
 
-    // Re-inject envVars on EVERY tick, not just at create. Rotating credentials
-    // (notably the GitHub Actions `github.token`, which is minted per-run and dies
-    // when that run's job ends) are bound into the box only at bootstrap; a warm
+    // Re-inject raw envVars on EVERY tick, not just at create. The GitHub Actions
+    // `github.token` is minted per-run and dies when that run's job ends; a warm
     // resume would otherwise keep running against the first tick's now-expired
-    // token and 401 on every `gh`/git call. Passing them here overlays the current
-    // run's fresh values on the box env for this command.
+    // token and 401 on every `gh`/git call. Secret BINDINGS (spec.secrets) need no
+    // such refresh: they attach by NAME at create and the platform swaps the
+    // secret's current value in at egress, so a rotated secret is picked up
+    // automatically. Only raw env values go stale.
     const result = await box.commands.run(spec.iterate, {
       env: spec.envVars,
       timeoutMs: ITERATE_TIMEOUT_MS,
