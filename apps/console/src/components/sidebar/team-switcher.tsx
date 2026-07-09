@@ -67,7 +67,7 @@ export function TeamSwitcher() {
             {() => (active ? teamLabel(active) : "Select team")}
           </SelectValue>
         </SelectTrigger>
-        <SelectPopup>
+        <SelectPopup dropdown>
           {data.teams.map((team) => (
             <SelectItem key={optionValue(team)} value={optionValue(team)}>
               {teamLabel(team)}

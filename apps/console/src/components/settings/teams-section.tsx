@@ -63,7 +63,7 @@ export function TeamsSection() {
         <div>
           <h2 className="text-base font-medium text-foreground">Teams</h2>
           <p className="mt-1 text-xs text-muted">
-            Your teams and the region each is homed in.
+            Your teams and their primary region.
           </p>
         </div>
         <div className="max-w-md space-y-5">

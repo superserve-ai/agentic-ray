@@ -34,15 +34,34 @@ function SelectTrigger({
 function SelectPopup({
   className,
   children,
+  dropdown = false,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Popup>) {
+}: React.ComponentProps<typeof SelectPrimitive.Popup> & {
+  /**
+   * Position like a menu — always below the trigger. The default overlays
+   * the popup so the selected item aligns with the trigger (native-select
+   * feel); near a viewport edge that reads as "opening upward". Use
+   * dropdown for triggers at the top of a layout surface.
+   */
+  dropdown?: boolean
+}) {
   return (
     <SelectPrimitive.Portal>
       {/* z-index must sit on the Positioner — the fixed-position element that
           competes at body level. On the Popup alone it only wins inside the
           Positioner's stacking context, so the popup paints under elevated
           app surfaces (e.g. a z-40 sidebar) that overlap its anchor. */}
-      <SelectPrimitive.Positioner className="z-50">
+      <SelectPrimitive.Positioner
+        className="z-50"
+        {...(dropdown
+          ? {
+              alignItemWithTrigger: false,
+              side: "bottom",
+              align: "start",
+              sideOffset: 4,
+            }
+          : {})}
+      >
         <SelectPrimitive.Popup
           className={cn(
             "ss-select-popup z-50 max-h-72 min-w-[8rem] overflow-auto border border-dashed border-border bg-surface/80 p-1 backdrop-blur-xl",
