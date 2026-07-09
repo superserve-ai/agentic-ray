@@ -654,6 +654,7 @@ export function CreateSandboxDialog({
                         <Input
                           type="number"
                           placeholder="No timeout"
+                          suffix="sec"
                           min={1}
                           max={MAX_TIMEOUT_SECONDS}
                           value={timeout}
@@ -668,6 +669,7 @@ export function CreateSandboxDialog({
                         <Input
                           type="number"
                           placeholder="Keep forever"
+                          suffix="sec"
                           min={0}
                           max={MAX_AUTO_DELETE_SECONDS}
                           value={autoDelete}
