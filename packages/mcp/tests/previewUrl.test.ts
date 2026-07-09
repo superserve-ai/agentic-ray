@@ -1,28 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import {
-  buildPreviewUrl,
-  deriveSandboxHost,
-  PreviewUrlError,
-} from "../src/lib/previewUrl.js"
-
-describe("deriveSandboxHost", () => {
-  it("maps prod and staging control planes to their sandbox apex", () => {
-    expect(deriveSandboxHost("https://api.superserve.ai")).toBe(
-      "sandbox.superserve.ai",
-    )
-    expect(deriveSandboxHost("https://api-staging.superserve.ai")).toBe(
-      "staging-sandbox.superserve.ai",
-    )
-  })
-
-  it("falls back to the prod sandbox host for unknown or invalid base URLs", () => {
-    expect(deriveSandboxHost("https://example.test")).toBe(
-      "sandbox.superserve.ai",
-    )
-    expect(deriveSandboxHost("not-a-url")).toBe("sandbox.superserve.ai")
-  })
-})
+import { buildPreviewUrl, PreviewUrlError } from "../src/lib/previewUrl.js"
 
 describe("buildPreviewUrl", () => {
   it("builds {port}-{id}.{host} on the default (prod) host", () => {
@@ -31,10 +9,13 @@ describe("buildPreviewUrl", () => {
     )
   })
 
-  it("uses the staging apex when given the staging base URL", () => {
+  it("uses the host it is given (region-resolved by the caller)", () => {
     expect(
-      buildPreviewUrl("a1b2c3", 4000, "https://api-staging.superserve.ai"),
+      buildPreviewUrl("a1b2c3", 4000, "staging-sandbox.superserve.ai"),
     ).toBe("https://4000-a1b2c3.staging-sandbox.superserve.ai")
+    expect(
+      buildPreviewUrl("sb-usw-a1b2c3", 3000, "usw-sandbox.superserve.ai"),
+    ).toBe("https://3000-sb-usw-a1b2c3.usw-sandbox.superserve.ai")
   })
 
   it("rejects out-of-range and non-integer ports", () => {

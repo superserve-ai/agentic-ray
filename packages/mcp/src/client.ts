@@ -16,6 +16,7 @@
 import {
   AuthenticationError,
   NotFoundError,
+  resolveConfig,
   Sandbox,
   SandboxError,
   Secret,
@@ -42,7 +43,7 @@ import {
   parseLsOutput,
   validateAbsolutePath,
 } from "./lib/listing.js"
-import { buildPreviewUrl, DEFAULT_BASE_URL } from "./lib/previewUrl.js"
+import { buildPreviewUrl } from "./lib/previewUrl.js"
 
 /** Hang guard for the direct control-plane network-log GET. */
 const NETWORK_LOG_TIMEOUT_MS = 30_000
@@ -252,6 +253,13 @@ function toSecretSummary(s: SecretInfo): SecretSummary {
 /** Real client backed by `@superserve/sdk`. */
 export function createSdkClient(config: ClientConfig): SandboxClient {
   const conn = { apiKey: config.apiKey, baseUrl: config.baseUrl }
+  // Region-resolved endpoints (key prefix → cell), the single source the SDK
+  // uses internally — so our direct preview/network calls hit the same cell
+  // as the SDK-backed sandbox ops instead of defaulting to the primary.
+  const resolved = resolveConfig({
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl,
+  })
 
   return {
     async create(input) {
@@ -340,7 +348,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
 
     // Pure string construction; no resume, no network call.
     previewUrl(id, port) {
-      return buildPreviewUrl(id, port, config.baseUrl)
+      return buildPreviewUrl(id, port, resolved.sandboxHost)
     },
 
     // Direct control-plane GET so reading the audit log never activates
@@ -349,7 +357,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
     // non-resuming static equivalent. Trusted control-plane endpoint, API-key
     // auth, bounded by `limit` and a request timeout.
     async networkLog(id, opts) {
-      const base = config.baseUrl ?? DEFAULT_BASE_URL
+      const base = resolved.baseUrl
       const url = new URL(`${base}/sandboxes/${encodeURIComponent(id)}/network`)
       if (opts.limit !== undefined)
         url.searchParams.set("limit", String(opts.limit))
