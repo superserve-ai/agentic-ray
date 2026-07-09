@@ -74,9 +74,14 @@ class TestRegionDerivation:
         assert cfg.base_url == "https://api.superserve.ai"
         assert cfg.sandbox_host == "sandbox.superserve.ai"
 
-    def test_unknown_region_falls_back_to_default(self) -> None:
-        # `usw` won't enter the known-regions map until its DNS is live.
+    def test_usw_region_key_resolves_mapped_endpoints(self) -> None:
         cfg = resolve_config(api_key=f"ss_live_usw_{_TAIL}")
+        assert cfg.base_url == "https://api-usw.superserve.ai"
+        assert cfg.sandbox_host == "usw-sandbox.superserve.ai"
+
+    def test_unconfigured_region_falls_back_to_default(self) -> None:
+        # A syntactically valid region token that isn't in _KNOWN_REGIONS.
+        cfg = resolve_config(api_key=f"ss_live_apac_{_TAIL}")
         assert cfg.base_url == DEFAULT_BASE_URL
         assert cfg.sandbox_host == DEFAULT_SANDBOX_HOST
 

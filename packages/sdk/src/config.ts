@@ -18,8 +18,8 @@ const DEFAULT_SANDBOX_HOST = "sandbox.superserve.ai"
  * API — DNS resolving is not the bar: superserve.ai has a catch-all
  * wildcard, so every derived hostname resolves and answers with a
  * valid-TLS 404 from the wrong infrastructure. Verify with a live /health
- * check, not dig. `usw` will be added once `https://api-usw.superserve.ai`
- * / `usw-sandbox.superserve.ai` serve their cell.
+ * check, not dig. `usw` was added once `https://api-usw.superserve.ai`
+ * / `usw-sandbox.superserve.ai` served their cell end-to-end.
  *
  * Legacy keys (`ss_live_<random>`) can never be misread as region-tagged:
  * both key formats embed the same fixed-length 32-char base64url random
@@ -38,6 +38,13 @@ const KNOWN_REGIONS: ReadonlyMap<
     {
       baseUrl: "https://api.superserve.ai",
       sandboxHost: "sandbox.superserve.ai",
+    },
+  ],
+  [
+    "usw",
+    {
+      baseUrl: "https://api-usw.superserve.ai",
+      sandboxHost: "usw-sandbox.superserve.ai",
     },
   ],
 ])

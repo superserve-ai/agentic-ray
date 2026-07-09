@@ -101,9 +101,15 @@ describe("resolveConfig", () => {
     expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")
   })
 
-  it("falls back to defaults for an unknown region", () => {
-    // `usw` won't enter the known-regions map until its DNS is live.
+  it("derives endpoints from the usw region key", () => {
     const cfg = resolveConfig({ apiKey: `ss_live_usw_${TAIL}` })
+    expect(cfg.baseUrl).toBe("https://api-usw.superserve.ai")
+    expect(cfg.sandboxHost).toBe("usw-sandbox.superserve.ai")
+  })
+
+  it("falls back to defaults for an unconfigured region", () => {
+    // A syntactically valid region token that isn't in KNOWN_REGIONS.
+    const cfg = resolveConfig({ apiKey: `ss_live_apac_${TAIL}` })
     expect(cfg.baseUrl).toBe("https://api.superserve.ai")
     expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")
   })

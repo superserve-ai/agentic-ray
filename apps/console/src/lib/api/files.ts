@@ -2,7 +2,8 @@
  * files — data-plane file operations for the sandbox file manager.
  *
  * Byte transfer (read/write/upload/download) talks directly to the per-sandbox
- * data plane (`boxd-{id}.{SANDBOX_HOST}/files`) with the `X-Access-Token`.
+ * data plane (`boxd-{id}.{host}/files`, host per the sandbox's region) with
+ * the `X-Access-Token`.
  * Directory listing is metadata, so it goes through the control-plane API
  * (`apiClient`) instead — see `listDir`.
  *
@@ -12,9 +13,7 @@
 
 import { apiClient } from "@/lib/api/client"
 import type { SandboxResponse } from "@/lib/api/types"
-
-const SANDBOX_HOST =
-  process.env.NEXT_PUBLIC_SANDBOX_HOST ?? "sandbox.superserve.ai"
+import { sandboxHostFor } from "@/lib/sandbox-host"
 
 /** A single entry in a directory listing. */
 export interface DirEntry {
@@ -33,7 +32,7 @@ export function filesUrl(
   path: string,
   params?: Record<string, string>,
 ): string {
-  let url = `https://boxd-${sandboxId}.${SANDBOX_HOST}/files?path=${encodeURIComponent(path)}`
+  let url = `https://boxd-${sandboxId}.${sandboxHostFor(sandboxId)}/files?path=${encodeURIComponent(path)}`
   for (const [key, value] of Object.entries(params ?? {})) {
     url += `&${encodeURIComponent(key)}=${encodeURIComponent(value)}`
   }
