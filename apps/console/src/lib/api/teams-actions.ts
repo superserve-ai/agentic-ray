@@ -14,18 +14,14 @@ import {
   listTeamsForUser,
   membershipExistsInCell,
 } from "@/lib/api/team-directory"
+import { provisionTeam } from "@/lib/api/team-provisioning"
 import {
-  cellFor,
   configuredRegions,
   creatableRegions,
   DEFAULT_REGION,
   multiCellUiEnabled,
 } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
-
-// Role granted to a team's creator. Seeded by the control-plane RBAC
-// migration in every cell; looked up by name so the id can differ per cell.
-const TEAM_OWNER_ROLE = "team_owner"
 
 export interface TeamSummary {
   id: string
@@ -120,12 +116,9 @@ export async function setActiveTeamAction(
 }
 
 /**
- * Create a team homed in the given cell. Everything the control plane needs
- * to authorize the creator is written in that cell: profile (auth is global
- * but profile rows are per-cell), team with home_region, the legacy
- * team_member row the console's own lookups read, and the RBAC chain
- * (active membership + team_owner assignment) — without which the control
- * plane rejects every request for the team.
+ * Create a team homed in the given cell. The full RBAC chain the control
+ * plane needs is written by `provisionTeam`; this action only enforces who
+ * may create where, then lands the creator in the new team.
  */
 export async function createTeamAction(
   name: string,
@@ -147,106 +140,12 @@ export async function createTeamAction(
     throw new Error(`Region ${targetRegion} is not available`)
   }
 
-  const admin = cellFor(targetRegion).createAdminClient()
-
-  // The user may have never touched this cell before; upsert so a concurrent
-  // create can't fail on the unique id.
-  const { error: profileErr } = await admin
-    .from("profile")
-    .upsert(
-      { id: user.id, email: user.email ?? user.id },
-      { onConflict: "id", ignoreDuplicates: true },
-    )
-  if (profileErr) {
-    throw new Error(`Failed to create profile: ${profileErr.message}`)
-  }
-
-  const { data: team, error: teamErr } = await admin
-    .from("team")
-    .insert({ name: trimmed, home_region: targetRegion })
-    .select("id, name")
-    .single()
-  if (teamErr) throw new Error(`Failed to create team: ${teamErr.message}`)
-
-  // Postgrest calls aren't a transaction, so a failure mid-chain would leave
-  // a team the console can list but the control plane rejects (no RBAC
-  // chain). Compensate by unwinding what was written; a per-cell RPC that
-  // does the whole chain in one transaction is the durable replacement.
-  try {
-    const { error: memberErr } = await admin.from("team_member").insert({
-      team_id: team.id,
-      profile_id: user.id,
-      role: "owner",
-    })
-    if (memberErr) {
-      throw new Error(`Failed to add team member: ${memberErr.message}`)
-    }
-
-    // Membership must exist (and be active) before the role assignment — the
-    // control-plane schema enforces that ordering with a trigger.
-    const { error: membershipErr } = await admin
-      .from("team_memberships")
-      .insert({
-        team_id: team.id,
-        user_id: user.id,
-        status: "active",
-      })
-    if (membershipErr) {
-      throw new Error(
-        `Failed to create team membership: ${membershipErr.message}`,
-      )
-    }
-
-    const { data: role, error: roleErr } = await admin
-      .from("roles")
-      .select("id")
-      .eq("name", TEAM_OWNER_ROLE)
-      .single()
-    if (roleErr || !role) {
-      throw new Error(
-        `Failed to look up ${TEAM_OWNER_ROLE} role: ${roleErr?.message ?? "not found"}`,
-      )
-    }
-
-    const { error: assignErr } = await admin
-      .from("user_role_assignments")
-      .insert({
-        user_id: user.id,
-        role_id: role.id,
-        scope_type: "team",
-        team_id: team.id,
-      })
-    if (assignErr) {
-      throw new Error(
-        `Failed to assign ${TEAM_OWNER_ROLE}: ${assignErr.message}`,
-      )
-    }
-  } catch (chainErr) {
-    // Best-effort unwind in reverse dependency order, so a mid-chain failure
-    // can't leave a team the console lists but the control plane rejects.
-    // Failures here are logged and the original error is surfaced with the
-    // team id for manual repair.
-    for (const [table, column] of [
-      ["user_role_assignments", "team_id"],
-      ["team_memberships", "team_id"],
-      ["team_member", "team_id"],
-      ["team", "id"],
-    ] as const) {
-      const { error: unwindErr } = await admin
-        .from(table)
-        .delete()
-        .eq(column, team.id)
-      if (unwindErr) {
-        console.error(
-          `create-team unwind: failed to delete from ${table} for team ${team.id}: ${unwindErr.message}`,
-        )
-      }
-    }
-    throw new Error(
-      `${chainErr instanceof Error ? chainErr.message : String(chainErr)} (team ${team.id})`,
-      { cause: chainErr },
-    )
-  }
+  const team = await provisionTeam(
+    targetRegion,
+    user.id,
+    user.email ?? user.id,
+    trimmed,
+  )
 
   // The user just gained a membership; drop their cached directory so the
   // very next read sees the new team instead of waiting out the TTL.
@@ -254,11 +153,7 @@ export async function createTeamAction(
 
   // Land the creator in the team they just made — the reason to create a
   // team is almost always to start working in it.
-  await storeTeamSelection({ region: targetRegion, teamId: team.id as string })
+  await storeTeamSelection({ region: targetRegion, teamId: team.id })
 
-  return {
-    id: team.id as string,
-    name: team.name as string,
-    region: targetRegion,
-  }
+  return { id: team.id, name: team.name, region: targetRegion }
 }

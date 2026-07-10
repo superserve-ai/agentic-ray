@@ -9,9 +9,11 @@ import {
 } from "@/lib/api/active-team"
 import { getProxySecret, hashKey } from "@/lib/api/proxy-secret"
 import {
+  invalidateMembershipDirectory,
   listTeamMembershipsForUser,
   type TeamMembership,
 } from "@/lib/api/team-directory"
+import { provisionTeam } from "@/lib/api/team-provisioning"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -111,25 +113,17 @@ async function getTeamForUser(
     return membership
   }
 
-  const admin = cellFor(DEFAULT_REGION).createAdminClient()
-  const { data: team, error: teamErr } = await admin
-    .from("team")
-    .insert({ name: email })
-    .select("id")
-    .single()
+  // First login: no membership yet. Provision a team through the same full
+  // RBAC chain the create-team action uses — a legacy-only team (team +
+  // team_member, no team_memberships/role assignment) is one the console
+  // lists but the control plane 403s, so the user's first request fails.
+  const team = await provisionTeam(DEFAULT_REGION, userId, email, email)
 
-  if (teamErr) throw new Error(`Failed to create team: ${teamErr.message}`)
+  // The empty membership list we just read may be cached; drop it so other
+  // surfaces (billing, quota, directory) see the new team immediately.
+  invalidateMembershipDirectory(userId)
 
-  const { error: memberErr } = await admin.from("team_member").insert({
-    team_id: team.id,
-    profile_id: userId,
-    role: "owner",
-  })
-
-  if (memberErr)
-    throw new Error(`Failed to add team member: ${memberErr.message}`)
-
-  const created = { teamId: team.id as string, region: DEFAULT_REGION }
+  const created = { teamId: team.id, region: DEFAULT_REGION }
   setFresh(teamCache, cacheKey, created)
   return created
 }

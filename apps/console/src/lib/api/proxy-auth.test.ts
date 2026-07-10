@@ -32,9 +32,22 @@ vi.mock("@/lib/api/team-directory", () => ({
   listTeamMembershipsForUser: vi.fn(async () => [
     { teamId: "team-west", region: "usw" },
   ]),
+  invalidateMembershipDirectory: vi.fn(),
+}))
+
+// A user with no membership is provisioned a full team via this helper; the
+// new-user test asserts getTeamForUser routes through it instead of writing a
+// legacy-only team the control plane would reject.
+vi.mock("@/lib/api/team-provisioning", () => ({
+  provisionTeam: vi.fn(async () => ({
+    id: "team-new",
+    name: "new@example.com",
+    region: "use",
+  })),
 }))
 
 const uswApiKeyUpserts: Array<Record<string, unknown>> = []
+const useApiKeyUpserts: Array<Record<string, unknown>> = []
 vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
   configuredRegions: () => ["use", "usw"],
@@ -53,17 +66,25 @@ vi.mock("@/lib/cells", () => ({
             }),
           }
         : {
-            // ensureProfile only reads: the profile already exists.
-            from: () => ({
+            // ensureProfile reads (profile exists); the proxy key upsert for a
+            // freshly provisioned default-cell team is captured too.
+            from: (table: string) => ({
               select: () => ({
                 eq: () => ({
                   single: async () => ({ data: { id: "u1" }, error: null }),
                 }),
               }),
+              upsert: async (row: Record<string, unknown>) => {
+                useApiKeyUpserts.push({ table, ...row })
+                return { error: null }
+              },
             }),
           },
   }),
 }))
+
+import { listTeamMembershipsForUser } from "@/lib/api/team-directory"
+import { provisionTeam } from "@/lib/api/team-provisioning"
 
 import {
   deriveRawKey,
@@ -177,5 +198,43 @@ describe("proxy-auth cell targeting", () => {
     expect(await getApiBaseUrlForUser(user as never)).toBe(
       "https://api-usw.test",
     )
+  })
+})
+
+describe("proxy-auth new-user provisioning", () => {
+  beforeEach(() => {
+    process.env.CONSOLE_PROXY_SECRET =
+      "test-secret-must-be-at-least-thirty-two-chars-long-abcdef"
+    useApiKeyUpserts.length = 0
+  })
+
+  it("provisions a full RBAC team when the user has no memberships", async () => {
+    vi.mocked(listTeamMembershipsForUser).mockResolvedValueOnce([])
+
+    const key = await getAuthApiKeyForUser({
+      id: "brand-new",
+      email: "new@example.com",
+    } as never)
+
+    // The fix: a memberless user is provisioned through provisionTeam (full
+    // RBAC chain), not a legacy-only team the control plane would 403.
+    expect(provisionTeam).toHaveBeenCalledWith(
+      "use",
+      "brand-new",
+      "new@example.com",
+      "new@example.com",
+    )
+    expect(key).toMatch(/^ss_live_/)
+    // Proxy key row lands in the newly provisioned team's home (default) cell.
+    expect(useApiKeyUpserts).toEqual([
+      {
+        table: "api_key",
+        team_id: "team-new",
+        key_hash: hashKey(key as string),
+        name: "__console_proxy__",
+        scopes: [],
+        created_by: "brand-new",
+      },
+    ])
   })
 })
