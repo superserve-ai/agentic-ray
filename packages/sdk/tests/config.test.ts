@@ -173,6 +173,19 @@ describe("resolveConfig", () => {
     expect(cfg.baseUrl).toBe("https://env.example.com")
   })
 
+  it("treats an empty/whitespace SUPERSERVE_BASE_URL as unset (region still wins)", () => {
+    vi.stubEnv("SUPERSERVE_BASE_URL", "   ")
+    const cfg = resolveConfig({ apiKey: `ss_live_usw_${TAIL}` })
+    expect(cfg.baseUrl).toBe("https://api-usw.superserve.ai")
+    expect(cfg.sandboxHost).toBe("usw-sandbox.superserve.ai")
+  })
+
+  it("treats an explicit empty baseUrl option as unset", () => {
+    const cfg = resolveConfig({ apiKey: `ss_live_use_${TAIL}`, baseUrl: "" })
+    expect(cfg.baseUrl).toBe("https://api.superserve.ai")
+    expect(cfg.sandboxHost).toBe("sandbox.superserve.ai")
+  })
+
   it("derives endpoints from a region key sourced from SUPERSERVE_API_KEY", () => {
     vi.stubEnv("SUPERSERVE_API_KEY", `ss_live_use_${TAIL}`)
     const cfg = resolveConfig()

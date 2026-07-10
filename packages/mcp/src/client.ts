@@ -256,6 +256,8 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
   // Region-resolved endpoints (key prefix → cell), the single source the SDK
   // uses internally — so our direct preview/network calls hit the same cell
   // as the SDK-backed sandbox ops instead of defaulting to the primary.
+  // resolveConfig is exported as of @superserve/sdk 0.8.0 — the current
+  // MIN_SDK_VERSION floor in mcp-publish.yml (max across features).
   const resolved = resolveConfig({
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,

@@ -113,6 +113,20 @@ class TestRegionDerivation:
         cfg = resolve_config(api_key=f"ss_live_use_{_TAIL}")
         assert cfg.base_url == "https://env.example.com"
 
+    def test_empty_env_base_url_is_unset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A whitespace-only override must not shadow region derivation.
+        monkeypatch.setenv("SUPERSERVE_BASE_URL", "   ")
+        cfg = resolve_config(api_key=f"ss_live_usw_{_TAIL}")
+        assert cfg.base_url == "https://api-usw.superserve.ai"
+        assert cfg.sandbox_host == "usw-sandbox.superserve.ai"
+
+    def test_empty_explicit_base_url_is_unset(self) -> None:
+        cfg = resolve_config(api_key=f"ss_live_use_{_TAIL}", base_url="")
+        assert cfg.base_url == "https://api.superserve.ai"
+        assert cfg.sandbox_host == "sandbox.superserve.ai"
+
     def test_region_key_sourced_from_env_var(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

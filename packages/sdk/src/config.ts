@@ -80,7 +80,12 @@ export function resolveConfig(opts?: {
       "Missing API key. Pass `apiKey` or set the SUPERSERVE_API_KEY environment variable.",
     )
   }
-  const overrideUrl = opts?.baseUrl ?? process.env.SUPERSERVE_BASE_URL
+  // A set-but-empty/whitespace override (e.g. SUPERSERVE_BASE_URL="") is treated
+  // as unset, so it falls through to region derivation instead of becoming a
+  // real override that yields an empty base URL (which throws in `new URL`) and
+  // silently bypasses region derivation for a region-tagged key.
+  const rawOverride = opts?.baseUrl ?? process.env.SUPERSERVE_BASE_URL
+  const overrideUrl = rawOverride?.trim() || undefined
   if (overrideUrl !== undefined) {
     return {
       apiKey,
@@ -114,7 +119,11 @@ function regionFromApiKey(apiKey: string): string | undefined {
   return REGION_KEY_RE.exec(apiKey)?.[1]
 }
 
-// Sandbox hosts where the proxy supports shared-host routing.
+// Sandbox hosts where the proxy supports shared-host routing (shared origin +
+// X-Superserve-Sandbox-Id, server-side only). `usw-sandbox.superserve.ai` is
+// intentionally omitted for now: usw sandboxes route via the per-sandbox
+// subdomain (verified working) until the usw proxy's shared-host path is
+// confirmed — add it here once it is.
 const SUPPORTED_SHARED_HOSTS: ReadonlySet<string> = new Set([
   "sandbox.superserve.ai",
   "staging-sandbox.superserve.ai",
@@ -197,23 +206,25 @@ export function previewUrl(
 /**
  * Derive the data-plane sandbox host from the control-plane base URL.
  *
- * `https://api.superserve.ai`         → `sandbox.superserve.ai`
+ * Cells are matched off `KNOWN_REGIONS` (which already pairs each base URL with
+ * its sandbox host), so a new cell needs only its map entry — no second edit
+ * here. Staging is the one host that isn't a region cell, so it stays special.
+ *
+ * `https://api.superserve.ai`         → `sandbox.superserve.ai`      (map: use)
+ * `https://api-usw.superserve.ai`     → `usw-sandbox.superserve.ai`  (map: usw)
  * `https://api-staging.superserve.ai` → `staging-sandbox.superserve.ai`
- * `https://api-usw.superserve.ai`     → `usw-sandbox.superserve.ai`
  * Any other URL                        → `sandbox.superserve.ai` (safe default)
  */
 function deriveSandboxHost(baseUrl: string): string {
   try {
-    const url = new URL(baseUrl)
-    const host = url.hostname
+    const host = new URL(baseUrl).hostname
     if (host === "api-staging.superserve.ai") {
       return "staging-sandbox.superserve.ai"
     }
-    if (host === "api-usw.superserve.ai") {
-      return "usw-sandbox.superserve.ai"
-    }
-    if (host === "api.superserve.ai") {
-      return "sandbox.superserve.ai"
+    for (const cell of KNOWN_REGIONS.values()) {
+      if (new URL(cell.baseUrl).hostname === host) {
+        return cell.sandboxHost
+      }
     }
   } catch {
     // Invalid URL — use default

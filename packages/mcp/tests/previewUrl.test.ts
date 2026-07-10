@@ -25,12 +25,23 @@ describe("buildPreviewUrl", () => {
     expect(() => buildPreviewUrl("id", -1)).toThrow(PreviewUrlError)
   })
 
+  // Privileged ports (< 1024) are refused by the edge proxy, so a URL to one
+  // would never route — reject up front, matching the SDK's builder.
+  it("rejects privileged ports (< 1024)", () => {
+    expect(() => buildPreviewUrl("id", 80)).toThrow(PreviewUrlError)
+    expect(() => buildPreviewUrl("id", 1023)).toThrow(PreviewUrlError)
+    expect(buildPreviewUrl("id", 1024)).toBe(
+      "https://1024-id.sandbox.superserve.ai",
+    )
+  })
+
   // A sandbox id is caller-controlled; a `.`/`/`/`@` could re-point the host.
+  // Use a valid (>=1024) port so the id check is what rejects, not the port.
   it("rejects a sandbox id that is not host-safe", () => {
-    expect(() => buildPreviewUrl("evil.example.com", 80)).toThrow(
+    expect(() => buildPreviewUrl("evil.example.com", 8080)).toThrow(
       PreviewUrlError,
     )
-    expect(() => buildPreviewUrl("id/../../x", 80)).toThrow(PreviewUrlError)
-    expect(() => buildPreviewUrl("a@b", 80)).toThrow(PreviewUrlError)
+    expect(() => buildPreviewUrl("id/../../x", 8080)).toThrow(PreviewUrlError)
+    expect(() => buildPreviewUrl("a@b", 8080)).toThrow(PreviewUrlError)
   })
 })
