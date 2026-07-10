@@ -27,6 +27,10 @@ vi.mock("@/lib/admin/impersonation-key", () => ({
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: vi.fn(),
 }))
+vi.mock("@/lib/admin/impersonation", () => ({
+  getImpersonationTeamId: vi.fn(),
+  impersonationTtlMs: vi.fn(() => 30 * 60_000),
+}))
 
 // No cookie set: active-team resolution falls back to the first membership.
 vi.mock("next/headers", () => ({
@@ -89,10 +93,10 @@ vi.mock("@/lib/cells", () => ({
   }),
 }))
 
-import { listTeamMembershipsForUser } from "@/lib/api/team-directory"
-import { provisionTeam } from "@/lib/api/team-provisioning"
 import { ensureImpersonationKeyRow } from "@/lib/admin/impersonation-key"
 import { platformImpersonationReadScopes } from "@/lib/admin/permissions"
+import { listTeamMembershipsForUser } from "@/lib/api/team-directory"
+import { provisionTeam } from "@/lib/api/team-provisioning"
 
 import {
   deriveRawKey,
@@ -286,6 +290,8 @@ describe("proxy-auth impersonation", () => {
         { id: "admin", email: "admin@superserve.ai" } as never,
         "team-1",
       ),
-    ).rejects.toThrow(/impersonation requires platform sandbox or template read access/)
+    ).rejects.toThrow(
+      /impersonation requires platform sandbox or template read access/,
+    )
   })
 })

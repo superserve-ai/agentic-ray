@@ -3,7 +3,7 @@ import crypto from "node:crypto"
 import type { User } from "@supabase/supabase-js"
 import { cookies, headers } from "next/headers"
 
-import { canReadPlatformSandboxes } from "@/lib/admin/permissions"
+import { canStartPlatformImpersonation } from "@/lib/admin/permissions"
 import { getProxySecret } from "@/lib/api/proxy-secret"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createServerClient } from "@/lib/supabase/server"
@@ -74,7 +74,7 @@ export async function hasImpersonationCookie(): Promise<boolean> {
 export async function getImpersonationTeamId(
   user: User | null | undefined,
 ): Promise<string | null> {
-  if (!canReadPlatformSandboxes(user)) return null
+  if (!canStartPlatformImpersonation(user)) return null
   return readImpersonationTeamId()
 }
 

@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation"
 
-import { canReadPlatformSandboxes } from "@/lib/admin/permissions"
+import {
+  canReadPlatformTeams,
+  canStartPlatformImpersonation,
+} from "@/lib/admin/permissions"
 import {
   listAllTeamsAction,
   startImpersonationAction,
@@ -15,10 +18,16 @@ export default async function AdminPage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!canReadPlatformSandboxes(user)) {
+  if (!canReadPlatformTeams(user)) {
     notFound()
   }
 
   const teams = await listAllTeamsAction()
-  return <AdminTeamsTable teams={teams} onActAs={startImpersonationAction} />
+  return (
+    <AdminTeamsTable
+      teams={teams}
+      canActAs={canStartPlatformImpersonation(user)}
+      onActAs={startImpersonationAction}
+    />
+  )
 }

@@ -2,7 +2,7 @@ import crypto from "node:crypto"
 
 import { getProxySecret, hashKey } from "@/lib/api/proxy-secret"
 import { createAdminClient } from "@/lib/supabase/admin"
-import type { PlatformImpersonationReadScope } from "./permissions"
+import type { PlatformImpersonationReadScope } from "@/lib/admin/permissions"
 
 export const IMPERSONATION_KEY_NAME = "__console_impersonation__"
 const IMPERSONATION_KEY_PURPOSE = "imp:v1"

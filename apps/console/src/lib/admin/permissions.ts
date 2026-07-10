@@ -6,6 +6,7 @@ export const PLATFORM_TEAMS_READ_PERMISSION = "platform:teams:read"
 export type PlatformImpersonationReadScope =
   | typeof PLATFORM_SANDBOX_READ_PERMISSION
   | typeof PLATFORM_TEMPLATE_READ_PERMISSION
+
 const DEFAULT_STAFF_DOMAIN = "superserve.ai"
 
 function staffDomain(): string {
@@ -45,37 +46,43 @@ function userPermissions(user: User | null | undefined): string[] {
   return [...permissions]
 }
 
+function hasPermission(
+  user: User | null | undefined,
+  permission: string,
+): boolean {
+  return userPermissions(user).includes(permission)
+}
+
 export function canReadPlatformSandboxes(
   user: User | null | undefined,
 ): boolean {
-  return userPermissions(user).includes(PLATFORM_SANDBOX_READ_PERMISSION)
+  return hasPermission(user, PLATFORM_SANDBOX_READ_PERMISSION)
 }
 
 export function canReadPlatformTemplates(
   user: User | null | undefined,
 ): boolean {
-  return userPermissions(user).includes(PLATFORM_TEMPLATE_READ_PERMISSION)
+  return hasPermission(user, PLATFORM_TEMPLATE_READ_PERMISSION)
 }
 
 export function canReadPlatformTeams(
   user: User | null | undefined,
 ): boolean {
-  return (
-    isGoogleStaffUser(user) &&
-    userPermissions(user).includes(PLATFORM_TEAMS_READ_PERMISSION)
-  )
+  return isGoogleStaffUser(user) && hasPermission(user, PLATFORM_TEAMS_READ_PERMISSION)
 }
 
 export function platformImpersonationReadScopes(
   user: User | null | undefined,
 ): PlatformImpersonationReadScope[] {
   const scopes: PlatformImpersonationReadScope[] = []
+
   if (canReadPlatformSandboxes(user)) {
     scopes.push(PLATFORM_SANDBOX_READ_PERMISSION)
   }
   if (canReadPlatformTemplates(user)) {
     scopes.push(PLATFORM_TEMPLATE_READ_PERMISSION)
   }
+
   return scopes
 }
 

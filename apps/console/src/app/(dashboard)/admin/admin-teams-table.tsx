@@ -15,10 +15,15 @@ import { formatDate } from "@/lib/format"
 
 interface AdminTeamsTableProps {
   teams: AdminTeamRow[]
+  canActAs: boolean
   onActAs: (teamId: string) => Promise<void>
 }
 
-export function AdminTeamsTable({ teams, onActAs }: AdminTeamsTableProps) {
+export function AdminTeamsTable({
+  teams,
+  canActAs,
+  onActAs,
+}: AdminTeamsTableProps) {
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Admin" />
@@ -56,6 +61,7 @@ export function AdminTeamsTable({ teams, onActAs }: AdminTeamsTableProps) {
                     <form action={onActAs.bind(null, team.id)}>
                       <button
                         type="submit"
+                        disabled={!canActAs}
                         className="inline-flex h-8 items-center justify-center border border-dashed border-border px-3 font-mono text-xs text-foreground uppercase transition-colors hover:bg-muted/30"
                       >
                         Act as
