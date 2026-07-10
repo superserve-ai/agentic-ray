@@ -207,6 +207,20 @@ describe("dataPlaneTarget", () => {
     expect(target.headers["X-Superserve-Sandbox-Id"]).toBe("xyz")
   })
 
+  it("routes every launched region's sandbox host via the shared origin", () => {
+    // Extend per cell launch: a region resolvable from a key must also take
+    // the pooled shared-origin path server-side, or its data-plane traffic
+    // silently downgrades to per-sandbox TLS origins.
+    for (const region of ["use", "usw"]) {
+      const { sandboxHost } = resolveConfig({
+        apiKey: `ss_live_${region}_${"a".repeat(32)}`,
+      })
+      const target = dataPlaneTarget("abc-123", sandboxHost)
+      expect(target.url).toBe(`https://${sandboxHost}`)
+      expect(target.headers["X-Superserve-Sandbox-Id"]).toBe("abc-123")
+    }
+  })
+
   it("falls back to per-sandbox subdomain on unsupported host", () => {
     const target = dataPlaneTarget("abc", "self-hosted.example.org")
     expect(target.url).toBe("https://boxd-abc.self-hosted.example.org")
