@@ -203,6 +203,16 @@ class TestDataPlaneTarget:
         assert target.url == "https://sandbox.superserve.ai"
         assert target.headers["X-Superserve-Sandbox-Id"] == "abc-123"
 
+    def test_every_launched_region_uses_shared_origin(self) -> None:
+        # Extend per cell launch: a region resolvable from a key must also
+        # take the pooled shared-origin path server-side, or its data-plane
+        # traffic silently downgrades to per-sandbox TLS origins.
+        for region in ("use", "usw"):
+            config = resolve_config(api_key=f"ss_live_{region}_{'a' * 32}")
+            target = data_plane_target("abc-123", config.sandbox_host)
+            assert target.url == f"https://{config.sandbox_host}"
+            assert target.headers["X-Superserve-Sandbox-Id"] == "abc-123"
+
     def test_shared_host_on_staging(self) -> None:
         target = data_plane_target("xyz", "staging-sandbox.superserve.ai")
         assert target.url == "https://staging-sandbox.superserve.ai"

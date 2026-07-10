@@ -121,12 +121,10 @@ function regionFromApiKey(apiKey: string): string | undefined {
 
 // Sandbox hosts where the proxy supports shared-host routing (shared origin +
 // X-Superserve-Sandbox-Id, server-side only). `usw-sandbox.superserve.ai` is
-// intentionally omitted for now: usw sandboxes route via the per-sandbox
-// subdomain (verified working) until the usw proxy's shared-host path is
-// confirmed — add it here once it is.
 const SUPPORTED_SHARED_HOSTS: ReadonlySet<string> = new Set([
   "sandbox.superserve.ai",
   "staging-sandbox.superserve.ai",
+  "usw-sandbox.superserve.ai",
 ])
 
 const SANDBOX_ID_HEADER = "X-Superserve-Sandbox-Id"

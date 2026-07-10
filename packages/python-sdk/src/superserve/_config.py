@@ -90,13 +90,11 @@ def resolve_config(
 
 # Sandbox hosts where the proxy supports shared-host routing (shared origin +
 # X-Superserve-Sandbox-Id, server-side only). ``usw-sandbox.superserve.ai`` is
-# intentionally omitted for now: usw sandboxes route via the per-sandbox
-# subdomain (verified working) until the usw proxy's shared-host path is
-# confirmed — add it here once it is.
 _SUPPORTED_SHARED_HOSTS: frozenset[str] = frozenset(
     {
         "sandbox.superserve.ai",
         "staging-sandbox.superserve.ai",
+        "usw-sandbox.superserve.ai",
     }
 )
 
