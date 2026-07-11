@@ -81,19 +81,11 @@ void main() {
   float dithered = step(threshold, n * 0.7);
 
   // Charcoal dots shifting toward brand mint (#b2fab4) inside the pockets
-  vec3 mint = vec3(0.698, 0.980, 0.706);
   vec3 greyDot = vec3(0.16);
-  vec3 dotColor = mix(greyDot, mint * 0.5, glow);
-  vec3 color = vec3(0.015) + dithered * dotColor;
+  vec3 mintDot = vec3(0.698, 0.980, 0.706) * 0.5;
+  vec3 dotColor = mix(greyDot, mintDot, glow);
 
-  // Winking sparkles, like the chart stars: rare cells of the same dither
-  // grid glint mint, each on its own phase
-  vec2 cell = floor(gl_FragCoord.xy / 3.0);
-  float h = fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);
-  float wink = (sin(u_time * 1.5 + h * 6283.185) + 1.0) * 0.5;
-  color += mint * step(0.9998, h) * wink * wink * 0.8;
-
-  fragColor = vec4(color, 1.0);
+  fragColor = vec4(vec3(0.015) + dithered * dotColor, 1.0);
 }
 `
 
