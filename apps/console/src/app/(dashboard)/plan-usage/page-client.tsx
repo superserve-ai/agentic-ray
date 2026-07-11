@@ -17,6 +17,12 @@ import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
 
 import { DateRangeFilter, type DateRange } from "@/components/date-range-filter"
+import { Area } from "@/components/dither-kit/area"
+import { AreaChart } from "@/components/dither-kit/area-chart"
+import { Grid } from "@/components/dither-kit/grid"
+import { Tooltip } from "@/components/dither-kit/tooltip"
+import { XAxis } from "@/components/dither-kit/x-axis"
+import { YAxis } from "@/components/dither-kit/y-axis"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
@@ -249,7 +255,6 @@ export function PlanUsagePageClient() {
               periodEnd={chartPeriod.end}
               bucket={chartBucket}
               valueLabel="vCPU"
-              strokeClassName="text-success"
               metric="vcpu"
             />
             <UsageChartCard
@@ -260,7 +265,6 @@ export function PlanUsagePageClient() {
               periodEnd={chartPeriod.end}
               bucket={chartBucket}
               valueLabel="GiB"
-              strokeClassName="text-success"
               metric="memory"
             />
             <UsageChartCard
@@ -271,7 +275,6 @@ export function PlanUsagePageClient() {
               periodEnd={chartPeriod.end}
               bucket={chartBucket}
               valueLabel="GiB"
-              strokeClassName="text-success"
               metric="storage"
             />
           </div>
@@ -281,11 +284,13 @@ export function PlanUsagePageClient() {
   )
 }
 
-function formatChartTick(value: string): string {
-  return new Date(value).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-  })
+function formatBucketLabel(value: string, bucketLabel: string): string {
+  return new Date(value).toLocaleString(
+    "en-US",
+    bucketLabel.includes("hour")
+      ? { month: "short", day: "numeric", hour: "numeric", hour12: true }
+      : { month: "short", day: "numeric" },
+  )
 }
 
 function UsageChartCard({
@@ -296,7 +301,6 @@ function UsageChartCard({
   periodEnd,
   bucket,
   valueLabel,
-  strokeClassName,
   metric,
 }: {
   title: string
@@ -306,43 +310,19 @@ function UsageChartCard({
   periodEnd: string
   bucket: UsageChartBucket
   valueLabel: string
-  strokeClassName: string
   metric: UsageMetric
 }) {
-  const width = 360
-  const height = 190
-  const padding = { top: 16, right: 12, bottom: 34, left: 44 }
-  const plotWidth = width - padding.left - padding.right
-  const plotHeight = height - padding.top - padding.bottom
-  const periodStartMs = new Date(periodStart).getTime()
-  const periodEndMs = new Date(periodEnd).getTime()
-  const periodMs = Math.max(periodEndMs - periodStartMs, 1)
-  const chartPoints = buildUsageChartPoints({
+  const chartData = buildUsageChartPoints({
     rows,
     periodStart,
     periodEnd,
     metric,
     bucketMs: bucket.ms,
-  })
-  const values = chartPoints.map((point) => point.value)
-  const maxValue = Math.max(...values, 0)
-  const yMax = maxValue > 0 ? maxValue : 1
-  const yTicks = [yMax, yMax / 2, 0]
-
-  const points = chartPoints.map((point) => {
-    const value = point.value
-    const bucketStartMs = new Date(point.bucket_start).getTime()
-    const x =
-      padding.left +
-      Math.min(Math.max((bucketStartMs - periodStartMs) / periodMs, 0), 1) *
-        plotWidth
-    const y = padding.top + (1 - value / yMax) * plotHeight
-    return { x, y, value, bucketStart: point.bucket_start }
-  })
-  const path = points
-    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
-    .join(" ")
-  const latestPoint = points[points.length - 1]
+  }).map((point) => ({
+    value: point.value,
+    label: formatBucketLabel(point.bucket_start, bucket.label),
+  }))
+  const latestPoint = chartData[chartData.length - 1]
 
   return (
     <Card>
@@ -359,88 +339,22 @@ function UsageChartCard({
             Latest {valueLabel}
           </p>
         </div>
-        <svg
-          className={`h-48 w-full overflow-visible ${strokeClassName}`}
-          viewBox={`0 0 ${width} ${height}`}
-          aria-label={`${title} ${bucket.label} line graph`}
-        >
-          <title>{`${title} ${bucket.label} line graph`}</title>
-          {yTicks.map((tick) => {
-            const y = padding.top + (1 - tick / yMax) * plotHeight
-            return (
-              <g key={tick}>
-                <line
-                  x1={padding.left}
-                  x2={width - padding.right}
-                  y1={y}
-                  y2={y}
-                  className="stroke-border"
-                  strokeDasharray="3 4"
-                />
-                <text
-                  x={padding.left - 10}
-                  y={y + 4}
-                  textAnchor="end"
-                  className="fill-muted font-mono text-[10px]"
-                >
-                  {formatNumber(tick)}
-                </text>
-              </g>
-            )
-          })}
-          <line
-            x1={padding.left}
-            x2={padding.left}
-            y1={padding.top}
-            y2={height - padding.bottom}
-            className="stroke-border"
-          />
-          <line
-            x1={padding.left}
-            x2={width - padding.right}
-            y1={height - padding.bottom}
-            y2={height - padding.bottom}
-            className="stroke-border"
-          />
-          {path && (
-            <path
-              d={path}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          )}
-          {latestPoint && (
-            <circle
-              cx={latestPoint.x}
-              cy={latestPoint.y}
-              r="4"
-              fill="currentColor"
-              stroke="var(--color-surface)"
-              strokeWidth="2"
-            />
-          )}
-          <text
-            x={padding.left}
-            y={height - 8}
-            textAnchor="start"
-            className="fill-muted font-mono text-[10px]"
-            suppressHydrationWarning
+        <div className="h-48" aria-label={`${title} ${bucket.label} chart`}>
+          <AreaChart
+            data={chartData}
+            config={{ value: { label: valueLabel, color: "green" } }}
+            bloom="low"
           >
-            {formatChartTick(periodStart)}
-          </text>
-          <text
-            x={width - padding.right}
-            y={height - 8}
-            textAnchor="end"
-            className="fill-muted font-mono text-[10px]"
-            suppressHydrationWarning
-          >
-            {formatChartTick(periodEnd)}
-          </text>
-        </svg>
+            <Grid />
+            <XAxis dataKey="label" maxTicks={4} />
+            <YAxis tickFormatter={formatNumber} />
+            <Tooltip
+              labelKey="label"
+              valueFormatter={(value) => formatNumber(value)}
+            />
+            <Area dataKey="value" variant="gradient" />
+          </AreaChart>
+        </div>
       </CardContent>
     </Card>
   )
