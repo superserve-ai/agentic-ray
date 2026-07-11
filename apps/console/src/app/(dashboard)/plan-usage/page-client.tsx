@@ -321,6 +321,10 @@ function UsageChartCard({
   }).map((point) => ({
     value: point.value,
     label: formatBucketLabel(point.bucket_start, bucket.label),
+    day: new Date(point.bucket_start).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+    }),
   }))
   const latestPoint = chartData[chartData.length - 1]
 
@@ -346,7 +350,7 @@ function UsageChartCard({
             bloom="low"
           >
             <Grid />
-            <XAxis dataKey="label" maxTicks={4} />
+            <XAxis dataKey="day" maxTicks={4} />
             <YAxis tickFormatter={formatNumber} />
             <Tooltip
               labelKey="label"
