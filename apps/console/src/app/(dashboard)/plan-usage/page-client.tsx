@@ -20,7 +20,6 @@ import { DateRangeFilter, type DateRange } from "@/components/date-range-filter"
 import { Area } from "@/components/dither-kit/area"
 import { AreaChart } from "@/components/dither-kit/area-chart"
 import { Grid } from "@/components/dither-kit/grid"
-import { Sparkline } from "@/components/dither-kit/sparkline"
 import { Tooltip } from "@/components/dither-kit/tooltip"
 import { XAxis } from "@/components/dither-kit/x-axis"
 import { YAxis } from "@/components/dither-kit/y-axis"
@@ -144,14 +143,6 @@ export function PlanUsagePageClient() {
   )
   const estimateLabel =
     data?.billing_mode === "active" ? "Estimated spend" : "Preview estimate"
-  const sparkFor = (metric: UsageMetric) =>
-    buildUsageChartPoints({
-      rows,
-      periodStart: chartPeriod.start,
-      periodEnd: chartPeriod.end,
-      metric,
-      bucketMs: chartBucket.ms,
-    }).map((point) => point.value)
 
   return (
     <div className="flex h-full flex-col">
@@ -216,7 +207,6 @@ export function PlanUsagePageClient() {
               rate={`${formatRate(pricing.cpu_vcpu_hour_usd)} / vCPU-hour`}
               estimateLabel={estimateLabel}
               estimate={formatCurrency(estimates.cpuUsd)}
-              spark={sparkFor("vcpu")}
             />
             <UsageCard
               title="Memory Usage"
@@ -224,7 +214,6 @@ export function PlanUsagePageClient() {
               rate={`${formatRate(pricing.memory_gib_hour_usd)} / GiB-hour`}
               estimateLabel={estimateLabel}
               estimate={formatCurrency(estimates.memoryUsd)}
-              spark={sparkFor("memory")}
             />
             <UsageCard
               title="Active Storage"
@@ -232,7 +221,6 @@ export function PlanUsagePageClient() {
               rate={`${formatRate(pricing.storage_gib_hour_usd)} / GiB-hour`}
               estimateLabel={estimateLabel}
               estimate={formatCurrency(estimates.storageUsd)}
-              spark={sparkFor("storage")}
             />
           </div>
 
@@ -382,14 +370,12 @@ function UsageCard({
   rate,
   estimateLabel,
   estimate,
-  spark,
 }: {
   title: string
   usage: string
   rate: string
   estimateLabel: string
   estimate: string
-  spark: number[]
 }) {
   return (
     <Card>
@@ -402,11 +388,6 @@ function UsageCard({
         <p className="text-sm text-foreground">
           {estimateLabel}: <span className="font-mono text-lg">{estimate}</span>
         </p>
-        {spark.length > 1 && (
-          <div className="h-8" aria-hidden>
-            <Sparkline data={spark} color="green" bloomOnHover bloom="low" />
-          </div>
-        )}
       </CardContent>
     </Card>
   )
