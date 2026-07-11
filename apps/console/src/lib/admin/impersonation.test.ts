@@ -80,14 +80,16 @@ import {
 const TEAM = "11111111-1111-1111-1111-111111111111"
 const platformUser = {
   id: "a1",
-  email: "admin@example.com",
+  email: "admin@superserve.ai",
   app_metadata: {
+    provider: "google",
+    providers: ["google"],
     permissions: ["platform:sandbox:read"],
   },
 } as unknown as User
 const unauthorizedUser = {
   id: "c1",
-  email: "joe@gmail.com",
+  email: "joe@superserve.ai",
   app_metadata: { permissions: [] },
 } as unknown as User
 

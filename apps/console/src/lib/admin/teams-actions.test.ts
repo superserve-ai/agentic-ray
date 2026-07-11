@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const teamRows = [
   {
-    id: "team-1",
+    id: "11111111-1111-1111-1111-111111111111",
     name: "Team One",
     active_sandbox_count: 1,
     max_sandboxes: 5,
@@ -35,15 +35,15 @@ vi.mock("@/lib/admin/impersonation-key", () => ({
 }))
 
 import {
-  canReadPlatformTeams,
-  canStartPlatformImpersonation,
-} from "@/lib/admin/permissions"
-import {
   clearImpersonationCookie,
   readImpersonationTeamId,
   setImpersonationCookie,
 } from "@/lib/admin/impersonation"
 import { revokeImpersonationKeyRow } from "@/lib/admin/impersonation-key"
+import {
+  canReadPlatformTeams,
+  canStartPlatformImpersonation,
+} from "@/lib/admin/permissions"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -61,7 +61,7 @@ describe("teams actions", () => {
     } as never)
     vi.mocked(canReadPlatformTeams).mockReturnValue(true)
     vi.mocked(canStartPlatformImpersonation).mockReturnValue(true)
-    vi.mocked(readImpersonationTeamId).mockResolvedValue("team-1")
+    vi.mocked(readImpersonationTeamId).mockResolvedValue(teamRows[0].id)
     vi.mocked(setImpersonationCookie).mockResolvedValue(undefined)
     vi.mocked(clearImpersonationCookie).mockResolvedValue(undefined)
     vi.mocked(revokeImpersonationKeyRow).mockResolvedValue(undefined)
@@ -91,7 +91,7 @@ describe("teams actions", () => {
   it("rejects start impersonation when the user lacks supported read scopes", async () => {
     vi.mocked(canStartPlatformImpersonation).mockReturnValue(false)
 
-    await expect(startImpersonationAction("team-1")).rejects.toThrow(
+    await expect(startImpersonationAction(teamRows[0].id)).rejects.toThrow(
       /platform impersonation access required/,
     )
     expect(setImpersonationCookie).not.toHaveBeenCalled()
@@ -108,7 +108,7 @@ describe("teams actions", () => {
       }),
     } as never)
 
-    await expect(startImpersonationAction("team-1")).rejects.toThrow(
+    await expect(startImpersonationAction(teamRows[0].id)).rejects.toThrow(
       "Team not found",
     )
     expect(setImpersonationCookie).not.toHaveBeenCalled()
@@ -117,11 +117,14 @@ describe("teams actions", () => {
   it("revokes the impersonation key when stopping impersonation", async () => {
     await expect(stopImpersonationAction()).rejects.toThrow("redirect")
     expect(clearImpersonationCookie).toHaveBeenCalled()
-    expect(revokeImpersonationKeyRow).toHaveBeenCalledWith("admin-1", "team-1")
+    expect(revokeImpersonationKeyRow).toHaveBeenCalledWith(
+      "admin-1",
+      teamRows[0].id,
+    )
   })
 
   it("allows the team detail lookup to run behind the team-read gate", async () => {
-    const team = await getTeamAction("team-1")
+    const team = await getTeamAction(teamRows[0].id)
     expect(team).toEqual(teamRows[0])
   })
 })
