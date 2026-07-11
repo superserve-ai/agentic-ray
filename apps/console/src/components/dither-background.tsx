@@ -72,13 +72,20 @@ void main() {
   // Slow-moving gradient via noise
   float n = snoise(uv * 2.0 + t) * 0.5 + 0.5;
 
+  // Second, slower field carves drifting pockets where dots turn mint
+  float glow = snoise(uv * 1.3 - t * 0.6 + 7.0) * 0.5 + 0.5;
+  glow = smoothstep(0.5, 0.95, glow);
+
   // Dither the gradient with Bayer matrix — scale up for visible dots
   float threshold = bayer8(floor(gl_FragCoord.xy / 3.0));
   float dithered = step(threshold, n * 0.7);
 
-  // Background base with dithered highlights
-  float brightness = 0.015 + dithered * 0.18;
-  fragColor = vec4(vec3(brightness), 1.0);
+  // Charcoal dots shifting toward brand mint (#b2fab4) inside the pockets
+  vec3 greyDot = vec3(0.16);
+  vec3 mintDot = vec3(0.698, 0.980, 0.706) * 0.5;
+  vec3 dotColor = mix(greyDot, mintDot, glow);
+
+  fragColor = vec4(vec3(0.015) + dithered * dotColor, 1.0);
 }
 `
 
@@ -92,6 +99,7 @@ function createShader(
   gl.shaderSource(shader, source)
   gl.compileShader(shader)
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error("DitherBackground shader:", gl.getShaderInfoLog(shader))
     gl.deleteShader(shader)
     return null
   }
