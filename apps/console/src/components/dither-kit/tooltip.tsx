@@ -10,8 +10,8 @@ import { rgb } from "./palette"
 export type TooltipVariant = "default" | "frosted-glass"
 
 const VARIANT: Record<TooltipVariant, string> = {
-  default: "bg-popover",
-  "frosted-glass": "bg-popover/70 backdrop-blur-sm",
+  default: "bg-surface/80 backdrop-blur-xl",
+  "frosted-glass": "bg-surface/70 backdrop-blur-sm",
 }
 
 /**
@@ -69,12 +69,12 @@ export function Tooltip({
             mass: 0.6,
           }}
           className={cn(
-            "pointer-events-none absolute z-10 rounded-md border px-2 py-1 shadow-sm",
+            "pointer-events-none absolute z-10 border border-dashed border-border px-2 py-1 shadow-sm",
             VARIANT[variant],
           )}
         >
           {heading && (
-            <div className="text-muted-foreground mb-0.5 font-mono text-[10px]">
+            <div className="mb-0.5 font-mono text-[10px] text-muted-foreground">
               {heading}
             </div>
           )}
@@ -82,7 +82,7 @@ export function Tooltip({
             {items.map((item) => (
               <div
                 key={item.name}
-                className="text-popover-foreground flex items-center gap-1.5 font-mono text-[11px] tabular-nums"
+                className="flex items-center gap-1.5 font-mono text-[11px] text-popover-foreground tabular-nums"
                 style={{ opacity: item.dimmed ? 0.4 : 1 }}
               >
                 <span

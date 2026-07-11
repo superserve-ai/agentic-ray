@@ -18,6 +18,12 @@
   --color-ring: var(--color-brand);
   --color-muted: rgba(255, 255, 255, 0.6);
 
+  /* shadcn-token aliases so registry-vendored components
+     (e.g. dither-kit) pick up the console palette */
+  --color-muted-foreground: var(--color-muted);
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-foreground);
+
   /* primary is the accent; aliased to brand so existing
      bg-primary / text-primary usages become mint in one move */
   --color-primary: var(--color-brand);
