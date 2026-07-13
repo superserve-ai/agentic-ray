@@ -100,16 +100,16 @@ export async function startImpersonationAction(teamId: string) {
 }
 
 export async function stopImpersonationAction() {
-  let user
+  const teamId = await readImpersonationTeamId()
+  await clearImpersonationCookie()
 
+  let user
   try {
     user = await requirePlatformImpersonationAccess()
   } catch {
     redirect("/admin")
   }
 
-  const teamId = await readImpersonationTeamId()
-  await clearImpersonationCookie()
   if (user && teamId) {
     try {
       await revokeImpersonationKeyRow(user.id, teamId)
