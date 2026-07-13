@@ -21,6 +21,7 @@ const ALLOWED_PREFIXES = [
   "templates",
   "secrets",
   "providers",
+  "billing/summary",
 ]
 
 /** Paths that carry their own auth (e.g. Bearer token). */
@@ -166,6 +167,9 @@ async function proxyRequest(
       continue
     }
     responseHeaders.set(key, value)
+  }
+  if (joinedPath === "billing/summary") {
+    responseHeaders.set("cache-control", "private, no-store")
   }
   setImpersonationDebugHeaders(
     responseHeaders,

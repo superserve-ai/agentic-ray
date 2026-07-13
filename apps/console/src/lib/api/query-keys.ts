@@ -79,9 +79,34 @@ export const networkKeys = {
 
 export const billingKeys = {
   all: ["billing"] as const,
-  settings: () => [...billingKeys.all, "settings"] as const,
-  usage: (filters: { periodStart: string; periodEnd: string }) =>
-    [...billingKeys.all, "usage", filters] as const,
+  summary: (context: { cacheScope: string; teamKey: string }) =>
+    [
+      ...billingKeys.all,
+      "summary",
+      context.cacheScope,
+      context.teamKey,
+    ] as const,
+  settings: (context: { cacheScope: string; teamKey: string }) =>
+    [
+      ...billingKeys.all,
+      "settings",
+      context.cacheScope,
+      context.teamKey,
+    ] as const,
+  usage: (context: {
+    cacheScope: string
+    teamKey: string
+    periodStart: string
+    periodEnd: string
+  }) =>
+    [
+      ...billingKeys.all,
+      "usage",
+      context.cacheScope,
+      context.teamKey,
+      context.periodStart,
+      context.periodEnd,
+    ] as const,
 }
 
 export const templateKeys = {
