@@ -48,18 +48,29 @@ vi.mock("@/lib/supabase/server", () => ({
 }))
 
 const teamLookup = vi.hoisted(() => ({
+  team: {
+    id: "11111111-1111-1111-1111-111111111111",
+    region: "use",
+  } as { id: string; region: string } | null,
   result: { data: { name: "Acme Corp" }, error: null } as {
     data: { name: string } | null
     error: { message: string } | null
   },
 }))
 
-vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: () => ({
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          single: async () => teamLookup.result,
+vi.mock("@/lib/api/team-directory", () => ({
+  findTeamById: async () => teamLookup.team,
+}))
+
+vi.mock("@/lib/cells", () => ({
+  DEFAULT_REGION: "use",
+  cellFor: () => ({
+    createAdminClient: () => ({
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            single: async () => teamLookup.result,
+          }),
         }),
       }),
     }),
@@ -96,6 +107,7 @@ const unauthorizedUser = {
 afterEach(() => {
   cookieStore.value = undefined
   cookieStore.lastSet = null
+  teamLookup.team = { id: TEAM, region: "use" }
   teamLookup.result = { data: { name: "Acme Corp" }, error: null }
   mockHeaders.host = "console.superserve.ai"
   delete process.env.NEXT_PUBLIC_COOKIE_DOMAIN
@@ -150,6 +162,7 @@ describe("getImpersonationContext", () => {
     cookieStore.value = signImpersonationToken(TEAM, Date.now() + 60_000)
     expect(await getImpersonationContext(platformUser)).toEqual({
       teamId: TEAM,
+      region: "use",
       teamName: "Acme Corp",
     })
   })
@@ -159,6 +172,7 @@ describe("getImpersonationContext", () => {
     teamLookup.result = { data: null, error: { message: "db down" } }
     expect(await getImpersonationContext(platformUser)).toEqual({
       teamId: TEAM,
+      region: "use",
       teamName: "another team",
     })
   })
