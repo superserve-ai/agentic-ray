@@ -282,6 +282,13 @@ describe("pr-loop buildSpec / resolveAuth", () => {
     }
     // No --pr → sweep every open PR.
     expect(built.iterate).toContain("Review the open PRs in $TARGET_REPO")
+    // An agent-side failure (turn limit, rate limit) is labeled so a red tick
+    // is distinguishable from the sandbox infrastructure breaking: the claude
+    // run is un-guarded (`set +e`), its exit captured, and re-raised with a
+    // marker line.
+    expect(built.iterate).toContain("set +e")
+    expect(built.iterate).toContain("CLAUDE_EXIT=$?")
+    expect(built.iterate).toContain("review incomplete")
   })
 
   it("refreshes the warm checkout to the latest default branch every tick", () => {
@@ -298,6 +305,10 @@ describe("pr-loop buildSpec / resolveAuth", () => {
     // the fetched remote tip so project context is never stale.
     expect(built.iterate).toContain("git fetch --all --prune")
     expect(built.iterate).toContain("symbolic-ref")
+    // Before assuming `main`, ask the remote what HEAD actually points at —
+    // a master-default repo with a broken origin/HEAD must not wedge on a
+    // checkout of a branch that doesn't exist.
+    expect(built.iterate).toContain("git ls-remote --symref origin HEAD")
     expect(built.iterate).toContain(
       '-B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"',
     )

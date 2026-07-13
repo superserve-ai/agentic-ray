@@ -171,144 +171,171 @@ async function main(): Promise<void> {
   const work = mkdtempSync(join(tmpdir(), "ss-loops-e2e-"))
   const started = performance.now()
 
-  console.log(`\n[1] creating throwaway repo ${repo} + baseline ...`)
-  seed(work)
-  run("git", ["init", "-q", "-b", "main"], { cwd: work })
-  run("git", ["add", "-A"], { cwd: work })
-  run(
-    "git",
-    [
-      "-c",
-      "user.name=loop-e2e",
-      "-c",
-      "user.email=e2e@superserve.ai",
-      "commit",
-      "-qm",
-      "baseline",
-    ],
-    { cwd: work },
-  )
-  run(
-    "gh",
-    [
-      "repo",
-      "create",
-      repo,
-      "--private",
-      "--source=.",
-      "--remote=origin",
-      "--push",
-    ],
-    { cwd: work, env: ghEnv },
-  )
-
-  console.log("[2] opening a PR with a planted logic bug + shell injection ...")
-  run("git", ["checkout", "-q", "-b", "fix/discount"], { cwd: work })
-  writeFileSync(join(work, "src/discount.js"), BUGGY_DISCOUNT)
-  run("git", ["commit", "-aqm", "feat: tweak discount, add order archive"], {
-    cwd: work,
-    env: {
-      ...ghEnv,
-      GIT_AUTHOR_NAME: "loop-e2e",
-      GIT_AUTHOR_EMAIL: "e2e@superserve.ai",
-      GIT_COMMITTER_NAME: "loop-e2e",
-      GIT_COMMITTER_EMAIL: "e2e@superserve.ai",
-    },
-  })
-  run("git", ["push", "-q", "-u", "origin", "fix/discount"], {
-    cwd: work,
-    env: ghEnv,
-  })
-  const prUrl = run(
-    "gh",
-    [
-      "pr",
-      "create",
-      "--repo",
-      repo,
-      "--base",
-      "main",
-      "--head",
-      "fix/discount",
-      "--title",
-      "Tweak discount + add order archive",
-      "--body",
-      "Adjusts the discount calc and adds an order-archive helper.",
-    ],
-    { env: ghEnv, capture: true },
-  )
-  const prNumber = prUrl.split("/").pop() ?? "1"
-  console.log(`    opened ${prUrl}`)
-
-  console.log(
-    "[3] running the loop (cold start → Claude Code reviews the PR) ...",
-  )
-  const skill = readFileSync(
-    new URL("../pr-loop/skill/SKILL.md", import.meta.url),
-    "utf8",
-  )
-  const result = await runLoop(
-    buildSpec({ repo, skill, auth }),
-    undefined,
-    (l) => process.stdout.write(l),
-  )
-  console.log(
-    `\n    tick done — sandbox ${result.sandboxId}, exit ${result.exitCode}, ${SECS(performance.now() - started)}s total`,
-  )
-
-  console.log("[4] fetching the review the loop posted ...")
-  const raw = run(
-    "gh",
-    ["pr", "view", prNumber, "--repo", repo, "--json", "reviews,comments"],
-    { env: ghEnv, capture: true },
-  )
-  const parsed = JSON.parse(raw) as {
-    reviews: Array<{ body: string; author: { login: string } }>
-    comments: Array<{ body: string; author: { login: string } }>
-  }
-  const bodies = [...parsed.reviews, ...parsed.comments]
-    .map((x) => x.body)
-    .filter((b) => b.trim().length > 0)
-  const lastBody = bodies.length > 0 ? bodies[bodies.length - 1] : undefined
-  const review = bodies.find((b) => b.includes("pr-loop")) ?? lastBody
-
-  console.log("\n========== REVIEW ==========")
-  console.log(review ?? "(no review/comment found — see the loop output above)")
-  console.log("============================\n")
-
-  if (review) {
-    const lc = review.toLowerCase()
-    const caughtBug = lc.includes("discount") || lc.includes("test")
-    const caughtSec =
-      lc.includes("inject") || lc.includes("execsync") || lc.includes("shell")
-    console.log(
-      `heuristic: logic-bug flagged=${caughtBug}  injection flagged=${caughtSec}`,
-    )
-    console.log(
-      caughtBug && caughtSec
-        ? "RESULT: PASS — both planted issues surfaced."
-        : "RESULT: review posted; eyeball it above.",
-    )
-  } else {
-    console.log("RESULT: no review posted — inspect the loop output.")
-  }
-
-  if (flags.keep) {
-    console.log(
-      `\nkept ${repo} (and its sandbox). Delete with: gh repo delete ${repo} --yes`,
-    )
-    return
-  }
-  console.log("\n[5] tearing down (sandbox + repo) ...")
-  await killLoopBoxes(repo)
+  // Everything after `gh repo create` runs inside try/finally: a failed step
+  // (runLoop throw, timeout, Ctrl-C-adjacent error) must still tear down the
+  // private repo and the sandbox, or every failed e2e leaks both.
+  let repoCreated = false
   try {
-    run("gh", ["repo", "delete", repo, "--yes"], { env: ghEnv, capture: true })
-    console.log("done — sandbox + repo removed.")
-  } catch {
-    // The gh token may lack `delete_repo` scope — leave the repo for inspection.
-    console.log(
-      `done — sandbox removed. Repo left for inspection: gh repo delete ${repo} --yes`,
+    await scenario()
+  } finally {
+    if (repoCreated && flags.keep) {
+      console.log(
+        `\nkept ${repo} (and its sandbox). Delete with: gh repo delete ${repo} --yes`,
+      )
+    } else if (repoCreated) {
+      console.log("\n[5] tearing down (sandbox + repo) ...")
+      // Best-effort: teardown failures must not mask the scenario's real error.
+      try {
+        await killLoopBoxes(repo)
+      } catch (err) {
+        console.log(`    sandbox teardown failed (kill manually): ${err}`)
+      }
+      try {
+        run("gh", ["repo", "delete", repo, "--yes"], {
+          env: ghEnv,
+          capture: true,
+        })
+        console.log("done — sandbox + repo removed.")
+      } catch {
+        // The gh token may lack `delete_repo` scope — leave the repo for inspection.
+        console.log(
+          `done — repo left for inspection: gh repo delete ${repo} --yes`,
+        )
+      }
+    }
+  }
+
+  async function scenario(): Promise<void> {
+    console.log(`\n[1] creating throwaway repo ${repo} + baseline ...`)
+    seed(work)
+    run("git", ["init", "-q", "-b", "main"], { cwd: work })
+    run("git", ["add", "-A"], { cwd: work })
+    run(
+      "git",
+      [
+        "-c",
+        "user.name=loop-e2e",
+        "-c",
+        "user.email=e2e@superserve.ai",
+        "commit",
+        "-qm",
+        "baseline",
+      ],
+      { cwd: work },
     )
+    run(
+      "gh",
+      [
+        "repo",
+        "create",
+        repo,
+        "--private",
+        "--source=.",
+        "--remote=origin",
+        "--push",
+      ],
+      { cwd: work, env: ghEnv },
+    )
+    repoCreated = true
+
+    console.log(
+      "[2] opening a PR with a planted logic bug + shell injection ...",
+    )
+    run("git", ["checkout", "-q", "-b", "fix/discount"], { cwd: work })
+    writeFileSync(join(work, "src/discount.js"), BUGGY_DISCOUNT)
+    run("git", ["commit", "-aqm", "feat: tweak discount, add order archive"], {
+      cwd: work,
+      env: {
+        ...ghEnv,
+        GIT_AUTHOR_NAME: "loop-e2e",
+        GIT_AUTHOR_EMAIL: "e2e@superserve.ai",
+        GIT_COMMITTER_NAME: "loop-e2e",
+        GIT_COMMITTER_EMAIL: "e2e@superserve.ai",
+      },
+    })
+    run("git", ["push", "-q", "-u", "origin", "fix/discount"], {
+      cwd: work,
+      env: ghEnv,
+    })
+    const prUrl = run(
+      "gh",
+      [
+        "pr",
+        "create",
+        "--repo",
+        repo,
+        "--base",
+        "main",
+        "--head",
+        "fix/discount",
+        "--title",
+        "Tweak discount + add order archive",
+        "--body",
+        "Adjusts the discount calc and adds an order-archive helper.",
+      ],
+      { env: ghEnv, capture: true },
+    )
+    const prNumber = prUrl.split("/").pop() ?? "1"
+    console.log(`    opened ${prUrl}`)
+
+    console.log(
+      "[3] running the loop (cold start → Claude Code reviews the PR) ...",
+    )
+    const skill = readFileSync(
+      new URL("../pr-loop/skill/SKILL.md", import.meta.url),
+      "utf8",
+    )
+    const result = await runLoop(
+      buildSpec({ repo, skill, auth }),
+      undefined,
+      (l) => process.stdout.write(l),
+    )
+    console.log(
+      `\n    tick done — sandbox ${result.sandboxId}, exit ${result.exitCode}, ${SECS(performance.now() - started)}s total`,
+    )
+
+    console.log("[4] fetching the review the loop posted ...")
+    const raw = run(
+      "gh",
+      ["pr", "view", prNumber, "--repo", repo, "--json", "reviews,comments"],
+      { env: ghEnv, capture: true },
+    )
+    const parsed = JSON.parse(raw) as {
+      reviews: Array<{ body: string; author: { login: string } }>
+      comments: Array<{ body: string; author: { login: string } }>
+    }
+    const bodies = [...parsed.reviews, ...parsed.comments]
+      .map((x) => x.body)
+      .filter((b) => b.trim().length > 0)
+    const lastBody = bodies.length > 0 ? bodies[bodies.length - 1] : undefined
+    const review = bodies.find((b) => b.includes("pr-loop")) ?? lastBody
+
+    console.log("\n========== REVIEW ==========")
+    console.log(
+      review ?? "(no review/comment found — see the loop output above)",
+    )
+    console.log("============================\n")
+
+    if (review) {
+      const lc = review.toLowerCase()
+      // Match bug-specific phrasing only: "discount" and "test" appear in the PR
+      // title and filename, so a review that never identified the logic error
+      // would still have matched them and reported a false PASS.
+      const caughtBug =
+        lc.includes("percentage") || /price\s*-\s*percent/.test(lc)
+      const caughtSec =
+        lc.includes("inject") || lc.includes("execsync") || lc.includes("shell")
+      console.log(
+        `heuristic: logic-bug flagged=${caughtBug}  injection flagged=${caughtSec}`,
+      )
+      console.log(
+        caughtBug && caughtSec
+          ? "RESULT: PASS — both planted issues surfaced."
+          : "RESULT: review posted; eyeball it above.",
+      )
+    } else {
+      console.log("RESULT: no review posted — inspect the loop output.")
+    }
   }
 }
 

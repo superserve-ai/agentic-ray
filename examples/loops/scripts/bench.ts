@@ -27,54 +27,70 @@ async function main(): Promise<void> {
   const tCreate = now() - t0
   console.log(`    created ${box.id} in ${secs(tCreate)}s`)
 
-  const ver = await box.commands.run(
-    "claude --version 2>&1 || echo 'NO CLAUDE'",
-  )
-  console.log(`    harness: ${ver.stdout.trim()}`)
+  // From here on the box exists: run the whole benchmark inside try/finally so
+  // any throw (setup timeout, pause, resume) still kills it instead of leaking
+  // a billed sandbox.
+  try {
+    await benchmark()
+  } finally {
+    await Sandbox.killById(box.id).catch(() => {})
+    console.log("killed box. done.")
+  }
 
-  console.log("[2] cold setup (install gh + clone) ...")
-  const setup = [
-    'export PATH="$HOME/.local/bin:$PATH"',
-    "if ! command -v gh >/dev/null 2>&1; then GH=2.63.2;" +
-      ' curl -fsSL "https://github.com/cli/cli/releases/download/v${GH}/gh_${GH}_linux_amd64.tar.gz" -o /tmp/gh.tgz' +
-      ' && mkdir -p "$HOME/.local/bin" && tar -xzf /tmp/gh.tgz -C /tmp' +
-      ' && cp "/tmp/gh_${GH}_linux_amd64/bin/gh" "$HOME/.local/bin/gh"; fi',
-    "git clone --depth 1 https://github.com/octocat/Hello-World /home/user/repo",
-    "gh --version | head -1",
-    'echo "warm-marker $(date -u +%s)" > /home/user/repo/.smoke-state',
-  ].join(" && ")
-  const t1 = now()
-  const setupRes = await box.commands.run(setup, {
-    timeoutMs: 5 * 60_000,
-    onStdout: (d) => process.stdout.write(d),
-    onStderr: (d) => process.stderr.write(d),
-  })
-  const tSetup = now() - t1
-  console.log(`    setup exit ${setupRes.exitCode} in ${secs(tSetup)}s`)
+  async function benchmark(): Promise<void> {
+    const ver = await box.commands.run(
+      "claude --version 2>&1 || echo 'NO CLAUDE'",
+    )
+    console.log(`    harness: ${ver.stdout.trim()}`)
 
-  console.log("[3] pausing ...")
-  await box.pause()
+    console.log("[2] cold setup (install gh + clone) ...")
+    const setup = [
+      'export PATH="$HOME/.local/bin:$PATH"',
+      "if ! command -v gh >/dev/null 2>&1; then GH=2.63.2;" +
+        ' curl -fsSL "https://github.com/cli/cli/releases/download/v${GH}/gh_${GH}_linux_amd64.tar.gz" -o /tmp/gh.tgz' +
+        ' && mkdir -p "$HOME/.local/bin" && tar -xzf /tmp/gh.tgz -C /tmp' +
+        ' && cp "/tmp/gh_${GH}_linux_amd64/bin/gh" "$HOME/.local/bin/gh"; fi',
+      "git clone --depth 1 https://github.com/octocat/Hello-World /home/user/repo",
+      "gh --version | head -1",
+      'echo "warm-marker $(date -u +%s)" > /home/user/repo/.smoke-state',
+    ].join(" && ")
+    const t1 = now()
+    const setupRes = await box.commands.run(setup, {
+      timeoutMs: 5 * 60_000,
+      onStdout: (d) => process.stdout.write(d),
+      onStderr: (d) => process.stderr.write(d),
+    })
+    const tSetup = now() - t1
+    console.log(`    setup exit ${setupRes.exitCode} in ${secs(tSetup)}s`)
 
-  console.log("[4] warm resume (list by metadata + connect) ...")
-  const t2 = now()
-  const [info] = await Sandbox.list({ metadata: META })
-  const warm = await Sandbox.connect(info.id)
-  const check = await warm.commands.run(
-    "cat /home/user/repo/.smoke-state && ls /home/user/repo >/dev/null && echo RESUMED-WARM",
-  )
-  const tWarm = now() - t2
-  console.log(
-    `    warm tick in ${secs(tWarm)}s — ${check.stdout.trim().replace(/\n/g, " | ")}`,
-  )
-  await warm.pause()
+    console.log("[3] pausing ...")
+    await box.pause()
 
-  console.log("\n=== HERO NUMBERS ===")
-  console.log(`cold start (create + setup): ${secs(tCreate + tSetup)}s`)
-  console.log(`warm tick   (resume + run):  ${secs(tWarm)}s`)
-  console.log(`warm is ${((tCreate + tSetup) / tWarm).toFixed(1)}x faster\n`)
+    console.log("[4] warm resume (list by metadata + connect) ...")
+    const t2 = now()
+    const [info] = await Sandbox.list({ metadata: META })
+    // Paused boxes can be excluded or listing can lag — fail with a real message
+    // instead of a TypeError on `info.id` (the finally above still cleans up).
+    if (!info) {
+      throw new Error(
+        "warm resume failed: list() returned no box for the bench metadata",
+      )
+    }
+    const warm = await Sandbox.connect(info.id)
+    const check = await warm.commands.run(
+      "cat /home/user/repo/.smoke-state && ls /home/user/repo >/dev/null && echo RESUMED-WARM",
+    )
+    const tWarm = now() - t2
+    console.log(
+      `    warm tick in ${secs(tWarm)}s — ${check.stdout.trim().replace(/\n/g, " | ")}`,
+    )
+    await warm.pause()
 
-  await Sandbox.killById(box.id)
-  console.log("killed box. done.")
+    console.log("\n=== HERO NUMBERS ===")
+    console.log(`cold start (create + setup): ${secs(tCreate + tSetup)}s`)
+    console.log(`warm tick   (resume + run):  ${secs(tWarm)}s`)
+    console.log(`warm is ${((tCreate + tSetup) / tWarm).toFixed(1)}x faster\n`)
+  }
 }
 
 main().catch((e: unknown) => {

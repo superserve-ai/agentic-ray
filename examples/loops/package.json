@@ -1,6 +1,6 @@
 {
   "name": "@superserve/loops",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Agent loops that run on Superserve sandboxes — a warm, isolated runtime for loop engineering.",
   "bin": {
     "superserve-loops": "install/cli.ts"

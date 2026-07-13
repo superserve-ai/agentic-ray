@@ -214,11 +214,22 @@ function iterateScript(claudeMode: ClaudeMode, pr?: number): string {
     // Best-effort — the lookup itself must never fail the tick.
     "git remote set-head origin --auto >/dev/null 2>&1 || true",
     `DEFAULT_BRANCH="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' || true)"`,
+    // origin/HEAD can be unset or broken (the set-head above is best-effort);
+    // ask the remote directly before assuming `main` — on a master-default repo
+    // a wrong guess would wedge EVERY tick on a checkout of a branch that
+    // doesn't exist, until origin/HEAD is repaired.
+    `DEFAULT_BRANCH="\${DEFAULT_BRANCH:-$(git ls-remote --symref origin HEAD 2>/dev/null | awk '/^ref:/ {sub("refs/heads/","",$2); print $2; exit}')}"`,
     `DEFAULT_BRANCH="\${DEFAULT_BRANCH:-main}"`,
     // Each PR is reviewed in its own scratch worktree, so the main tree stays on the
     // default branch: `-f -B` fast-forwards it to origin and drops any stray change,
     // while leaving the untracked .pr-loop-state.md (loop memory) untouched.
     'git checkout -f -q -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"',
+    // `set -e` guards the git plumbing above; the claude run itself is captured
+    // so an agent-side failure (--max-turns hit, a transient Anthropic rate
+    // limit) is labeled "review incomplete" instead of being indistinguishable
+    // from the sandbox/proxy infrastructure breaking. The tick still exits
+    // non-zero either way — a red run stays red — but the log names the class.
+    "set +e",
     // IS_SANDBOX=1 lifts Claude Code's refusal to run --dangerously-skip-permissions
     // (what bypassPermissions maps to) as root: the box runs as root, and without this
     // the tick dies with "cannot be used with root/sudo privileges" before reviewing
@@ -245,6 +256,12 @@ function iterateScript(claudeMode: ClaudeMode, pr?: number): string {
     '  --disallowedTools "Bash(gh pr merge*),Bash(git push*),Bash(gh pr close*),Bash(gh pr reopen*),Bash(gh pr ready*)" \\',
     "  --output-format json \\",
     "  --max-turns 50",
+    "CLAUDE_EXIT=$?",
+    "set -e",
+    'if [ "$CLAUDE_EXIT" -ne 0 ]; then',
+    '  echo "[pr-loop] review incomplete — claude exited $CLAUDE_EXIT (agent-side: turn limit, rate limit, or harness error — not sandbox infrastructure)" >&2',
+    '  exit "$CLAUDE_EXIT"',
+    "fi",
   ].join("\n")
 }
 
