@@ -3,21 +3,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 const upserts: Array<Record<string, unknown>> = []
 const updates: Array<Record<string, unknown>> = []
 
-vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: vi.fn(() => ({
-    from: () => ({
-      upsert: async (row: Record<string, unknown>) => {
-        upserts.push(row)
-        return { error: null }
-      },
-      update: (values: Record<string, unknown>) => ({
-        eq: async (column: string, value: string) => {
-          updates.push({ values, column, value })
+vi.mock("@/lib/cells", () => ({
+  cellFor: () => ({
+    createAdminClient: () => ({
+      from: () => ({
+        upsert: async (row: Record<string, unknown>) => {
+          upserts.push(row)
           return { error: null }
         },
+        update: (values: Record<string, unknown>) => ({
+          eq: async (column: string, value: string) => {
+            updates.push({ values, column, value })
+            return { error: null }
+          },
+        }),
       }),
     }),
-  })),
+  }),
 }))
 
 import {
@@ -44,6 +46,7 @@ describe("impersonation key rows", () => {
     const key = await ensureImpersonationKeyRow(
       "admin-1",
       "team-1",
+      "use",
       ["platform:sandbox:read", "platform:template:read"],
       7,
     )
@@ -65,16 +68,16 @@ describe("impersonation key rows", () => {
 
   it("rejects empty scope lists", async () => {
     await expect(
-      ensureImpersonationKeyRow("admin-1", "team-1", []),
+      ensureImpersonationKeyRow("admin-1", "team-1", "use", []),
     ).rejects.toThrow(/at least one read scope/)
     expect(upserts).toHaveLength(0)
   })
 
   it("revokes the impersonation key row", async () => {
-    await ensureImpersonationKeyRow("admin-2", "team-2", [
+    await ensureImpersonationKeyRow("admin-2", "team-2", "use", [
       "platform:sandbox:read",
     ])
-    await revokeImpersonationKeyRow("admin-2", "team-2")
+    await revokeImpersonationKeyRow("admin-2", "team-2", "use")
 
     expect(upserts).toHaveLength(1)
     expect(updates).toEqual([

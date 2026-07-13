@@ -4,11 +4,11 @@ import { redirect } from "next/navigation"
 
 import {
   clearImpersonationCookie,
-  readImpersonationTeamId,
+  readImpersonationContext,
   setImpersonationCookie,
 } from "@/lib/admin/impersonation"
 import { revokeImpersonationKeyRow } from "@/lib/admin/impersonation-key"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { findTeamById, listAllTeams } from "@/lib/api/team-directory"
 import { createServerClient } from "@/lib/supabase/server"
 
 import {
@@ -18,8 +18,6 @@ import {
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-const MAX_TEAMS = 1000
 
 export interface AdminTeamRow {
   id: string
@@ -53,15 +51,7 @@ async function requirePlatformImpersonationAccess() {
 
 export async function listAllTeamsAction(): Promise<AdminTeamRow[]> {
   await requirePlatformTeamRead()
-  const admin = createAdminClient()
-  const { data, error } = await admin
-    .from("team")
-    .select("id, name, active_sandbox_count, max_sandboxes, created_at")
-    .order("created_at", { ascending: false })
-    .limit(MAX_TEAMS)
-
-  if (error) throw new Error(error.message)
-  return (data ?? []) as AdminTeamRow[]
+  return (await listAllTeams()).map(({ region: _region, ...team }) => team)
 }
 
 export async function getTeamAction(teamId: string) {
@@ -70,15 +60,10 @@ export async function getTeamAction(teamId: string) {
     throw new Error("Invalid team id")
   }
 
-  const admin = createAdminClient()
-  const { data, error } = await admin
-    .from("team")
-    .select("id, name, active_sandbox_count, max_sandboxes, created_at")
-    .eq("id", teamId)
-    .single()
-
-  if (error) throw new Error(error.message)
-  return data as AdminTeamRow
+  const team = await findTeamById(teamId)
+  if (!team) throw new Error("Team not found")
+  const { region: _region, ...row } = team
+  return row
 }
 
 export async function startImpersonationAction(teamId: string) {
@@ -87,20 +72,15 @@ export async function startImpersonationAction(teamId: string) {
     throw new Error("Invalid team id")
   }
 
-  const admin = createAdminClient()
-  const { data: team, error } = await admin
-    .from("team")
-    .select("id")
-    .eq("id", teamId)
-    .single()
-  if (error || !team) throw new Error("Team not found")
+  const team = await findTeamById(teamId)
+  if (!team) throw new Error("Team not found")
 
-  await setImpersonationCookie(teamId)
+  await setImpersonationCookie(teamId, team.region)
   redirect("/sandboxes")
 }
 
 export async function stopImpersonationAction() {
-  const teamId = await readImpersonationTeamId()
+  const impersonation = await readImpersonationContext()
   await clearImpersonationCookie()
 
   let user
@@ -110,9 +90,13 @@ export async function stopImpersonationAction() {
     redirect("/admin")
   }
 
-  if (user && teamId) {
+  if (user && impersonation) {
     try {
-      await revokeImpersonationKeyRow(user.id, teamId)
+      await revokeImpersonationKeyRow(
+        user.id,
+        impersonation.teamId,
+        impersonation.region,
+      )
     } catch {
       // Exit should not be blocked by best-effort cleanup failure.
     }

@@ -1,13 +1,13 @@
 import {
   getImpersonationContext,
-  type ImpersonationContext,
+  type ImpersonationDisplayContext,
 } from "@/lib/admin/impersonation"
 import { stopImpersonationAction } from "@/lib/admin/teams-actions"
 
 export async function ImpersonationBanner({
   context,
 }: {
-  context?: ImpersonationContext | null
+  context?: ImpersonationDisplayContext | null
 } = {}) {
   const ctx = context === undefined ? await getImpersonationContext() : context
 

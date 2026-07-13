@@ -2,7 +2,7 @@ import crypto from "node:crypto"
 
 import type { PlatformImpersonationReadScope } from "@/lib/admin/permissions"
 import { getProxySecret, hashKey } from "@/lib/api/proxy-secret"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { cellFor } from "@/lib/cells"
 
 export const IMPERSONATION_KEY_NAME = "__console_impersonation__"
 const IMPERSONATION_KEY_PURPOSE = "imp:v1"
@@ -35,6 +35,7 @@ export function deriveImpersonationKey(
 export async function ensureImpersonationKeyRow(
   adminId: string,
   teamId: string,
+  region: string,
   scopes: PlatformImpersonationReadScope[],
   ttlMinutes: number = DEFAULT_TTL_MINUTES,
 ): Promise<string> {
@@ -47,8 +48,9 @@ export async function ensureImpersonationKeyRow(
   const ttlMs = ttlMinutes * 60_000
   const now = Date.now()
   const scopesKey = scopes.join(",")
+  const cacheKey = `${region}:${keyHash}`
 
-  const cachedExpiry = keyExpiryCache.get(keyHash)
+  const cachedExpiry = keyExpiryCache.get(cacheKey)
   if (
     cachedExpiry !== undefined &&
     cachedExpiry.scopesKey === scopesKey &&
@@ -58,7 +60,7 @@ export async function ensureImpersonationKeyRow(
   }
 
   const expiresAtMs = now + ttlMs
-  const admin = createAdminClient()
+  const admin = cellFor(region).createAdminClient()
   const { error } = await admin.from("api_key").upsert(
     {
       team_id: teamId,
@@ -76,19 +78,20 @@ export async function ensureImpersonationKeyRow(
     throw new Error(`Failed to ensure impersonation key: ${error.message}`)
   }
 
-  keyExpiryCache.set(keyHash, { expiresAtMs, scopesKey })
+  keyExpiryCache.set(cacheKey, { expiresAtMs, scopesKey })
   return rawKey
 }
 
 export async function revokeImpersonationKeyRow(
   adminId: string,
   teamId: string,
+  region: string,
 ): Promise<void> {
   const rawKey = deriveImpersonationKey(adminId, teamId)
   const keyHash = hashKey(rawKey)
-  keyExpiryCache.delete(keyHash)
+  keyExpiryCache.delete(`${region}:${keyHash}`)
 
-  const admin = createAdminClient()
+  const admin = cellFor(region).createAdminClient()
   const { error } = await admin
     .from("api_key")
     .update({ revoked_at: new Date().toISOString() })

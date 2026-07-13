@@ -18,7 +18,14 @@ vi.mock("@/lib/api/proxy-auth", () => ({
   getAuthApiKeyForUser: vi.fn(),
 }))
 vi.mock("@/lib/admin/impersonation", () => ({
-  getImpersonationTeamId: vi.fn(),
+  getImpersonationContext: vi.fn(),
+}))
+vi.mock("@/lib/cells", () => ({
+  DEFAULT_REGION: "use",
+  cellFor: (region: string) => ({
+    region,
+    apiBaseUrl: `https://api-${region}.test`,
+  }),
 }))
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: vi.fn(),
@@ -30,7 +37,7 @@ vi.stubGlobal("fetch", fetchSpy)
 
 // SANDBOX_API_URL is pre-stubbed in src/test/setup.ts; the route reads it at module load.
 
-import { getImpersonationTeamId } from "@/lib/admin/impersonation"
+import { getImpersonationContext } from "@/lib/admin/impersonation"
 import {
   getApiBaseUrlForUser,
   getAuthApiKeyForUser,
@@ -70,8 +77,8 @@ describe("api proxy /api/[...path]", () => {
     vi.mocked(getApiBaseUrlForUser).mockResolvedValue(
       "https://api.test.superserve.ai",
     )
-    vi.mocked(getImpersonationTeamId).mockReset()
-    vi.mocked(getImpersonationTeamId).mockResolvedValue(null)
+    vi.mocked(getImpersonationContext).mockReset()
+    vi.mocked(getImpersonationContext).mockResolvedValue(null)
   })
 
   it("returns 404 for a path outside the allowed prefixes", async () => {
@@ -140,7 +147,11 @@ describe("api proxy /api/[...path]", () => {
   })
 
   it("overrides forwarded team_id while impersonating", async () => {
-    vi.mocked(getImpersonationTeamId).mockResolvedValue("impersonated-team")
+    vi.mocked(getImpersonationContext).mockResolvedValue({
+      teamId: "impersonated-team",
+      region: "usw",
+      teamName: "Impersonated Team",
+    })
     fetchSpy.mockResolvedValue(new Response("[]", { status: 200 }))
     const request = new NextRequest(
       new URL("https://console.test/api/templates?team_id=admin-team&owner=me"),
@@ -151,11 +162,16 @@ describe("api proxy /api/[...path]", () => {
 
     expect(getAuthApiKeyForUser).toHaveBeenCalledWith(
       { id: "u1" },
-      "impersonated-team",
+      {
+        teamId: "impersonated-team",
+        region: "usw",
+        teamName: "Impersonated Team",
+      },
     )
+    expect(getApiBaseUrlForUser).not.toHaveBeenCalled()
     const [url] = fetchSpy.mock.calls[0]
     expect(url).toBe(
-      "https://api.test.superserve.ai/templates?team_id=impersonated-team&owner=me",
+      "https://api-usw.test/templates?team_id=impersonated-team&owner=me",
     )
     const [, fetchInit] = fetchSpy.mock.calls[0]
     const headers = fetchInit.headers as Headers
@@ -163,7 +179,11 @@ describe("api proxy /api/[...path]", () => {
   })
 
   it("blocks writes while impersonating", async () => {
-    vi.mocked(getImpersonationTeamId).mockResolvedValue("impersonated-team")
+    vi.mocked(getImpersonationContext).mockResolvedValue({
+      teamId: "impersonated-team",
+      region: "usw",
+      teamName: "Impersonated Team",
+    })
 
     const res = await POST(
       req("POST", ["templates"], {
@@ -283,7 +303,11 @@ describe("api proxy /api/[...path]", () => {
   })
 
   it("redacts access tokens during impersonation", async () => {
-    vi.mocked(getImpersonationTeamId).mockResolvedValue("impersonated-team")
+    vi.mocked(getImpersonationContext).mockResolvedValue({
+      teamId: "impersonated-team",
+      region: "usw",
+      teamName: "Impersonated Team",
+    })
     fetchSpy.mockResolvedValue(
       new Response(JSON.stringify({ id: "abc", access_token: "keep-me" }), {
         status: 200,

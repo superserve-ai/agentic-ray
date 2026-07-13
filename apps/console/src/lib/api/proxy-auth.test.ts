@@ -43,6 +43,7 @@ vi.mock("@/lib/api/team-directory", () => ({
     { teamId: "team-west", region: "usw" },
   ]),
   invalidateMembershipDirectory: vi.fn(),
+  findTeamById: vi.fn(async () => ({ region: "use" })),
 }))
 
 // A user with no membership is provisioned a full team via this helper; the
@@ -279,7 +280,30 @@ describe("proxy-auth impersonation", () => {
     expect(ensureImpersonationKeyRow).toHaveBeenCalledWith(
       "admin",
       "team-1",
+      "use",
       ["platform:sandbox:read", "platform:template:read"],
+      expect.any(Number),
+    )
+  })
+
+  it("uses the impersonation region without re-resolving it", async () => {
+    vi.mocked(platformImpersonationReadScopes).mockReturnValue([
+      "platform:sandbox:read",
+    ])
+
+    await getAuthApiKeyForUser(
+      { id: "admin", email: "admin@superserve.ai" } as never,
+      {
+        teamId: "team-1",
+        region: "usw",
+      },
+    )
+
+    expect(ensureImpersonationKeyRow).toHaveBeenCalledWith(
+      "admin",
+      "team-1",
+      "usw",
+      ["platform:sandbox:read"],
       expect.any(Number),
     )
   })

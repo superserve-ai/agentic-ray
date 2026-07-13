@@ -13,6 +13,12 @@ export interface TeamDirectoryEntry {
   region: string
 }
 
+export interface TeamRecord extends TeamDirectoryEntry {
+  active_sandbox_count: number
+  max_sandboxes: number
+  created_at: string
+}
+
 /**
  * Run a per-cell lookup across every configured cell in parallel, merged in
  * region order (default cell first).
@@ -213,4 +219,72 @@ export async function listTeamsForUser(
     }))
   })
   return items
+}
+
+/**
+ * All teams across every configured cell, tagged with their source region.
+ * Admin pages use this to avoid the default-cell-only blind spot.
+ */
+export async function listAllTeams(): Promise<TeamRecord[]> {
+  const { items } = await acrossCells(async (region) => {
+    const admin = cellFor(region).createAdminClient()
+    const { data: teams, error } = await admin
+      .from("team")
+      .select("id, name, active_sandbox_count, max_sandboxes, created_at")
+
+    if (error) throw new Error(error.message)
+
+    return (teams ?? []).map((team) => ({
+      id: team.id as string,
+      name: team.name as string,
+      active_sandbox_count: team.active_sandbox_count as number,
+      max_sandboxes: team.max_sandboxes as number,
+      created_at: team.created_at as string,
+      region,
+    }))
+  })
+
+  return items
+    .toSorted((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, 1000)
+}
+
+async function findTeamInRegion(
+  region: string,
+  teamId: string,
+): Promise<TeamRecord | null> {
+  const admin = cellFor(region).createAdminClient()
+  const { data: teams, error } = await admin
+    .from("team")
+    .select("id, name, active_sandbox_count, max_sandboxes, created_at")
+    .eq("id", teamId)
+    .limit(1)
+
+  if (error) throw new Error(error.message)
+
+  const team = teams?.[0]
+  if (!team) return null
+
+  return {
+    id: team.id as string,
+    name: team.name as string,
+    active_sandbox_count: team.active_sandbox_count as number,
+    max_sandboxes: team.max_sandboxes as number,
+    created_at: team.created_at as string,
+    region,
+  }
+}
+
+/**
+ * Find a team by id across all configured cells. Returns the first match
+ * with its source region, or null if the team does not exist anywhere.
+ */
+export async function findTeamById(teamId: string): Promise<TeamRecord | null> {
+  const regions = configuredRegions()
+  for (const region of regions) {
+    const team = await findTeamInRegion(region, teamId)
+    if (team) return team
+  }
+
+  return null
 }

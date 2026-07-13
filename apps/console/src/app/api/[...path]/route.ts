@@ -1,7 +1,7 @@
 import type { User } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 
-import { getImpersonationTeamId } from "@/lib/admin/impersonation"
+import { getImpersonationContext } from "@/lib/admin/impersonation"
 import {
   getApiBaseUrlForUser,
   getAuthApiKeyForUser,
@@ -80,7 +80,7 @@ async function proxyRequest(
   const debugImpersonation =
     request.nextUrl.searchParams.get("__debug_impersonation") === "1"
   let user: User | null = null
-  let impersonatedTeamId: string | null = null
+  let impersonationContext: { teamId: string; region: string } | null = null
   let impersonating = false
 
   if (!skipKeyInjection) {
@@ -89,8 +89,8 @@ async function proxyRequest(
       data: { user: authUser },
     } = await supabase.auth.getUser()
     user = authUser
-    impersonatedTeamId = await getImpersonationTeamId(user)
-    impersonating = impersonatedTeamId !== null
+    impersonationContext = await getImpersonationContext(user)
+    impersonating = impersonationContext !== null
     const isReadMethod = request.method === "GET" || request.method === "HEAD"
     if (impersonating && !isReadMethod) {
       return NextResponse.json(
@@ -109,8 +109,8 @@ async function proxyRequest(
   const url = new URL(`${SANDBOX_API_URL}/${joinedPath}`)
   url.search = request.nextUrl.search
   url.searchParams.delete("__debug_impersonation")
-  if (impersonating && impersonatedTeamId) {
-    url.searchParams.set("team_id", impersonatedTeamId)
+  if (impersonating && impersonationContext) {
+    url.searchParams.set("team_id", impersonationContext.teamId)
   }
 
   const headers = new Headers()
@@ -131,7 +131,7 @@ async function proxyRequest(
   // Inject server-side API key for authenticated requests
   let authMode = skipKeyInjection ? "skipped" : "none"
   if (!skipKeyInjection) {
-    const apiKey = await getAuthApiKeyForUser(user, impersonatedTeamId)
+    const apiKey = await getAuthApiKeyForUser(user, impersonationContext)
 
     if (!apiKey || !user) {
       return NextResponse.json(
@@ -140,7 +140,9 @@ async function proxyRequest(
       )
     }
     headers.set("X-API-Key", apiKey)
-    apiBaseUrl = await getApiBaseUrlForUser(user)
+    apiBaseUrl = impersonationContext
+      ? cellFor(impersonationContext.region).apiBaseUrl
+      : await getApiBaseUrlForUser(user)
     authMode = impersonating ? "impersonation" : "self"
   }
 
@@ -169,7 +171,7 @@ async function proxyRequest(
     responseHeaders,
     debugImpersonation,
     authMode,
-    impersonatedTeamId,
+    impersonationContext?.teamId ?? null,
   )
 
   // Per the Fetch spec, 204/205/304 responses must not have a body.
