@@ -24,6 +24,25 @@ Curated by Superserve and available to every team. Identified by the `superserve
 
 A sandbox inherits its VM shape (vCPU, memory, disk) from the template it boots from — see [BuildSpec reference](/templates/build-spec) for the limits.
 
+## Python & pip availability
+
+Only some system templates include Python, and `pip install` behavior depends on how it got installed. Debian/Ubuntu's `apt`-installed Python is a PEP 668 "externally managed" environment — a bare `pip install` fails with `externally-managed-environment`. The official Python Docker images (`python:3.11-slim`, `python:3.11`) don't have this restriction.
+
+| Template | Python | pip | PEP 668 (externally managed) |
+|---|---|---|---|
+| `superserve/base` | Not installed | — | — |
+| `superserve/python-3.11` | 3.11 | Yes | No — `pip install` works directly |
+| `superserve/node-22` | Not installed | — | — |
+| `superserve/python-ml` | 3.11 | Yes | No — `pip install` works directly |
+| `superserve/code-interpreter` | 3.11 | Yes | No — `pip install` works directly |
+| `superserve/claude-code` | 3.12 (Ubuntu 24.04 system Python) | `pip3` | Yes — use a venv, `pipx`, or `pip install --break-system-packages` |
+| `superserve/openclaw` | Not installed | — | — |
+| `superserve/hermes` | Not installed | — | — |
+
+<Note>
+Need Python without the PEP 668 restriction? Boot from `superserve/python-3.11`, `superserve/python-ml`, or `superserve/code-interpreter` instead of installing Python via `apt` in a custom template — the official Python base images aren't externally managed.
+</Note>
+
 ## Team templates
 
 Team-owned templates let you bake in team-specific dependencies (e.g. `my-python-env` with scientific libs pre-installed). They're created via `Template.create()` and referenced by name.

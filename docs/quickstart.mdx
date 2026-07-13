@@ -30,6 +30,10 @@ See [Get an API key](/api-key) for more options.
 
 ## 3. Create a sandbox and run a command
 
+<Note>
+`Sandbox.create()` defaults to the `superserve/base` template — a bare Ubuntu 24.04 image with no Python or pip installed. For Python work, pass `fromTemplate: "superserve/python-3.11"` (or another Python template). See [what each template includes](/templates/overview#python-pip-availability).
+</Note>
+
 <CodeGroup>
 ```typescript TypeScript
 import { Sandbox } from "@superserve/sdk"
