@@ -30,8 +30,11 @@ vi.stubGlobal("fetch", fetchSpy)
 
 // SANDBOX_API_URL is pre-stubbed in src/test/setup.ts; the route reads it at module load.
 
-import { getApiBaseUrlForUser, getAuthApiKeyForUser } from "@/lib/api/proxy-auth"
 import { getImpersonationTeamId } from "@/lib/admin/impersonation"
+import {
+  getApiBaseUrlForUser,
+  getAuthApiKeyForUser,
+} from "@/lib/api/proxy-auth"
 import { createServerClient } from "@/lib/supabase/server"
 
 import { DELETE, GET, POST, PUT } from "./route"

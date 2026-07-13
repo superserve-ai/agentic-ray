@@ -134,7 +134,9 @@ describe("proxy-auth.deriveRawKey", () => {
     process.env.CONSOLE_PROXY_SECRET =
       "test-secret-must-be-at-least-thirty-two-chars-long-abcdef"
     vi.mocked(platformImpersonationReadScopes).mockReturnValue([])
-    vi.mocked(ensureImpersonationKeyRow).mockResolvedValue("ss_live_impersonation")
+    vi.mocked(ensureImpersonationKeyRow).mockResolvedValue(
+      "ss_live_impersonation",
+    )
   })
 
   it("is deterministic: same user and team always return the same key", () => {

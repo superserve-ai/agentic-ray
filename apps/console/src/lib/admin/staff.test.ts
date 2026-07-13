@@ -86,9 +86,9 @@ describe("platform team read permission", () => {
   })
 
   it("does not grant team access without the permission", () => {
-    expect(canReadPlatformTeams(user("a@superserve.ai", "google", ["google"]))).toBe(
-      false,
-    )
+    expect(
+      canReadPlatformTeams(user("a@superserve.ai", "google", ["google"])),
+    ).toBe(false)
   })
 
   it("does not grant team access to non-staff even with the permission", () => {
@@ -223,12 +223,22 @@ describe("platform impersonation access", () => {
   it("returns only the matching scope when a single permission is present", () => {
     expect(
       platformImpersonationReadScopes(
-        user("person@example.com", "google", ["google"], ["platform:sandbox:read"]),
+        user(
+          "person@example.com",
+          "google",
+          ["google"],
+          ["platform:sandbox:read"],
+        ),
       ),
     ).toEqual(["platform:sandbox:read"])
     expect(
       platformImpersonationReadScopes(
-        user("person@example.com", "google", ["google"], ["platform:template:read"]),
+        user(
+          "person@example.com",
+          "google",
+          ["google"],
+          ["platform:template:read"],
+        ),
       ),
     ).toEqual(["platform:template:read"])
   })
@@ -236,7 +246,12 @@ describe("platform impersonation access", () => {
   it("does not include teams read", () => {
     expect(
       platformImpersonationReadScopes(
-        user("person@example.com", "google", ["google"], ["platform:teams:read"]),
+        user(
+          "person@example.com",
+          "google",
+          ["google"],
+          ["platform:teams:read"],
+        ),
       ),
     ).toEqual([])
   })
@@ -244,12 +259,22 @@ describe("platform impersonation access", () => {
   it("allows impersonation only for staff with at least one supported scope", () => {
     expect(
       canStartPlatformImpersonation(
-        user("a@superserve.ai", "google", ["google"], ["platform:sandbox:read"]),
+        user(
+          "a@superserve.ai",
+          "google",
+          ["google"],
+          ["platform:sandbox:read"],
+        ),
       ),
     ).toBe(true)
     expect(
       canStartPlatformImpersonation(
-        user("a@superserve.ai", "google", ["google"], ["platform:template:read"]),
+        user(
+          "a@superserve.ai",
+          "google",
+          ["google"],
+          ["platform:template:read"],
+        ),
       ),
     ).toBe(true)
     expect(

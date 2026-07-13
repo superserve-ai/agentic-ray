@@ -65,10 +65,11 @@ export function canReadPlatformTemplates(
   return hasPermission(user, PLATFORM_TEMPLATE_READ_PERMISSION)
 }
 
-export function canReadPlatformTeams(
-  user: User | null | undefined,
-): boolean {
-  return isGoogleStaffUser(user) && hasPermission(user, PLATFORM_TEAMS_READ_PERMISSION)
+export function canReadPlatformTeams(user: User | null | undefined): boolean {
+  return (
+    isGoogleStaffUser(user) &&
+    hasPermission(user, PLATFORM_TEAMS_READ_PERMISSION)
+  )
 }
 
 export function platformImpersonationReadScopes(
@@ -89,7 +90,9 @@ export function platformImpersonationReadScopes(
 export function canStartPlatformImpersonation(
   user: User | null | undefined,
 ): boolean {
-  return isGoogleStaffUser(user) && platformImpersonationReadScopes(user).length > 0
+  return (
+    isGoogleStaffUser(user) && platformImpersonationReadScopes(user).length > 0
+  )
 }
 
 export function canViewOtherUsersAccount(
