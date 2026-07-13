@@ -1,7 +1,17 @@
+import { execFileSync } from "node:child_process"
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join } from "node:path"
+
 import { describe, expect, it } from "vitest"
 import { parse } from "yaml"
 
-import { buildWorkflow, extractOAuthToken } from "../install/cli"
+import {
+  buildWorkflow,
+  commitAndPushWorkflow,
+  extractOAuthToken,
+  planPush,
+} from "../install/cli"
 
 /** The parsed shape of the generated workflow — just what the tests assert on. */
 interface ParsedWorkflow {
@@ -137,6 +147,161 @@ describe("buildWorkflow — structural (parsed YAML)", () => {
     expect(steps[2].env?.GITHUB_TOKEN).toBe(
       "${{ steps.app-token.outputs.token }}",
     )
+  })
+})
+
+describe("planPush", () => {
+  it("never auto-pushes over pre-existing unpublished commits — even with --yes", () => {
+    expect(planPush({ aheadBeforeCommit: 2, yes: true, isTTY: true })).toEqual({
+      action: "skip",
+      reason: "ahead",
+    })
+  })
+
+  it("skips when there is no upstream to push to", () => {
+    expect(
+      planPush({ aheadBeforeCommit: undefined, yes: true, isTTY: true }),
+    ).toEqual({ action: "skip", reason: "no-upstream" })
+  })
+
+  it("pushes without prompting only under explicit --yes", () => {
+    expect(planPush({ aheadBeforeCommit: 0, yes: true, isTTY: false })).toEqual(
+      { action: "push" },
+    )
+  })
+
+  it("prompts interactively, and skips when it can't prompt", () => {
+    expect(planPush({ aheadBeforeCommit: 0, yes: false, isTTY: true })).toEqual(
+      { action: "confirm" },
+    )
+    expect(
+      planPush({ aheadBeforeCommit: 0, yes: false, isTTY: false }),
+    ).toEqual({ action: "skip", reason: "needs-confirmation" })
+  })
+})
+
+// --- commitAndPushWorkflow against real throwaway git repos ------------------
+
+function git(cwd: string, ...args: string[]): string {
+  return execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim()
+}
+
+/** A repo with one seed commit and repo-local config that keeps the
+ *  installer's own git calls deterministic (no signing, fixed identity). */
+function makeRepo(): string {
+  const dir = mkdtempSync(join(tmpdir(), "loops-install-test-"))
+  git(dir, "init", "-q", "-b", "main")
+  git(dir, "config", "user.name", "loops-test")
+  git(dir, "config", "user.email", "test@superserve.ai")
+  git(dir, "config", "commit.gpgsign", "false")
+  writeFileSync(join(dir, "README.md"), "seed\n")
+  git(dir, "add", "README.md")
+  git(dir, "commit", "-qm", "seed")
+  return dir
+}
+
+/** Wire the repo to a local bare "origin" and set the upstream. */
+function addUpstream(repo: string): string {
+  const bare = mkdtempSync(join(tmpdir(), "loops-upstream-"))
+  git(bare, "init", "-q", "--bare", "-b", "main")
+  git(repo, "remote", "add", "origin", bare)
+  git(repo, "push", "-qu", "origin", "main")
+  return bare
+}
+
+function writeWorkflowFile(repo: string): string {
+  const wf = join(repo, ".github", "workflows", "loop-pr-loop.yml")
+  mkdirSync(dirname(wf), { recursive: true })
+  writeFileSync(wf, buildWorkflow())
+  return wf
+}
+
+describe("commitAndPushWorkflow", () => {
+  it("commits ONLY the workflow file — the user's staged work stays staged", async () => {
+    const repo = makeRepo()
+    // Unrelated work the user had staged before running the installer.
+    writeFileSync(join(repo, "unrelated.txt"), "user work\n")
+    git(repo, "add", "unrelated.txt")
+    const wf = writeWorkflowFile(repo)
+
+    await commitAndPushWorkflow(repo, wf, {
+      dryRun: false,
+      push: true,
+      yes: true,
+    })
+
+    // The installer commit contains exactly the workflow file…
+    const committed = git(repo, "show", "--name-only", "--format=", "HEAD")
+      .split("\n")
+      .filter(Boolean)
+    expect(committed).toEqual([".github/workflows/loop-pr-loop.yml"])
+    // …and the unrelated staged file was not swept into it.
+    expect(git(repo, "diff", "--cached", "--name-only")).toBe("unrelated.txt")
+  })
+
+  it("refuses to auto-push when the branch was already ahead — even with --yes", async () => {
+    const repo = makeRepo()
+    const bare = addUpstream(repo)
+    // Unpublished local work: one commit ahead of origin/main.
+    writeFileSync(join(repo, "wip.txt"), "unpublished\n")
+    git(repo, "add", "wip.txt")
+    git(repo, "commit", "-qm", "wip: not for publishing")
+    const upstreamBefore = git(bare, "rev-parse", "refs/heads/main")
+    const wf = writeWorkflowFile(repo)
+
+    await commitAndPushWorkflow(repo, wf, {
+      dryRun: false,
+      push: true,
+      yes: true,
+    })
+
+    // Committed locally…
+    expect(git(repo, "log", "-1", "--format=%s")).toBe(
+      "Add pr-loop GitHub Actions workflow",
+    )
+    // …but nothing was published: upstream did not move.
+    expect(git(bare, "rev-parse", "refs/heads/main")).toBe(upstreamBefore)
+  })
+
+  it("pushes exactly the one workflow commit when in sync and consented via --yes", async () => {
+    const repo = makeRepo()
+    const bare = addUpstream(repo)
+    const upstreamBefore = git(bare, "rev-parse", "refs/heads/main")
+    const wf = writeWorkflowFile(repo)
+
+    await commitAndPushWorkflow(repo, wf, {
+      dryRun: false,
+      push: true,
+      yes: true,
+    })
+
+    const upstreamAfter = git(bare, "rev-parse", "refs/heads/main")
+    expect(upstreamAfter).not.toBe(upstreamBefore)
+    expect(
+      git(bare, "rev-list", "--count", `${upstreamBefore}..${upstreamAfter}`),
+    ).toBe("1")
+  })
+
+  it("commits but does not push when push:false (App mode without its secrets)", async () => {
+    const repo = makeRepo()
+    const bare = addUpstream(repo)
+    const upstreamBefore = git(bare, "rev-parse", "refs/heads/main")
+    const wf = writeWorkflowFile(repo)
+
+    await commitAndPushWorkflow(repo, wf, {
+      dryRun: false,
+      push: false,
+      yes: true,
+    })
+
+    expect(git(repo, "log", "-1", "--format=%s")).toBe(
+      "Add pr-loop GitHub Actions workflow",
+    )
+    expect(git(bare, "rev-parse", "refs/heads/main")).toBe(upstreamBefore)
   })
 })
 

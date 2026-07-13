@@ -2,6 +2,7 @@
 import { execFileSync, spawn } from "node:child_process"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join, relative } from "node:path"
+import { createInterface } from "node:readline/promises"
 
 import { Secret } from "@superserve/sdk"
 
@@ -22,9 +23,12 @@ import { assertTokenScope, runLoopCli } from "../pr-loop/loop"
  * workflow invokes; it drives ../pr-loop/loop.ts from inside the package.
  *
  * Tokens you provide are turned into Superserve secrets (swapped in at egress,
- * never committed, never seen by the box). The workflow file is committed and
- * pushed for you — without that push, GitHub never sees the workflow and the
- * loop never runs — plus the encrypted `SUPERSERVE_API_KEY` Actions secret.
+ * never committed, never seen by the box). The workflow file is committed for
+ * you — scoped to just that file, never the rest of your staged index — and
+ * pushed only when that publishes nothing but the installer's own commit,
+ * confirmed interactively or consented to via `--yes` (without the push GitHub
+ * never sees the workflow and the loop never runs; every skipped step prints
+ * the manual command). Plus the encrypted `SUPERSERVE_API_KEY` Actions secret.
  */
 
 // The workflow pins a Superserve-gated dist-tag, NOT a semver range or `@latest`:
@@ -54,14 +58,33 @@ function fail(message: string): never {
 
 // --- small shell helpers ---------------------------------------------------
 
-function tryExec(file: string, args: string[]): string | undefined {
+function tryExec(
+  file: string,
+  args: string[],
+  cwd?: string,
+): string | undefined {
   try {
     return execFileSync(file, args, {
+      cwd,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     }).trim()
   } catch {
     return undefined
+  }
+}
+
+/** Plain visible y/N prompt (`promptHidden` is for secrets only). */
+async function confirm(question: string): Promise<boolean> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  })
+  try {
+    const answer = await rl.question(question)
+    return /^y(es)?$/i.test(answer.trim())
+  } finally {
+    rl.close()
   }
 }
 
@@ -393,54 +416,136 @@ function appSecretsConfigured(
   return names.has(APP_ID_SECRET) && names.has(APP_KEY_SECRET)
 }
 
+/** How the installer should handle publishing the workflow commit. */
+export type PushPlan =
+  | { action: "push" }
+  | { action: "confirm" }
+  | { action: "skip"; reason: "no-upstream" | "ahead" | "needs-confirmation" }
+
 /**
- * Commit and push the workflow file. Without this, the file only exists in the
- * local working tree — GitHub never sees it, no run is registered, and the loop
- * silently never fires. Falls back to printing the manual commands on any
- * failure (no repo write access, nothing to commit, no upstream configured, …).
- * With `push: false` (App mode before its secrets exist) it commits but leaves
- * publishing to the user, so a half-configured workflow never goes live.
+ * Decide whether the workflow commit may be pushed automatically. The
+ * installer must never publish anything BUT its own commit: if the branch was
+ * already ahead of upstream before that commit, a bare `git push` would take
+ * the user's unpublished work with it — refuse, even under `--yes`. When the
+ * push would publish exactly one commit it still needs the user's say-so:
+ * `--yes` is that consent non-interactively; a y/N prompt is it interactively.
+ * Pure — the git plumbing around it stays thin so this is unit-testable.
  */
-function commitAndPushWorkflow(
+export function planPush(opts: {
+  /** Commits ahead of upstream BEFORE the installer committed;
+   *  undefined = no upstream to compare against (or not resolvable). */
+  aheadBeforeCommit: number | undefined
+  yes: boolean
+  isTTY: boolean
+}): PushPlan {
+  if (opts.aheadBeforeCommit === undefined) {
+    return { action: "skip", reason: "no-upstream" }
+  }
+  if (opts.aheadBeforeCommit > 0) return { action: "skip", reason: "ahead" }
+  if (opts.yes) return { action: "push" }
+  return opts.isTTY
+    ? { action: "confirm" }
+    : { action: "skip", reason: "needs-confirmation" }
+}
+
+/**
+ * Commit the workflow file — pathspec-scoped to that ONE file, never the rest
+ * of the user's staged index — and publish it only when that is safe and
+ * consented to (see `planPush`). Without a push GitHub never sees the workflow
+ * and the loop silently never fires, so the flow pushes when it may; every
+ * skipped or failed step prints the manual command instead. With `push: false`
+ * (App mode before its secrets exist) the commit stays local so a
+ * half-configured workflow never goes live.
+ */
+export async function commitAndPushWorkflow(
   repoRoot: string,
   path: string,
-  dryRun: boolean,
-  push = true,
-): void {
+  opts: { dryRun: boolean; push: boolean; yes: boolean },
+): Promise<void> {
   const rel = relative(repoRoot, path)
-  if (dryRun) {
-    c.ok(`would commit and push ${rel}`)
+  if (opts.dryRun) {
+    c.ok(`would commit ${rel} and push it (with confirmation)`)
     return
   }
-  const manualFallback = (): void => {
-    c.info(
-      `git add ${rel} && git commit -m 'Add pr-loop GitHub Actions workflow' && git push`,
-    )
-  }
+
+  // Snapshot BEFORE committing: anything already ahead of upstream is the
+  // user's unpublished work, and publishing it is not this installer's call.
+  const aheadRaw = tryExec(
+    "git",
+    ["rev-list", "--count", "@{u}..HEAD"],
+    repoRoot,
+  )
+  const ahead = aheadRaw === undefined ? Number.NaN : Number(aheadRaw)
+  const aheadBeforeCommit = Number.isNaN(ahead) ? undefined : ahead
+
   try {
     execFileSync("git", ["add", rel], {
       cwd: repoRoot,
       stdio: ["ignore", "ignore", "pipe"],
     })
+    // Pathspec-scoped: commits ONLY the workflow file. Anything else the user
+    // had staged stays staged, instead of being swept into a commit labeled as
+    // the installer's.
     execFileSync(
       "git",
-      ["commit", "-m", "Add pr-loop GitHub Actions workflow"],
+      ["commit", "-m", "Add pr-loop GitHub Actions workflow", "--", rel],
       { cwd: repoRoot, stdio: ["ignore", "ignore", "pipe"] },
     )
-    c.ok(`committed ${rel}`)
+    c.ok(`committed ${rel} (only that file — your staged work is untouched)`)
   } catch (err) {
     c.warn(
       `could not commit automatically (${(err as Error).message.split("\n")[0]}).`,
     )
-    manualFallback()
+    c.info(
+      `git add ${rel} && git commit -m 'Add pr-loop GitHub Actions workflow' -- ${rel} && git push`,
+    )
     return
   }
-  if (!push) {
+
+  if (!opts.push) {
     c.warn(
       "NOT pushed yet — the workflow references GitHub App secrets that aren't set.",
     )
     c.info("Set them (instructions below), then publish with: git push")
     return
+  }
+
+  const plan = planPush({
+    aheadBeforeCommit,
+    yes: opts.yes,
+    isTTY: Boolean(process.stdin.isTTY),
+  })
+  if (plan.action === "skip") {
+    const reasons: Record<
+      "no-upstream" | "ahead" | "needs-confirmation",
+      string
+    > = {
+      "no-upstream":
+        "no upstream branch to push to — publish the commit yourself:",
+      ahead:
+        `this branch is already ${aheadBeforeCommit} commit(s) ahead of upstream — ` +
+        "pushing would publish that unpublished work too, so it's left to you:",
+      "needs-confirmation":
+        "not pushing without confirmation (re-run with --yes to consent):",
+    }
+    c.warn(reasons[plan.reason])
+    c.info("git push")
+    return
+  }
+  if (plan.action === "confirm") {
+    const branch =
+      tryExec("git", ["rev-parse", "--abbrev-ref", "HEAD"], repoRoot) ?? "HEAD"
+    const upstream =
+      tryExec("git", ["rev-parse", "--abbrev-ref", "@{u}"], repoRoot) ??
+      "upstream"
+    c.info(
+      `push exactly one commit — "Add pr-loop GitHub Actions workflow" (${branch} → ${upstream})`,
+    )
+    if (!(await confirm("    push now? [y/N] "))) {
+      c.warn("skipped the push — publish when ready:")
+      c.info("git push")
+      return
+    }
   }
   try {
     execFileSync("git", ["push"], {
@@ -515,7 +620,8 @@ Options:
   --github-app           Post reviews as your own GitHub App (its name + avatar). The
                          workflow mints a per-run installation token from the
                          ${APP_ID_SECRET} / ${APP_KEY_SECRET} secrets (repo or org).
-  --yes                  Non-interactive (fail instead of prompting)
+  --yes                  Non-interactive (fail instead of prompting; also consents
+                         to pushing the workflow commit)
   --dry-run              Show what would happen; change nothing
 `
 
@@ -646,7 +752,11 @@ async function main(): Promise<void> {
   // exists at push time), so they always push.
   const appSecretsReady =
     !flags.githubApp || flags.dryRun || appSecretsConfigured(repo, ghAuthToken)
-  commitAndPushWorkflow(repoRoot, workflowPath, flags.dryRun, appSecretsReady)
+  await commitAndPushWorkflow(repoRoot, workflowPath, {
+    dryRun: flags.dryRun,
+    push: appSecretsReady,
+    yes: flags.yes,
+  })
 
   c.step("3/3  GitHub Actions secret")
   setActionsSecret(repo, apiKey, ghAuthToken, flags.dryRun)

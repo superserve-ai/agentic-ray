@@ -45,14 +45,15 @@ The installer does everything:
 1. Prompts for your Superserve API key (hidden input) and — when the `claude` CLI is installed — runs `claude setup-token` for you to mint the long-lived Claude token.
 2. Stores that token as a Superserve secret (`claude-oauth`) bound to `api.anthropic.com` — it is [swapped in at egress](/secrets/binding) and never enters the sandbox.
 3. Sets `SUPERSERVE_API_KEY` as a GitHub Actions secret on the repo.
-4. Writes `.github/workflows/loop-pr-loop.yml` — the only file added to your repo — then commits and pushes it for you.
+4. Writes `.github/workflows/loop-pr-loop.yml` — the only file added to your repo — then commits it (scoped to just that file; anything else you had staged stays staged) and pushes it after you confirm (`--yes` is the non-interactive consent).
 
 Push a commit to any PR and it is reviewed within seconds.
 
 <Note>
-  If the installer can't push the workflow (no write access, detached HEAD, a
-  blocking pre-commit hook), it prints the exact `git add` / `commit` / `push`
-  commands to run yourself.
+  The push only ever publishes the installer's own commit. If your branch is
+  already ahead of upstream with unpublished work, the installer refuses to
+  auto-push — and whenever it can't or won't push (no upstream, no write
+  access, confirmation declined), it prints the exact commands to run yourself.
 </Note>
 
 <Note>

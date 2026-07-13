@@ -60,11 +60,14 @@ pr-loop …`), so **no loop source is vendored in**. It pins the `@stable` chann
 improvements to the loop roll out automatically; you never edit the file again.
 Reviews post as **`github-actions[bot]`** (the workflow's built-in token — no GitHub PAT needed).
 
-Then commit and push the workflow file:
+The installer also commits the workflow file for you — pathspec-scoped to that one file, so
+anything else you had staged stays staged — and pushes it only after a y/N confirmation
+(`--yes` consents non-interactively). It refuses to auto-push if your branch already has
+unpublished commits (the push must publish nothing but the installer's own commit); in that
+case, and whenever it can't push, it prints the exact command:
 
 ```bash
-git add .github/workflows/loop-pr-loop.yml
-git commit -m "add pr-loop" && git push
+git push
 ```
 
 Push a commit to any PR and it reviews that PR within seconds — no idle cron.
