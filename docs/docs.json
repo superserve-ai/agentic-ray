@@ -201,7 +201,11 @@
           },
           {
             "group": "Billing",
-            "pages": ["GET /billing/pricing", "GET /billing/pricing/public"]
+            "pages": [
+              "GET /billing/pricing",
+              "GET /billing/pricing/public",
+              "GET /billing/summary"
+            ]
           },
           {
             "group": "Team Management",
