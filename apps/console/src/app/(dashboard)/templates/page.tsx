@@ -1,6 +1,5 @@
-import { notFound } from "next/navigation"
+import { redirect } from "next/navigation"
 
-import { canReadPlatformTemplates } from "@/lib/admin/permissions"
 import { createServerClient } from "@/lib/supabase/server"
 
 import TemplatesPageClient from "./templates-page-client"
@@ -11,8 +10,8 @@ export default async function TemplatesPage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!canReadPlatformTemplates(user)) {
-    notFound()
+  if (!user) {
+    redirect("/auth/signin?next=/templates")
   }
 
   return <TemplatesPageClient />
