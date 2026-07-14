@@ -34,9 +34,7 @@ describe("TemplateDetailPageClient", () => {
   it("surfaces backend API errors instead of preempting them in the page gate", () => {
     render(<TemplateDetailPageClient />)
 
-    expect(
-      screen.getByText("Forbidden: team RBAC denied"),
-    ).toBeInTheDocument()
+    expect(screen.getByText("Forbidden: team RBAC denied")).toBeInTheDocument()
     expect(screen.getByText("Something went wrong")).toBeInTheDocument()
   })
 })
