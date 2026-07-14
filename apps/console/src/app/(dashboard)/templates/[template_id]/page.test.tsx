@@ -23,6 +23,8 @@ import { createServerClient } from "@/lib/supabase/server"
 import TemplateDetailPage from "./page"
 
 describe("TemplateDetailPage", () => {
+  const params = Promise.resolve({ template_id: "template-123" })
+
   beforeEach(() => {
     vi.mocked(createServerClient).mockResolvedValue({
       auth: { getUser: async () => ({ data: { user: null } }) },
@@ -32,8 +34,8 @@ describe("TemplateDetailPage", () => {
   })
 
   it("redirects unauthenticated users to sign-in", async () => {
-    await expect(TemplateDetailPage()).rejects.toThrow(
-      "redirect:/auth/signin?next=/templates",
+    await expect(TemplateDetailPage({ params })).rejects.toThrow(
+      "redirect:/auth/signin?next=/templates/template-123",
     )
     expect(mockTemplateDetailPageClient).not.toHaveBeenCalled()
   })
@@ -53,7 +55,7 @@ describe("TemplateDetailPage", () => {
       },
     } as never)
 
-    const element = await TemplateDetailPage()
+    const element = await TemplateDetailPage({ params })
 
     expect(element.type).toBe(mockTemplateDetailPageClient)
     expect(mockTemplateDetailPageClient).not.toHaveBeenCalled()
@@ -77,7 +79,7 @@ describe("TemplateDetailPage", () => {
       },
     } as never)
 
-    const element = await TemplateDetailPage()
+    const element = await TemplateDetailPage({ params })
 
     expect(element.type).toBe(mockTemplateDetailPageClient)
   })
