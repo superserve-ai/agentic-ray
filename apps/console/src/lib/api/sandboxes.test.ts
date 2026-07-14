@@ -23,7 +23,7 @@ describe("sandbox secret bindings", () => {
     await attachSandboxSecret("sbx-1", "ANTHROPIC_API_KEY", "anthropic-prod")
 
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe("/api/sandboxes/sbx-1/secrets")
+    expect(url).toBe("/api/sandboxes/sbx-1/secrets/")
     expect(init.method).toBe("POST")
     expect(JSON.parse(init.body as string)).toEqual({
       env_key: "ANTHROPIC_API_KEY",
@@ -36,7 +36,7 @@ describe("sandbox secret bindings", () => {
     await detachSandboxSecret("sbx-1", "A/B")
 
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe("/api/sandboxes/sbx-1/secrets/A%2FB")
+    expect(url).toBe("/api/sandboxes/sbx-1/secrets/A%2FB/")
     expect(init.method).toBe("DELETE")
   })
 })

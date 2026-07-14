@@ -1,6 +1,13 @@
+import type { User } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 
-import { getAuthApiKeyForUser } from "@/lib/api/proxy-auth"
+import { getImpersonationContext } from "@/lib/admin/impersonation"
+import {
+  getApiBaseUrlForUser,
+  getAuthApiKeyForUser,
+} from "@/lib/api/proxy-auth"
+import { redactAccessTokens } from "@/lib/api/redact"
+import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 const SANDBOX_API_URL =
@@ -8,6 +15,7 @@ const SANDBOX_API_URL =
 
 const ALLOWED_PREFIXES = [
   "sandboxes",
+  "activity",
   "health",
   "v1",
   "templates",
@@ -45,6 +53,18 @@ function shouldSkipKeyInjection(path: string): boolean {
   return SKIP_KEY_INJECTION.some((prefix) => path.startsWith(prefix))
 }
 
+function setImpersonationDebugHeaders(
+  headers: Headers,
+  debugEnabled: boolean,
+  authMode: string,
+  impersonatedTeamId: string | null,
+): void {
+  if (!debugEnabled) return
+  headers.set("x-console-auth-mode", authMode)
+  headers.set("x-console-impersonating", impersonatedTeamId ? "true" : "false")
+  headers.set("x-console-impersonated-team", impersonatedTeamId ?? "")
+}
+
 async function proxyRequest(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
@@ -56,39 +76,85 @@ async function proxyRequest(
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
-  const url = new URL(`${SANDBOX_API_URL}/${joinedPath}`)
-  url.search = request.nextUrl.search
+  const skipKeyInjection = shouldSkipKeyInjection(joinedPath)
+  const debugImpersonation =
+    request.nextUrl.searchParams.get("__debug_impersonation") === "1"
+  let user: User | null = null
+  let impersonationContext: { teamId: string; region: string } | null = null
+  let impersonating = false
 
-  const headers = new Headers()
-  for (const [key, value] of request.headers.entries()) {
-    if (FORWARD_REQUEST_HEADERS.has(key.toLowerCase())) {
-      headers.set(key, value)
+  if (!skipKeyInjection) {
+    const supabase = await createServerClient()
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser()
+    user = authUser
+    impersonationContext = await getImpersonationContext(user)
+    impersonating = impersonationContext !== null
+    const isReadMethod = request.method === "GET" || request.method === "HEAD"
+    if (impersonating && !isReadMethod) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "read_only_impersonation",
+            message:
+              "Write operations are disabled while viewing another team.",
+          },
+        },
+        { status: 403 },
+      )
     }
   }
 
-  // Inject server-side API key for authenticated requests
-  if (!shouldSkipKeyInjection(joinedPath)) {
-    const supabase = await createServerClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    const apiKey = await getAuthApiKeyForUser(user)
+  const url = new URL(`${SANDBOX_API_URL}/${joinedPath}`)
+  url.search = request.nextUrl.search
+  url.searchParams.delete("__debug_impersonation")
+  if (impersonating && impersonationContext) {
+    url.searchParams.set("team_id", impersonationContext.teamId)
+  }
 
-    if (!apiKey) {
+  const headers = new Headers()
+  for (const [key, value] of request.headers.entries()) {
+    const lowerKey = key.toLowerCase()
+    if (!skipKeyInjection && lowerKey === "authorization") {
+      continue
+    }
+    if (FORWARD_REQUEST_HEADERS.has(lowerKey)) {
+      headers.set(lowerKey, value)
+    }
+  }
+
+  // Paths that carry their own auth (no key injection) go to the default
+  // cell; authenticated requests go to the user's team's home cell.
+  let apiBaseUrl = cellFor(DEFAULT_REGION).apiBaseUrl
+
+  // Inject server-side API key for authenticated requests
+  let authMode = skipKeyInjection ? "skipped" : "none"
+  if (!skipKeyInjection) {
+    const apiKey = await getAuthApiKeyForUser(user, impersonationContext)
+
+    if (!apiKey || !user) {
       return NextResponse.json(
         { error: { code: "unauthorized", message: "Not authenticated" } },
         { status: 401 },
       )
     }
     headers.set("X-API-Key", apiKey)
+    apiBaseUrl = impersonationContext
+      ? cellFor(impersonationContext.region).apiBaseUrl
+      : await getApiBaseUrlForUser(user)
+    authMode = impersonating ? "impersonation" : "self"
   }
+
+  const upstreamUrl = new URL(`${apiBaseUrl}/${joinedPath}`)
+  upstreamUrl.search = url.search
 
   const body =
     request.method !== "GET" && request.method !== "HEAD"
       ? await request.arrayBuffer()
       : undefined
 
-  const response = await fetch(url.toString(), {
+  const response = await fetch(upstreamUrl.toString(), {
     method: request.method,
     headers,
     body,
@@ -101,6 +167,12 @@ async function proxyRequest(
     }
     responseHeaders.set(key, value)
   }
+  setImpersonationDebugHeaders(
+    responseHeaders,
+    debugImpersonation,
+    authMode,
+    impersonationContext?.teamId ?? null,
+  )
 
   // Per the Fetch spec, 204/205/304 responses must not have a body.
   // Next.js 16's NextResponse throws if you pass any body (even empty) for
@@ -123,6 +195,19 @@ async function proxyRequest(
   // before seeing any log output.
   const upstreamContentType = response.headers.get("content-type") ?? ""
   if (upstreamContentType.includes("text/event-stream")) {
+    if (impersonating) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "streaming_disabled_during_impersonation",
+            message:
+              "Streaming responses are disabled while viewing another team.",
+          },
+        },
+        { status: 403 },
+      )
+    }
+
     responseHeaders.set("cache-control", "no-cache, no-transform")
     responseHeaders.set("connection", "keep-alive")
     responseHeaders.set("x-accel-buffering", "no")
@@ -134,6 +219,20 @@ async function proxyRequest(
   }
 
   const data = await response.arrayBuffer()
+
+  if (impersonating) {
+    const contentType = responseHeaders.get("content-type") ?? ""
+    if (contentType.includes("application/json")) {
+      const redacted = redactAccessTokens(new TextDecoder().decode(data))
+      const body = new TextEncoder().encode(redacted)
+      responseHeaders.set("content-length", String(body.byteLength))
+      return new NextResponse(body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: responseHeaders,
+      })
+    }
+  }
 
   return new NextResponse(data, {
     status: response.status,

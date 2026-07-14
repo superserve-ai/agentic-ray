@@ -1,4 +1,8 @@
-import type { SandboxListParams, TemplateListParams } from "./types"
+import type {
+  ActivityListParams,
+  SandboxListParams,
+  TemplateListParams,
+} from "./types"
 
 export const sandboxKeys = {
   all: ["sandboxes"] as const,
@@ -42,8 +46,8 @@ export const snapshotKeys = {
 export const auditLogKeys = {
   all: ["audit-logs"] as const,
   lists: () => [...auditLogKeys.all, "list"] as const,
-  list: (filters?: { action?: string; search?: string }) =>
-    [...auditLogKeys.lists(), filters] as const,
+  list: (params: ActivityListParams) =>
+    [...auditLogKeys.lists(), params] as const,
   bySandbox: (sandboxId: string) =>
     [...auditLogKeys.all, "sandbox", sandboxId] as const,
 }
@@ -101,4 +105,9 @@ export const templateKeys = {
 export const quotaKeys = {
   all: ["quota"] as const,
   usage: () => [...quotaKeys.all, "usage"] as const,
+}
+
+export const teamKeys = {
+  all: ["teams"] as const,
+  directory: () => [...teamKeys.all, "directory"] as const,
 }

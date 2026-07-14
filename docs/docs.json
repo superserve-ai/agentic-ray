@@ -214,6 +214,10 @@
               "POST /teams/{team_id}/roles",
               "DELETE /teams/{team_id}/roles/{assignment_id}"
             ]
+          },
+          {
+            "group": "Activity",
+            "pages": ["GET /activity"]
           }
         ],
         "openapi": "https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml"

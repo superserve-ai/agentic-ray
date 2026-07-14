@@ -1,7 +1,7 @@
 import "dotenv/config"
 import Anthropic from "@anthropic-ai/sdk"
 import { createServer } from "node:http"
-import { handleWork, findOrCreateSandbox } from "./orchestrator.mjs"
+import { handleWork } from "./orchestrator.mjs"
 
 const ENVIRONMENT_KEY = process.env.ANTHROPIC_ENVIRONMENT_KEY
 const ENVIRONMENT_ID = process.env.ANTHROPIC_ENVIRONMENT_ID

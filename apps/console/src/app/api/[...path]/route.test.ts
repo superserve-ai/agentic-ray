@@ -14,7 +14,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mocks declared BEFORE the module under test is imported.
 vi.mock("@/lib/api/proxy-auth", () => ({
+  getApiBaseUrlForUser: vi.fn(),
   getAuthApiKeyForUser: vi.fn(),
+}))
+vi.mock("@/lib/admin/impersonation", () => ({
+  getImpersonationContext: vi.fn(),
+}))
+vi.mock("@/lib/cells", () => ({
+  DEFAULT_REGION: "use",
+  cellFor: (region: string) => ({
+    region,
+    apiBaseUrl: `https://api-${region}.test`,
+  }),
 }))
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: vi.fn(),
@@ -24,10 +35,13 @@ vi.mock("@/lib/supabase/server", () => ({
 const fetchSpy = vi.fn()
 vi.stubGlobal("fetch", fetchSpy)
 
-// SANDBOX_API_URL is pre-stubbed in src/test/setup.ts before the route
-// module is imported (route reads it at module load).
+// SANDBOX_API_URL is pre-stubbed in src/test/setup.ts; the route reads it at module load.
 
-import { getAuthApiKeyForUser } from "@/lib/api/proxy-auth"
+import { getImpersonationContext } from "@/lib/admin/impersonation"
+import {
+  getApiBaseUrlForUser,
+  getAuthApiKeyForUser,
+} from "@/lib/api/proxy-auth"
 import { createServerClient } from "@/lib/supabase/server"
 
 import { DELETE, GET, POST, PUT } from "./route"
@@ -59,6 +73,12 @@ describe("api proxy /api/[...path]", () => {
     } as never)
     vi.mocked(getAuthApiKeyForUser).mockReset()
     vi.mocked(getAuthApiKeyForUser).mockResolvedValue("ss_live_test_key")
+    vi.mocked(getApiBaseUrlForUser).mockReset()
+    vi.mocked(getApiBaseUrlForUser).mockResolvedValue(
+      "https://api.test.superserve.ai",
+    )
+    vi.mocked(getImpersonationContext).mockReset()
+    vi.mocked(getImpersonationContext).mockResolvedValue(null)
   })
 
   it("returns 404 for a path outside the allowed prefixes", async () => {
@@ -66,7 +86,7 @@ describe("api proxy /api/[...path]", () => {
     expect(res.status).toBe(404)
   })
 
-  it("forwards the secrets and providers prefixes", async () => {
+  it("forwards the secrets, providers, and activity prefixes", async () => {
     fetchSpy.mockImplementation(() =>
       Promise.resolve(
         new Response("[]", {
@@ -76,11 +96,16 @@ describe("api proxy /api/[...path]", () => {
       ),
     )
 
-    for (const path of [["secrets"], ["secrets", "my_key"], ["providers"]]) {
+    for (const path of [
+      ["secrets"],
+      ["secrets", "my_key"],
+      ["providers"],
+      ["activity"],
+    ]) {
       const res = await GET(req("GET", path), params(path))
       expect(res.status).toBe(200)
     }
-    expect(fetchSpy).toHaveBeenCalledTimes(3)
+    expect(fetchSpy).toHaveBeenCalledTimes(4)
   })
 
   it("returns 401 when the user is not authenticated", async () => {
@@ -121,6 +146,60 @@ describe("api proxy /api/[...path]", () => {
     )
   })
 
+  it("overrides forwarded team_id while impersonating", async () => {
+    vi.mocked(getImpersonationContext).mockResolvedValue({
+      teamId: "impersonated-team",
+      region: "usw",
+      teamName: "Impersonated Team",
+    })
+    fetchSpy.mockResolvedValue(new Response("[]", { status: 200 }))
+    const request = new NextRequest(
+      new URL("https://console.test/api/templates?team_id=admin-team&owner=me"),
+      { method: "GET" },
+    )
+
+    await GET(request, params(["templates"]))
+
+    expect(getAuthApiKeyForUser).toHaveBeenCalledWith(
+      { id: "u1" },
+      {
+        teamId: "impersonated-team",
+        region: "usw",
+        teamName: "Impersonated Team",
+      },
+    )
+    expect(getApiBaseUrlForUser).not.toHaveBeenCalled()
+    const [url] = fetchSpy.mock.calls[0]
+    expect(url).toBe(
+      "https://api-usw.test/templates?team_id=impersonated-team&owner=me",
+    )
+    const [, fetchInit] = fetchSpy.mock.calls[0]
+    const headers = fetchInit.headers as Headers
+    expect(headers.get("x-api-key")).toBe("ss_live_test_key")
+  })
+
+  it("blocks writes while impersonating", async () => {
+    vi.mocked(getImpersonationContext).mockResolvedValue({
+      teamId: "impersonated-team",
+      region: "usw",
+      teamName: "Impersonated Team",
+    })
+
+    const res = await POST(
+      req("POST", ["templates"], {
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      }),
+      params(["templates"]),
+    )
+
+    expect(res.status).toBe(403)
+    expect(fetchSpy).not.toHaveBeenCalled()
+    await expect(res.json()).resolves.toMatchObject({
+      error: { code: "read_only_impersonation" },
+    })
+  })
+
   it("skips X-API-Key injection on /v1/auth/ paths and preserves Authorization", async () => {
     fetchSpy.mockResolvedValue(new Response("{}", { status: 200 }))
     await POST(
@@ -146,6 +225,7 @@ describe("api proxy /api/[...path]", () => {
         headers: {
           cookie: "sb-access-token=leaked",
           "x-api-key": "ss_live_attacker",
+          authorization: "Bearer user-token",
           "content-type": "application/json",
         },
       }),
@@ -155,6 +235,7 @@ describe("api proxy /api/[...path]", () => {
     const headers = fetchInit.headers as Headers
     expect(headers.get("cookie")).toBeNull()
     // Our server-side key wins, not the attacker's.
+    expect(headers.get("authorization")).toBeNull()
     expect(headers.get("x-api-key")).toBe("ss_live_test_key")
     // Allowlisted header still forwarded.
     expect(headers.get("content-type")).toBe("application/json")
@@ -167,9 +248,6 @@ describe("api proxy /api/[...path]", () => {
       params(["sandboxes", "abc"]),
     )
     expect(res.status).toBe(204)
-    // NextResponse with status 204 must have null body — if the proxy
-    // tried to attach one, NextResponse would throw and the test above
-    // would fail at the DELETE call.
     expect(await res.text()).toBe("")
   })
 
@@ -190,7 +268,6 @@ describe("api proxy /api/[...path]", () => {
     )
     const [, fetchInit] = fetchSpy.mock.calls[0]
     expect(fetchInit.method).toBe("PUT")
-    // body is an ArrayBuffer — check length
     const body = fetchInit.body as ArrayBuffer
     expect(body.byteLength).toBeGreaterThan(0)
   })
@@ -223,5 +300,26 @@ describe("api proxy /api/[...path]", () => {
       params(["sandboxes", "abc"]),
     )
     expect((await res.json()).access_token).toBe("keep-me")
+  })
+
+  it("redacts access tokens during impersonation", async () => {
+    vi.mocked(getImpersonationContext).mockResolvedValue({
+      teamId: "impersonated-team",
+      region: "usw",
+      teamName: "Impersonated Team",
+    })
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ id: "abc", access_token: "keep-me" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    )
+
+    const res = await GET(
+      req("GET", ["sandboxes", "abc"]),
+      params(["sandboxes", "abc"]),
+    )
+
+    expect((await res.json()).access_token).toBeUndefined()
   })
 })

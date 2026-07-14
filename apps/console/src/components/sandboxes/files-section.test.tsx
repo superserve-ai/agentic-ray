@@ -148,7 +148,7 @@ describe("FileBrowser — listing & navigation", () => {
 
     const [url] = fetchSpy.mock.calls[0]
     expect(String(url)).toContain("/api/sandboxes/")
-    expect(String(url)).toContain("/files?path=%2Fhome%2Fuser")
+    expect(String(url)).toContain("/files/?path=%2Fhome%2Fuser")
   })
 
   it("descends into a folder and lists the subpath", async () => {

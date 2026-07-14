@@ -87,3 +87,9 @@ The console has a deliberate austere, technical aesthetic:
 
 - Single-line commit messages
 - No "Co-Authored-By" or AI attribution in commits
+
+## Public repo
+
+- Code, comments, fixtures, commits, and PR titles/descriptions are all public
+- Never name customers or their domains — use neutral placeholders (`pilot-team`, `example.com`)
+- Never cite internal tracker IDs or internal URLs — describe the purpose in words instead

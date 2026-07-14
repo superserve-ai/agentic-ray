@@ -15,6 +15,11 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }))
 
+// No cookie set: active-team resolution falls back to the first membership.
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => undefined }),
+}))
+
 // Per-test knobs read lazily by the admin-client mock.
 let homeRegionResult: { data: unknown; error: unknown } = {
   data: { home_region: "usw" },
@@ -39,8 +44,15 @@ vi.mock("@/lib/supabase/admin", () => ({
       switch (table) {
         case "profile":
           return chain({ data: { id: "a1" }, error: null })
+        case "team_memberships":
+          return chain({ data: [], error: null })
         case "team_member":
-          return chain({ data: { team_id: "team-1" }, error: null })
+          // The membership fan-out awaits the filter directly (no single()).
+          return {
+            select: () => ({
+              eq: async () => ({ data: [{ team_id: "team-1" }], error: null }),
+            }),
+          }
         case "team":
           return chain(homeRegionResult)
         case "api_key": {

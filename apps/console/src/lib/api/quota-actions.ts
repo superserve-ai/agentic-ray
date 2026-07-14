@@ -1,6 +1,11 @@
 "use server"
 
-import { createAdminClient } from "@/lib/supabase/admin"
+import { pickActiveTeam, readTeamSelection } from "@/lib/api/active-team"
+import {
+  listTeamMembershipsForUserDetailed,
+  type TeamMembership,
+} from "@/lib/api/team-directory"
+import { cellFor } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 export interface QuotaUsageResponse {
@@ -9,29 +14,15 @@ export interface QuotaUsageResponse {
   pct: number
 }
 
-async function getTeamId(userId: string): Promise<string | null> {
-  const admin = createAdminClient()
-  const { data, error } = await admin
-    .from("team_member")
-    .select("team_id")
-    .eq("profile_id", userId)
+async function getTeam(userId: string): Promise<TeamMembership | null> {
+  const { memberships, degradedRegions } =
+    await listTeamMembershipsForUserDetailed(userId)
 
-  if (error) throw new Error(error.message)
-  if (!data?.length) return null
+  // A partial directory read makes the membership shape untrustworthy — the
+  // banner renders nothing rather than showing a possibly-wrong team's quota.
+  if (degradedRegions.length > 0) return null
 
-  const teamIds = [
-    ...new Set(
-      data
-        .map((row) => row.team_id)
-        .filter((teamId): teamId is string => typeof teamId === "string"),
-    ),
-  ]
-  // Ambient poller with no team-selector: an ambiguous (multi-team) membership
-  // renders nothing rather than throwing on every poll (which would spam logs).
-  if (teamIds.length !== 1) {
-    return null
-  }
-  return teamIds[0]
+  return pickActiveTeam(memberships, await readTeamSelection())
 }
 
 // Current team's sandbox usage for the in-product quota banner; null when the
@@ -45,14 +36,14 @@ export async function getQuotaUsageAction(): Promise<QuotaUsageResponse | null> 
   if (authError) throw authError
   if (!user) throw new Error("Not authenticated")
 
-  const teamId = await getTeamId(user.id)
-  if (!teamId) return null
+  const team = await getTeam(user.id)
+  if (!team) return null
 
-  const admin = createAdminClient()
+  const admin = cellFor(team.region).createAdminClient()
   const { data, error } = await admin
     .from("team")
     .select("active_sandbox_count, max_sandboxes")
-    .eq("id", teamId)
+    .eq("id", team.teamId)
     .single()
   if (error) throw new Error(error.message)
 

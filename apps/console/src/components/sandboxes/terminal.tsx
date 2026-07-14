@@ -13,6 +13,7 @@ import { usePostHog } from "posthog-js/react"
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { TERMINAL_EVENTS } from "@/lib/posthog/events"
+import { sandboxHostFor } from "@/lib/sandbox-host"
 import {
   clearTerminalBuffer,
   loadTerminalBuffer,
@@ -34,8 +35,6 @@ export type TerminalConnectionStatus =
 
 const encoder = new TextEncoder()
 const TERMINAL_SUBPROTOCOL = "superserve.terminal.v1"
-const SANDBOX_HOST =
-  process.env.NEXT_PUBLIC_SANDBOX_HOST ?? "sandbox.superserve.ai"
 const RESIZE_DEBOUNCE_MS = 75
 const RECONNECT_BASE_MS = 500
 const RECONNECT_MAX_MS = 10_000
@@ -187,7 +186,7 @@ export function SandboxTerminal({
       setStatus("connecting")
 
       try {
-        const url = `wss://boxd-${sandboxId}.${SANDBOX_HOST}/terminal`
+        const url = `wss://boxd-${sandboxId}.${sandboxHostFor(sandboxId)}/terminal`
         const ws = new WebSocket(url, [
           TERMINAL_SUBPROTOCOL,
           `token.${accessToken}`,

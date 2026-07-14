@@ -7,6 +7,7 @@ import { useEffect, useState } from "react"
 
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { PageHeader } from "@/components/page-header"
+import { TeamsSection } from "@/components/settings/teams-section"
 import { useBillingSettings } from "@/hooks/use-billing-usage"
 import { useUser } from "@/hooks/use-user"
 import { SETTINGS_EVENTS } from "@/lib/posthog/events"
@@ -219,6 +220,9 @@ export default function SettingsPage() {
         </div>
 
         <Separator />
+
+        {/* Renders nothing unless a second cell (region) is configured */}
+        <TeamsSection />
 
         {billingSettings?.enabled && (
           <>

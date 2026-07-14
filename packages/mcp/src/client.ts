@@ -16,6 +16,7 @@
 import {
   AuthenticationError,
   NotFoundError,
+  resolveConfig,
   Sandbox,
   SandboxError,
   Secret,
@@ -42,7 +43,7 @@ import {
   parseLsOutput,
   validateAbsolutePath,
 } from "./lib/listing.js"
-import { buildPreviewUrl, DEFAULT_BASE_URL } from "./lib/previewUrl.js"
+import { buildPreviewUrl } from "./lib/previewUrl.js"
 
 /** Hang guard for the direct control-plane network-log GET. */
 const NETWORK_LOG_TIMEOUT_MS = 30_000
@@ -123,6 +124,8 @@ export interface CreateInput {
   fromTemplate?: string
   fromSnapshot?: string
   timeoutSeconds?: number
+  /** Delete the sandbox once continuously paused for this many seconds. */
+  autoDeleteSeconds?: number
   metadata?: Record<string, string>
   envVars?: Record<string, string>
   /** Bind team-stored secrets to env vars: `{ ENV_VAR: secretName }`. */
@@ -134,6 +137,10 @@ export interface CreateInput {
 export interface UpdateInput {
   metadata?: Record<string, string>
   network?: NetworkConfig
+  /** A number (re)arms the auto-delete window; null disarms it. */
+  autoDeleteSeconds?: number | null
+  /** A number sets the auto-pause timeout; null disables it. */
+  timeoutSeconds?: number | null
 }
 
 export interface ExecInput {
@@ -246,6 +253,15 @@ function toSecretSummary(s: SecretInfo): SecretSummary {
 /** Real client backed by `@superserve/sdk`. */
 export function createSdkClient(config: ClientConfig): SandboxClient {
   const conn = { apiKey: config.apiKey, baseUrl: config.baseUrl }
+  // Region-resolved endpoints (key prefix → cell), the single source the SDK
+  // uses internally — so our direct preview/network calls hit the same cell
+  // as the SDK-backed sandbox ops instead of defaulting to the primary.
+  // resolveConfig is exported as of @superserve/sdk 0.8.0 — the current
+  // MIN_SDK_VERSION floor in mcp-publish.yml (max across features).
+  const resolved = resolveConfig({
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl,
+  })
 
   return {
     async create(input) {
@@ -254,6 +270,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         fromTemplate: input.fromTemplate,
         fromSnapshot: input.fromSnapshot,
         timeoutSeconds: input.timeoutSeconds,
+        autoDeleteSeconds: input.autoDeleteSeconds,
         metadata: input.metadata,
         envVars: input.envVars,
         secrets: input.secrets,
@@ -269,8 +286,19 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
     },
 
     async update(id, input) {
-      const sb = await Sandbox.connect(id, conn)
-      await sb.update({ metadata: input.metadata, network: input.network })
+      // updateById (not connect().update()) so patching a paused sandbox —
+      // e.g. arming auto-delete — does not resume it. Requires @superserve/sdk
+      // >= 0.7.8; MIN_SDK_VERSION in mcp-publish.yml tracks this floor.
+      await Sandbox.updateById(
+        id,
+        {
+          metadata: input.metadata,
+          network: input.network,
+          autoDeleteSeconds: input.autoDeleteSeconds,
+          timeoutSeconds: input.timeoutSeconds,
+        },
+        conn,
+      )
     },
 
     async list(metadata) {
@@ -322,7 +350,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
 
     // Pure string construction; no resume, no network call.
     previewUrl(id, port) {
-      return buildPreviewUrl(id, port, config.baseUrl)
+      return buildPreviewUrl(id, port, resolved.sandboxHost)
     },
 
     // Direct control-plane GET so reading the audit log never activates
@@ -331,7 +359,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
     // non-resuming static equivalent. Trusted control-plane endpoint, API-key
     // auth, bounded by `limit` and a request timeout.
     async networkLog(id, opts) {
-      const base = config.baseUrl ?? DEFAULT_BASE_URL
+      const base = resolved.baseUrl
       const url = new URL(`${base}/sandboxes/${encodeURIComponent(id)}/network`)
       if (opts.limit !== undefined)
         url.searchParams.set("limit", String(opts.limit))
@@ -388,9 +416,8 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
     },
 
     // Zips + streams the dir from the data plane (VM must be up, so connect's
-    // resume is intrinsic, like readFile). Requires @superserve/sdk >= 0.7.7
-    // (downloadDir landed in #221). The publish workflow enforces this floor via
-    // MIN_SDK_VERSION in .github/workflows/mcp-publish.yml — bump both together.
+    // resume is intrinsic, like readFile). downloadDir landed in @superserve/sdk
+    // 0.7.7; the MCP floor (MIN_SDK_VERSION) is the max across features.
     async downloadDir(id, path, maxBytes) {
       const sb = await Sandbox.connect(id, conn)
       return sb.files.downloadDir(

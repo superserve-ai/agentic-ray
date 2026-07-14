@@ -107,3 +107,105 @@ Sandbox.kill_by_id("7a3f2b8c-1234-...")
 ```
 </CodeGroup>
 
+
+## Auto-pause
+
+Set `timeoutSeconds` to auto-pause a sandbox after it has been active for that long. Pausing checkpoints its state and stops compute billing, so a sandbox you forget about won't keep running and billing. It isn't deleted; the next `commands.run()`, file operation, or `connect()` resumes it where it left off.
+
+<CodeGroup>
+```typescript TypeScript {5}
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "worker",
+  timeoutSeconds: 3600, // auto-pause after 1h of active time
+})
+```
+
+```python Python {5}
+from superserve import Sandbox
+
+sandbox = Sandbox.create(
+    name="worker",
+    timeout_seconds=3600,  # auto-pause after 1h of active time
+)
+```
+</CodeGroup>
+
+The timeout is scoped to the current active session:
+
+- It's a cap on active time, not idle time. Running work doesn't reset it, so a task still going when the window elapses is paused mid-run. Size it for your longest active session.
+- Each resume starts a fresh window.
+- The sandbox is paused, not deleted. Resume restores full memory and filesystem.
+- Leave it unset (the default) to disable auto-pause; the sandbox stays active until you pause or kill it.
+
+Set or clear it on an existing sandbox:
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.update({ timeoutSeconds: 900 }) // auto-pause after 15m active
+await sandbox.update({ timeoutSeconds: null }) // disable auto-pause
+```
+
+```python Python
+sandbox.update(timeout_seconds=900)  # auto-pause after 15m active
+sandbox.update(timeout_seconds=None)  # disable auto-pause
+```
+</CodeGroup>
+
+## Auto-delete
+
+By default a paused sandbox is kept forever. Set `autoDeleteSeconds` to delete it once it has been continuously paused for that long. This suits short-lived or unattended sandboxes: scheduled jobs, one-off experiments, or agent sessions that never get an explicit `kill()`.
+
+<CodeGroup>
+```typescript TypeScript {5}
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "scratch-job",
+  autoDeleteSeconds: 3600, // delete after 1h of continuous pause
+})
+```
+
+```python Python {5}
+from superserve import Sandbox
+
+sandbox = Sandbox.create(
+    name="scratch-job",
+    auto_delete_seconds=3600,  # delete after 1h of continuous pause
+)
+```
+</CodeGroup>
+
+The countdown is tied to the paused state:
+
+- Pause starts it and resume cancels it. Pausing again starts a fresh window, so a sandbox in use is never deleted.
+- `0` deletes the sandbox as soon as it pauses.
+- While paused, the sandbox's info includes `autoDeleteAt`, the exact deletion time.
+- Maximum window: 30 days.
+
+You can also set or clear the window on an existing sandbox:
+
+<CodeGroup>
+```typescript TypeScript
+// Arm: delete after 1h of continuous pause. On an already-paused sandbox
+// the countdown starts now, so you always get the full window.
+await sandbox.update({ autoDeleteSeconds: 3600 })
+
+// Disarm: keep the sandbox until explicitly killed.
+await sandbox.update({ autoDeleteSeconds: null })
+```
+
+```python Python
+# Arm: delete after 1h of continuous pause. On an already-paused sandbox
+# the countdown starts now, so you always get the full window.
+sandbox.update(auto_delete_seconds=3600)
+
+# Disarm: keep the sandbox until explicitly killed.
+sandbox.update(auto_delete_seconds=None)
+```
+</CodeGroup>
+
+<Tip>
+Pair `autoDeleteSeconds` with `timeoutSeconds`: the timeout pauses the sandbox, then the auto-delete window cleans it up. A sandbox that never pauses is never auto-deleted.
+</Tip>

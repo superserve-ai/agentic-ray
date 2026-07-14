@@ -42,7 +42,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none",
             "disabled:cursor-not-allowed disabled:opacity-30",
             error && "border-destructive focus:ring-destructive/20",
-            suffix && "pr-10",
+            suffix &&
+              "[appearance:textfield] pr-10 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
             className,
           )}
           aria-invalid={!!error}

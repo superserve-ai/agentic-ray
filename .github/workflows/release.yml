@@ -56,22 +56,21 @@ jobs:
       - name: Publish to npm (Trusted Publishing + provenance)
         run: cd packages/sdk && npm publish --access public --provenance
 
-      - name: Commit version bump
+      # main is a protected branch (PR-only), so we push only the tag, never a
+      # commit. Bump the version on main via a PR before running this workflow.
+      - name: Tag release
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add packages/sdk/package.json
-          git commit -m "release: @superserve/sdk@${{ inputs.version }}"
           git tag "@superserve/sdk@${{ inputs.version }}"
-          git push
-          git push --tags
+          git push origin "@superserve/sdk@${{ inputs.version }}"
 
   release-python:
     if: ${{ inputs.package == 'python' || inputs.package == 'both' }}
     runs-on: ubuntu-latest
+    # Must match the environment on the PyPI trusted publisher (OIDC claim).
+    environment: pypi
     permissions:
       id-token: write # PyPI Trusted Publishing (OIDC)
-      contents: write # push the version-bump commit + tag
+      contents: write # push the release tag
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -93,12 +92,9 @@ jobs:
       - name: Publish to PyPI (Trusted Publishing)
         run: uv publish --trusted-publishing always dist/superserve-${{ inputs.version }}*
 
-      - name: Commit version bump
+      # main is a protected branch (PR-only), so we push only the tag, never a
+      # commit. Bump the version on main via a PR before running this workflow.
+      - name: Tag release
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add packages/python-sdk/pyproject.toml packages/python-sdk/src/superserve/__init__.py
-          git commit -m "release: superserve-py@${{ inputs.version }}"
           git tag "superserve-py@${{ inputs.version }}"
-          git push
-          git push --tags
+          git push origin "superserve-py@${{ inputs.version }}"

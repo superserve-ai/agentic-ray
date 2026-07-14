@@ -21,6 +21,18 @@ function getBaseUrl(): string {
 }
 
 /**
+ * The app is built with trailingSlash, so /api/foo answers only as
+ * /api/foo/ — request that form directly instead of paying a 308 redirect
+ * (a full extra round-trip) on every API call.
+ */
+function normalizePath(path: string): string {
+  const queryStart = path.indexOf("?")
+  const pathname = queryStart === -1 ? path : path.slice(0, queryStart)
+  const query = queryStart === -1 ? "" : path.slice(queryStart)
+  return pathname.endsWith("/") ? path : `${pathname}/${query}`
+}
+
+/**
  * Runs a request against the console API proxy with a 30s timeout and unified
  * error handling, then hands the successful Response to `read`. The reader runs
  * inside the timeout window so a slow body read still aborts.
@@ -30,7 +42,7 @@ async function request<R>(
   options: RequestInit,
   read: (response: Response) => Promise<R>,
 ): Promise<R> {
-  const url = `${getBaseUrl()}${path}`
+  const url = `${getBaseUrl()}${normalizePath(path)}`
 
   const headers = new Headers(options.headers)
   if (

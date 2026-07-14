@@ -19,6 +19,11 @@ vi.mock("@/lib/supabase/admin", () => ({
   })),
 }))
 
+// No cookie set: active-team resolution falls back to the first membership.
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => undefined }),
+}))
+
 function featureFlagResult(enabled: boolean) {
   return Promise.resolve({ data: enabled, error: null })
 }
@@ -154,6 +159,10 @@ describe("billing actions", () => {
       return featureFlagResult(false)
     })
     from.mockImplementation((table: string) => {
+      if (table === "team_memberships")
+        return {
+          select: () => ({ eq: async () => ({ data: [], error: null }) }),
+        }
       if (table === "team_member") return singleTeamResult()
       if (table === "team_pricing_plan") return teamPricingPlanQuery()
       if (table === "pricing_plan") return pricingPlanQuery()

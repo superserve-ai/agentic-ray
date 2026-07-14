@@ -19,6 +19,7 @@ import {
   Field,
   HighlightedCode,
   Input,
+  useToast,
 } from "@superserve/ui"
 import { AnimatePresence, LayoutGroup, motion } from "motion/react"
 import { usePostHog } from "posthog-js/react"
@@ -241,6 +242,7 @@ function CopyButton({ text }: { text: string }) {
 interface FormState {
   name: string
   timeout: string
+  autoDelete: string
   allowRules: string[]
   denyRules: string[]
   secretEntries: SecretBindingEntry[]
@@ -249,15 +251,48 @@ interface FormState {
   templateRef?: string
 }
 
+/** Max auto-pause timeout (7 days) and auto-delete window (30 days), matching
+ *  the control-plane API caps. */
+export const MAX_TIMEOUT_SECONDS = 604800
+export const MAX_AUTO_DELETE_SECONDS = 2592000
+
+/**
+ * Coerce a form string to a whole-second lifecycle window, or throw if the
+ * value is one a `type="number"` field can still emit past its min/max — the
+ * dialog submits from a click handler, not a validated form, so fractional,
+ * out-of-range, and non-finite inputs (e.g. `Number("1e309")` → `Infinity`,
+ * which `JSON.stringify` turns into `null` and the API reads as "disable")
+ * reach here. Returns undefined for an empty (unset) field.
+ */
+export function parseWindowSeconds(
+  raw: string,
+  label: string,
+  min: number,
+  max: number,
+): number | undefined {
+  if (raw.trim() === "") return undefined
+  const n = Number(raw)
+  if (!Number.isSafeInteger(n) || n < min || n > max) {
+    throw new Error(
+      `${label} must be a whole number between ${min} and ${max}.`,
+    )
+  }
+  return n
+}
+
 /**
  * Build the CreateSandboxRequest payload from the dialog's form state.
  *
  * Exported for unit testing. Keeps the network/env/metadata branches in
  * one place so we can assert shape without driving the full dialog UI.
  *
+ * Throws if `timeout` or `autoDelete` hold an invalid number (see
+ * {@link parseWindowSeconds}); the dialog surfaces the message as a toast.
+ *
  * Rules:
  *  - `name` is trimmed.
- *  - `timeout` is only included when set (coerced to number).
+ *  - `timeout` / `autoDelete` are only included when set, validated to a
+ *    whole number in range.
  *  - `network` is only included when at least one allow or deny rule is
  *    non-empty. Within it, `allow_out` / `deny_out` are each only included
  *    when that specific list has entries.
@@ -293,10 +328,28 @@ export function buildCreateSandboxRequest(
     if (k) metadata[k] = entry.value.trim()
   }
 
+  const timeoutSeconds = parseWindowSeconds(
+    state.timeout,
+    "Timeout",
+    1,
+    MAX_TIMEOUT_SECONDS,
+  )
+  const autoDeleteSeconds = parseWindowSeconds(
+    state.autoDelete,
+    "Auto-delete",
+    0,
+    MAX_AUTO_DELETE_SECONDS,
+  )
+
   return {
     name: state.name.trim(),
     ...(state.templateRef ? { from_template: state.templateRef } : {}),
-    ...(state.timeout ? { timeout_seconds: Number(state.timeout) } : {}),
+    ...(timeoutSeconds !== undefined
+      ? { timeout_seconds: timeoutSeconds }
+      : {}),
+    ...(autoDeleteSeconds !== undefined
+      ? { auto_delete_seconds: autoDeleteSeconds }
+      : {}),
     ...(hasNetwork
       ? {
           network: {
@@ -337,6 +390,7 @@ export function CreateSandboxDialog({
   const setOpen = onOpenChange ?? setInternalOpen
   const [name, setName] = useState("")
   const [timeout, setTimeout] = useState("")
+  const [autoDelete, setAutoDelete] = useState("")
   const [allowRules, setAllowRules] = useState<string[]>([])
   const [denyRules, setDenyRules] = useState<string[]>([])
   const [secretEntries, setSecretEntries] = useState<SecretBindingEntry[]>([])
@@ -397,10 +451,12 @@ export function CreateSandboxDialog({
   }, [templateOptions, templateRef])
 
   const createMutation = useCreateSandbox()
+  const { addToast } = useToast()
 
   const handleReset = () => {
     setName("")
     setTimeout("")
+    setAutoDelete("")
     setAllowRules([])
     setDenyRules([])
     setSecretEntries([])
@@ -412,19 +468,27 @@ export function CreateSandboxDialog({
   }
 
   const handleCreate = () => {
-    const payload = buildCreateSandboxRequest({
-      name,
-      timeout,
-      allowRules,
-      denyRules,
-      secretEntries,
-      envEntries,
-      metadataEntries,
-      templateRef: templateRef || undefined,
-    })
+    let payload: CreateSandboxRequest
+    try {
+      payload = buildCreateSandboxRequest({
+        name,
+        timeout,
+        autoDelete,
+        allowRules,
+        denyRules,
+        secretEntries,
+        envEntries,
+        metadataEntries,
+        templateRef: templateRef || undefined,
+      })
+    } catch (e) {
+      addToast(e instanceof Error ? e.message : "Invalid input", "error")
+      return
+    }
 
     posthog.capture(SANDBOX_EVENTS.CREATED, {
       has_timeout: !!timeout,
+      has_auto_delete: !!autoDelete,
       has_network_rules: !!payload.network,
       allow_rule_count: payload.network?.allow_out?.length ?? 0,
       deny_rule_count: payload.network?.deny_out?.length ?? 0,
@@ -590,10 +654,26 @@ export function CreateSandboxDialog({
                         <Input
                           type="number"
                           placeholder="No timeout"
+                          suffix="sec"
                           min={1}
-                          max={604800}
+                          max={MAX_TIMEOUT_SECONDS}
                           value={timeout}
                           onChange={(e) => setTimeout(e.target.value)}
+                        />
+                      </Field>
+
+                      <Field
+                        label="Auto-delete"
+                        description="Delete after this many seconds of continuous pause. 0 = delete as soon as it pauses; blank = keep forever. Max 2592000 (30 days)."
+                      >
+                        <Input
+                          type="number"
+                          placeholder="Keep forever"
+                          suffix="sec"
+                          min={0}
+                          max={MAX_AUTO_DELETE_SECONDS}
+                          value={autoDelete}
+                          onChange={(e) => setAutoDelete(e.target.value)}
                         />
                       </Field>
 

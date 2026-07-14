@@ -12,9 +12,14 @@ import {
 import Image from "next/image"
 
 import { useUser } from "@/hooks/use-user"
-import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
+import {
+  canReadPlatformTeams,
+  canReadPlatformTemplates,
+  canViewOtherUsersAccount,
+} from "@/lib/admin/permissions"
 
 import {
+  adminNavItem,
   bottomNavItems,
   mainNavItems,
   userManagementNavItem,
@@ -22,6 +27,7 @@ import {
 import { useSidebar } from "./sidebar-context"
 import { SidebarNav } from "./sidebar-nav"
 import { SidebarUserMenu } from "./sidebar-user-menu"
+import { TeamSwitcher } from "./team-switcher"
 
 function openCommandPalette() {
   window.dispatchEvent(
@@ -33,7 +39,13 @@ export function Sidebar() {
   const { isCollapsed, toggle } = useSidebar()
   const { user } = useUser()
   const navItems = [
-    ...mainNavItems,
+    ...mainNavItems.filter((item) => {
+      if (item.href === "/templates") {
+        return canReadPlatformTemplates(user)
+      }
+      return true
+    }),
+    ...(canReadPlatformTeams(user) ? [adminNavItem] : []),
     ...(canViewOtherUsersAccount(user) ? [userManagementNavItem] : []),
   ]
 
@@ -64,6 +76,9 @@ export function Sidebar() {
           />
         )}
       </div>
+
+      {/* Team Switcher — scopes every view below to the active team */}
+      {!isCollapsed && <TeamSwitcher />}
 
       {/* Search */}
       <div className="mb-2 px-2.5">

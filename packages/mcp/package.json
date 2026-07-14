@@ -1,6 +1,6 @@
 {
   "name": "@superserve/mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Model Context Protocol (MCP) server for Superserve sandboxes — create, exec, and manage Firecracker microVMs from any MCP client",
   "keywords": [
     "agents",

@@ -265,6 +265,7 @@ async function handleWork(work) {
 }
 
 async function janitorLoop() {
+  // eslint-disable-next-line no-unmodified-loop-condition -- signal handlers flip shuttingDown.
   while (!shuttingDown) {
     await new Promise((r) => setTimeout(r, JANITOR_INTERVAL))
     if (shuttingDown) return
@@ -304,6 +305,7 @@ async function pollLoop() {
   const client = new Anthropic({ authToken: ENVIRONMENT_KEY })
   console.log(`polling env=${ENVIRONMENT_ID} template=${TEMPLATE_NAME}`)
 
+  // eslint-disable-next-line no-unmodified-loop-condition -- signal handlers flip shuttingDown.
   while (!shuttingDown) {
     try {
       for await (const work of client.beta.environments.work.poller({

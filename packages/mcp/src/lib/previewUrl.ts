@@ -7,19 +7,20 @@
  * internet-exposed. This is pure string construction (no network call); the URL
  * only resolves while the sandbox is active and a process is bound to the port.
  *
- * The host map mirrors the SDK's `deriveSandboxHost` (packages/sdk/src/config.ts)
- * — the data plane is `boxd-{id}.{host}`, previews are `{port}-{id}.{host}`. Keep
- * the two in sync if the platform host mapping ever changes.
+ * The data plane is `boxd-{id}.{host}` and previews are `{port}-{id}.{host}`,
+ * on the same `{host}` — the sandbox's region-resolved data-plane host, which
+ * the caller passes in (the SDK's `resolveConfig` is the single source for it).
  */
 
-/** Default control-plane base URL (mirrors the SDK). */
-export const DEFAULT_BASE_URL = "https://api.superserve.ai"
 const DEFAULT_SANDBOX_HOST = "sandbox.superserve.ai"
 
 /** Sandbox ids are UUIDs; refuse anything that could escape the hostname. */
 const SANDBOX_ID_RE = /^[A-Za-z0-9-]+$/
 
-const MIN_PORT = 1
+// Privileged ports (< 1024) are refused by the edge proxy, so a preview URL
+// targeting one would never route — reject up front. Matches the SDK's
+// MIN_PREVIEW_PORT so both builders agree on what can be reached.
+const MIN_PORT = 1024
 const MAX_PORT = 65535
 
 /** Raised for an out-of-range port or a malformed sandbox id. */
@@ -31,34 +32,18 @@ export class PreviewUrlError extends Error {
 }
 
 /**
- * Derive the data-plane sandbox host from the control-plane base URL.
- * Mirrors the SDK so a preview URL lands on the same apex as the data plane.
- */
-export function deriveSandboxHost(baseUrl: string): string {
-  try {
-    const host = new URL(baseUrl).hostname
-    if (host === "api-staging.superserve.ai") {
-      return "staging-sandbox.superserve.ai"
-    }
-    if (host === "api.superserve.ai") {
-      return "sandbox.superserve.ai"
-    }
-  } catch {
-    // Invalid URL — fall through to the safe default.
-  }
-  return DEFAULT_SANDBOX_HOST
-}
-
-/**
  * Build the public preview URL for `port` on `sandboxId`.
  *
- * @throws {PreviewUrlError} when the port is not an integer in [1, 65535] or the
- * sandbox id contains characters that are not URL-host-safe.
+ * `sandboxHost` is the sandbox's data-plane host (region-resolved by the SDK's
+ * `resolveConfig`); it defaults to the prod apex for callers without one.
+ *
+ * @throws {PreviewUrlError} when the port is not an integer in [1024, 65535] or
+ * the sandbox id contains characters that are not URL-host-safe.
  */
 export function buildPreviewUrl(
   sandboxId: string,
   port: number,
-  baseUrl: string = DEFAULT_BASE_URL,
+  sandboxHost: string = DEFAULT_SANDBOX_HOST,
 ): string {
   if (!Number.isInteger(port) || port < MIN_PORT || port > MAX_PORT) {
     throw new PreviewUrlError(
@@ -68,5 +53,5 @@ export function buildPreviewUrl(
   if (!SANDBOX_ID_RE.test(sandboxId)) {
     throw new PreviewUrlError(`Invalid sandbox id: ${sandboxId}`)
   }
-  return `https://${port}-${sandboxId}.${deriveSandboxHost(baseUrl)}`
+  return `https://${port}-${sandboxId}.${sandboxHost}`
 }

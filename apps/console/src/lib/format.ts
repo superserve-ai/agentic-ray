@@ -35,3 +35,26 @@ export function formatTime(date: Date): { relative: string; absolute: string } {
 
   return { relative, absolute }
 }
+
+const REGION_LABELS: Record<string, string> = {
+  use: "US East",
+  usw: "US West",
+}
+
+/** Human label for a cell region code; unknown codes pass through as-is. */
+export function regionLabel(region: string): string {
+  return REGION_LABELS[region] ?? region
+}
+
+/** Compact duration label (s/m/h/d) for timeout and auto-delete windows. */
+export function formatTimeout(seconds?: number | null): string {
+  if (!seconds) return "None"
+  if (seconds < 60) return `${seconds}s`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`
+  return `${Math.floor(seconds / 86400)}d`
+}
+
+export function formatMemory(mib: number): string {
+  return mib >= 1024 ? `${(mib / 1024).toFixed(0)} GB` : `${mib} MB`
+}

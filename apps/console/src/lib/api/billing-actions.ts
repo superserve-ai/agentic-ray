@@ -1,6 +1,13 @@
 "use server"
 
-import { createAdminClient } from "@/lib/supabase/admin"
+import type { SupabaseClient } from "@supabase/supabase-js"
+
+import { pickActiveTeam, readTeamSelection } from "@/lib/api/active-team"
+import {
+  listTeamMembershipsForUserDetailed,
+  type TeamMembership,
+} from "@/lib/api/team-directory"
+import { cellFor } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 const MAX_USAGE_RANGE_MS = 90 * 24 * 60 * 60 * 1000
@@ -47,27 +54,24 @@ export interface BillingSettingsResponse {
   pricing?: BillingPricing
 }
 
-async function getTeamId(userId: string): Promise<string | null> {
-  const admin = createAdminClient()
-  const { data, error } = await admin
-    .from("team_member")
-    .select("team_id")
-    .eq("profile_id", userId)
+async function getTeam(userId: string): Promise<TeamMembership | null> {
+  // maxAgeMs 0: billing's fail-closed check below reasons about the
+  // freshness of the read itself, so it must not be served from the
+  // directory cache.
+  const { memberships, degradedRegions } =
+    await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 })
 
-  if (error) throw new Error(error.message)
-  if (!data?.length) return null
-
-  const teamIds = [
-    ...new Set(
-      data
-        .map((row) => row.team_id)
-        .filter((teamId): teamId is string => typeof teamId === "string"),
-    ),
-  ]
-  if (teamIds.length !== 1) {
-    throw new Error("Select a team before viewing billing usage")
+  // Fail closed on a partial directory read: with a cell unreachable,
+  // "exactly one membership" may just mean the other team's cell is down —
+  // billing must never show a different team's numbers because a sibling
+  // region blinked.
+  if (degradedRegions.length > 0) {
+    throw new Error(
+      "Billing is temporarily unavailable while part of the team directory is unreachable — retry shortly",
+    )
   }
-  return teamIds[0]
+
+  return pickActiveTeam(memberships, await readTeamSelection())
 }
 
 function normalizePeriod(periodStart: string, periodEnd: string) {
@@ -93,10 +97,10 @@ function normalizePeriod(periodStart: string, periodEnd: string) {
 }
 
 async function getFeatureEnabled(
+  admin: SupabaseClient,
   teamId: string,
   flagKey: string,
 ): Promise<boolean> {
-  const admin = createAdminClient()
   const { data: enabled, error } = await admin.rpc("feature_enabled", {
     flag_key: flagKey,
     flag_team_id: teamId,
@@ -130,8 +134,10 @@ function compareNullableStringsDesc(left: unknown, right: unknown): number {
   return rightString.localeCompare(leftString)
 }
 
-async function getTeamPricingPlanKey(teamId: string): Promise<string> {
-  const admin = createAdminClient()
+async function getTeamPricingPlanKey(
+  admin: SupabaseClient,
+  teamId: string,
+): Promise<string> {
   const now = new Date().toISOString()
   const { data: assignments, error: assignmentError } = await admin
     .from("team_pricing_plan")
@@ -167,9 +173,9 @@ async function getTeamPricingPlanKey(teamId: string): Promise<string> {
 }
 
 async function getBillingPricingForPlan(
+  admin: SupabaseClient,
   planKey: string,
 ): Promise<BillingPricing> {
-  const admin = createAdminClient()
   const now = new Date().toISOString()
   const { data: rates, error } = await admin
     .from("pricing_rate")
@@ -236,9 +242,12 @@ async function getBillingPricingForPlan(
   }
 }
 
-async function getTeamBillingPricing(teamId: string): Promise<BillingPricing> {
-  const planKey = await getTeamPricingPlanKey(teamId)
-  return getBillingPricingForPlan(planKey)
+async function getTeamBillingPricing(
+  admin: SupabaseClient,
+  teamId: string,
+): Promise<BillingPricing> {
+  const planKey = await getTeamPricingPlanKey(admin, teamId)
+  return getBillingPricingForPlan(admin, planKey)
 }
 
 export async function getBillingUsageAction(
@@ -253,8 +262,8 @@ export async function getBillingUsageAction(
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const teamId = await getTeamId(user.id)
-  if (!teamId) {
+  const team = await getTeam(user.id)
+  if (!team) {
     return {
       enabled: false,
       billing_mode: "disabled",
@@ -264,7 +273,15 @@ export async function getBillingUsageAction(
     }
   }
 
-  const dashboardEnabled = await getFeatureEnabled(teamId, USAGE_DASHBOARD_FLAG)
+  // All billing data lives in the team's home cell.
+  const admin = cellFor(team.region).createAdminClient()
+  const teamId = team.teamId
+
+  const dashboardEnabled = await getFeatureEnabled(
+    admin,
+    teamId,
+    USAGE_DASHBOARD_FLAG,
+  )
   if (!dashboardEnabled) {
     return {
       enabled: false,
@@ -276,8 +293,8 @@ export async function getBillingUsageAction(
   }
 
   const [metricsWriteEnabled, billingExportEnabled] = await Promise.all([
-    getFeatureEnabled(teamId, BILLING_METRICS_WRITE_FLAG),
-    getFeatureEnabled(teamId, BILLING_EXPORT_FLAG),
+    getFeatureEnabled(admin, teamId, BILLING_METRICS_WRITE_FLAG),
+    getFeatureEnabled(admin, teamId, BILLING_EXPORT_FLAG),
   ])
   if (!metricsWriteEnabled) {
     return {
@@ -292,9 +309,8 @@ export async function getBillingUsageAction(
   const billingMode: BillingUsageMode = billingExportEnabled
     ? "active"
     : "shadow"
-  const pricing = await getTeamBillingPricing(teamId)
+  const pricing = await getTeamBillingPricing(admin, teamId)
 
-  const admin = createAdminClient()
   const { data, error } = await admin
     .from("team_billing_usage_hourly")
     .select(
@@ -337,16 +353,18 @@ export async function getBillingSettingsAction(): Promise<BillingSettingsRespons
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const teamId = await getTeamId(user.id)
-  if (!teamId) {
+  const team = await getTeam(user.id)
+  if (!team) {
     return {
       enabled: false,
       billing_mode: "disabled",
     }
   }
 
+  const admin = cellFor(team.region).createAdminClient()
   const billingExportEnabled = await getFeatureEnabled(
-    teamId,
+    admin,
+    team.teamId,
     BILLING_EXPORT_FLAG,
   )
 
@@ -360,6 +378,6 @@ export async function getBillingSettingsAction(): Promise<BillingSettingsRespons
   return {
     enabled: true,
     billing_mode: "active",
-    pricing: await getTeamBillingPricing(teamId),
+    pricing: await getTeamBillingPricing(admin, team.teamId),
   }
 }

@@ -44,7 +44,7 @@ describe("apiClient", () => {
     )
     await apiClient("/sandboxes")
     expect(fetchSpy).toHaveBeenCalledWith(
-      "/api/sandboxes",
+      "/api/sandboxes/",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
   })

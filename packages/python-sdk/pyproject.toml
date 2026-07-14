@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "superserve"
-version = "0.7.7"
+version = "0.8.0"
 description = "Python SDK for the Superserve sandbox API"
 license = "Apache-2.0"
 readme = "README.md"

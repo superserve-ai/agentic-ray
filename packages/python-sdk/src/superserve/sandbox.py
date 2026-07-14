@@ -15,6 +15,8 @@ from .commands import Commands, CommandsDeps
 from .errors import NotFoundError, SandboxError
 from .files import Files, FilesDeps
 from .types import (
+    UNSET,
+    build_update_body,
     NetworkConfig,
     NetworkLogPage,
     NetworkVerdict,
@@ -106,6 +108,7 @@ class Sandbox:
         from_template: "str | Template | AsyncTemplate | None" = None,
         from_snapshot: str | None = None,
         timeout_seconds: int | None = None,
+        auto_delete_seconds: int | None = None,
         metadata: dict[str, str] | None = None,
         env_vars: dict[str, str] | None = None,
         secrets: dict[str, str] | None = None,
@@ -134,6 +137,8 @@ class Sandbox:
             body["from_snapshot"] = from_snapshot
         if timeout_seconds is not None:
             body["timeout_seconds"] = timeout_seconds
+        if auto_delete_seconds is not None:
+            body["auto_delete_seconds"] = auto_delete_seconds
         if metadata is not None:
             body["metadata"] = metadata
         if env_vars is not None:
@@ -226,6 +231,37 @@ class Sandbox:
         except NotFoundError:
             pass  # Already deleted
 
+    @classmethod
+    def update_by_id(
+        cls,
+        sandbox_id: str,
+        *,
+        metadata: dict[str, str] | None = None,
+        network: NetworkConfig | None = None,
+        auto_delete_seconds: int | None = UNSET,
+        timeout_seconds: int | None = UNSET,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> None:
+        """Update a sandbox by ID without holding a live instance.
+
+        Unlike ``connect(id).update(...)`` this does not activate the sandbox —
+        a paused sandbox stays paused. Pass ``None`` for ``auto_delete_seconds``
+        / ``timeout_seconds`` to clear them; omit to leave unchanged.
+        """
+        config = resolve_config(api_key=api_key, base_url=base_url)
+        api_request(
+            "PATCH",
+            f"{config.base_url}/sandboxes/{sandbox_id}",
+            headers={"X-API-Key": config.api_key},
+            json_body=build_update_body(
+                metadata=metadata,
+                network=network,
+                auto_delete_seconds=auto_delete_seconds,
+                timeout_seconds=timeout_seconds,
+            ),
+        )
+
     # Methods on sandbox
 
     def _close_http_client(self) -> None:
@@ -307,17 +343,23 @@ class Sandbox:
         *,
         metadata: dict[str, str] | None = None,
         network: NetworkConfig | None = None,
+        auto_delete_seconds: int | None = UNSET,
+        timeout_seconds: int | None = UNSET,
     ) -> None:
-        """Partially update this sandbox."""
+        """Partially update this sandbox.
+
+        ``auto_delete_seconds`` sets the auto-delete window (counting from now
+        when the sandbox is already paused); pass ``None`` to disable
+        auto-delete. ``timeout_seconds`` sets the auto-pause timeout; pass
+        ``None`` to disable auto-pause. Omit either to leave it unchanged.
+        """
         self._require_live()
-        body: dict[str, Any] = {}
-        if metadata is not None:
-            body["metadata"] = metadata
-        if network is not None:
-            body["network"] = {
-                "allow_out": network.allow_out,
-                "deny_out": network.deny_out,
-            }
+        body = build_update_body(
+            metadata=metadata,
+            network=network,
+            auto_delete_seconds=auto_delete_seconds,
+            timeout_seconds=timeout_seconds,
+        )
 
         api_request(
             "PATCH",

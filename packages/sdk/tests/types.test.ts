@@ -38,6 +38,17 @@ describe("toSandboxInfo", () => {
     expect(info.metadata).toEqual({ env: "prod" })
   })
 
+  it("converts auto-delete fields", () => {
+    const info = toSandboxInfo({
+      ...valid,
+      auto_delete_seconds: 3600,
+      auto_delete_at: "2026-01-01T01:00:00.000Z",
+    })
+    expect(info.autoDeleteSeconds).toBe(3600)
+    expect(info.autoDeleteAt).toBeInstanceOf(Date)
+    expect(info.autoDeleteAt?.toISOString()).toBe("2026-01-01T01:00:00.000Z")
+  })
+
   it("throws when id is missing", () => {
     expect(() => toSandboxInfo({ ...valid, id: undefined })).toThrow(
       /missing sandbox id/,
@@ -60,6 +71,8 @@ describe("toSandboxInfo", () => {
     expect(info.vcpuCount).toBe(0)
     expect(info.memoryMib).toBe(0)
     expect(info.timeoutSeconds).toBeUndefined()
+    expect(info.autoDeleteSeconds).toBeUndefined()
+    expect(info.autoDeleteAt).toBeUndefined()
     expect(info.network).toBeUndefined()
     expect(info.metadata).toEqual({})
   })

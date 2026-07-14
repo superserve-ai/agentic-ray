@@ -13,6 +13,9 @@ export interface SandboxListItem {
   memory_mib: number
   snapshot_id?: string
   timeout_seconds?: number
+  auto_delete_seconds?: number
+  /** Deletion deadline; present only while paused with auto_delete_seconds set. */
+  auto_delete_at?: string
   network?: NetworkConfig
   metadata: Record<string, string>
   created_at: string
@@ -46,6 +49,8 @@ export interface CreateSandboxRequest {
   from_template?: string
   from_snapshot?: string
   timeout_seconds?: number
+  /** Delete the sandbox once continuously paused for this many seconds. */
+  auto_delete_seconds?: number
   env_vars?: Record<string, string>
   /** env-var name → secret name. The agent sees a proxy token under env_key;
    *  the in-host daemon swaps it for the real value at egress. */
@@ -57,6 +62,10 @@ export interface CreateSandboxRequest {
 export interface SandboxPatch {
   network?: NetworkConfig
   metadata?: Record<string, string>
+  /** A number (re)arms the window; null disarms it. */
+  auto_delete_seconds?: number | null
+  /** A number sets the auto-pause timeout; null disables it. */
+  timeout_seconds?: number | null
 }
 
 export type SortDirection = "asc" | "desc"
@@ -109,6 +118,8 @@ export interface ActivityResponse {
   id: string
   /** Null for events not tied to a sandbox (e.g. secret CRUD). */
   sandbox_id: string | null
+  /** Set on template events. */
+  template_id: string | null
   category: string
   action: string
   status: string | null
@@ -116,10 +127,36 @@ export interface ActivityResponse {
   /** Set on secret events; secret_id is null once the secret is purged. */
   secret_id: string | null
   secret_name: string | null
+  /** Team member who performed the action; null for system-initiated events. */
+  actor_id: string | null
   duration_ms: number | null
   error: string | null
   metadata: Record<string, unknown>
   created_at: string
+}
+
+/** Sort columns GET /activity accepts; also the allowlist for URL ?sort=. */
+export const ACTIVITY_SORT_COLUMNS = ["created_at"] as const
+
+export type ActivitySortColumn = (typeof ACTIVITY_SORT_COLUMNS)[number]
+
+/** Query params for the paginated audit-log list (GET /activity). */
+export interface ActivityListParams {
+  /** 1-based page number. */
+  page: number
+  pageSize: number
+  sort: ActivitySortColumn
+  order: SortDirection
+  /** Exact category filter (e.g. "sandbox", "template", "secret"). */
+  category?: string
+  /** Exact status filter; the Errors tab sends "error". */
+  status?: string
+  /** Case-insensitive substring across sandbox/secret name, action, category. */
+  q?: string
+  /** RFC3339 lower bound on created_at (inclusive). */
+  start?: string
+  /** RFC3339 upper bound on created_at (inclusive). */
+  end?: string
 }
 
 export type TemplateStatus = "pending" | "building" | "ready" | "failed"
