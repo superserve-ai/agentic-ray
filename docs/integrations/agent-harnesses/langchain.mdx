@@ -1,0 +1,129 @@
+---
+title: "LangChain Deep Agents"
+sidebarTitle: LangChain Deep Agents
+description: Use Superserve sandboxes as the execution runtime for LangChain, LangGraph, and Deep Agents with the langchain-superserve backend.
+icon: "/logos/integrations/langchain.svg"
+---
+
+Deep Agents is LangChain's harness for long-running agents with planning, subagent, filesystem, and shell tools. The [`langchain-superserve`](https://pypi.org/project/langchain-superserve/) package implements the Deep Agents sandbox protocol on top of a Superserve sandbox, so every command and file operation the agent makes runs in an isolated VM instead of on your machine. A deep agent compiles to a LangGraph graph, so the same backend works across LangChain, LangGraph, and Deep Agents.
+
+## Setup
+
+```bash
+pip install langchain-superserve "langchain[anthropic]"
+export SUPERSERVE_API_KEY=ss_live_...
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+`langchain-superserve` already pulls in `deepagents`; the provider extra is only for the model used in the example below.
+
+## Wire the sandbox into the agent
+
+The highlighted lines create the sandbox-backed backend and hand it to the agent. Everything else is standard Deep Agents usage — the built-in `execute`, `ls`, `read_file`, `write_file`, `edit_file`, `glob`, and `grep` tools all run inside the sandbox.
+
+```python {5-9,14}
+from deepagents import create_deep_agent
+from superserve import Sandbox
+from langchain_superserve import SuperserveSandbox
+
+sandbox = Sandbox.create(
+    name="deep-agent-runtime",
+    from_template="superserve/python-3.11",
+)
+backend = SuperserveSandbox(sandbox=sandbox)
+
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-5",
+    system_prompt="Use the execute tool to inspect the sandbox before answering.",
+    backend=backend,
+)
+
+try:
+    result = agent.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "List the files in /tmp and tell me how many there are.",
+                }
+            ]
+        }
+    )
+    print(result["messages"][-1].content)
+finally:
+    sandbox.kill()
+```
+
+### Pick a python-equipped template
+
+The Deep Agents protocol synthesizes `ls`, `read_file`, `edit_file`, and `glob` (plus the `write_file` preflight) with in-sandbox `python3`, so launch from a python-equipped template — `superserve/python-3.11`, `superserve/python-ml`, or `superserve/code-interpreter`. `execute`, `grep`, and file upload/download work on any image, including the minimal `superserve/base`.
+
+## Use it from Deep Agents Code
+
+Installing the package also registers a `superserve` sandbox provider for `deepagents-code` (`dcode`), LangChain's terminal coding agent:
+
+```bash
+dcode --install langchain-superserve --package
+export SUPERSERVE_API_KEY=ss_live_...
+dcode --sandbox superserve
+```
+
+The provider creates a sandbox per session and deletes it when the session is deleted. Configure it with environment variables — each is also read with a `DEEPAGENTS_CODE_` prefix, which takes precedence:
+
+| Variable                     | Default                  | Purpose                                                    |
+| ---------------------------- | ------------------------ | ---------------------------------------------------------- |
+| `SUPERSERVE_API_KEY`         | —                        | API key used to create and connect to sandboxes (required) |
+| `SUPERSERVE_TEMPLATE`        | `superserve/python-3.11` | Template for new sandboxes                                 |
+| `SUPERSERVE_SANDBOX_TIMEOUT` | `1800`                   | Sandbox idle timeout in seconds                            |
+
+## Superserve extras
+
+The backend wraps a plain Superserve sandbox, so everything in the Superserve SDK still applies to the sandbox you pass to `SuperserveSandbox`.
+
+### Pause between runs
+
+[Pause and resume](/sandbox/lifecycle) the sandbox between agent runs to stop paying for idle time — the filesystem and running processes survive.
+
+```python
+backend = SuperserveSandbox(sandbox=sandbox)
+# ... first agent run ...
+
+sandbox.pause()   # stop billing while the agent is idle
+# ... later ...
+sandbox.resume()  # same filesystem and processes, ready for the next run
+```
+
+### Reattach to a long-lived sandbox
+
+Reuse one sandbox across processes or sessions — connect by id, then wrap it. This is what the `dcode` provider does per session.
+
+```python
+from superserve import Sandbox
+from langchain_superserve import SuperserveSandbox
+
+sandbox = Sandbox.connect("SANDBOX_ID")  # created earlier, elsewhere
+backend = SuperserveSandbox(sandbox=sandbox)
+```
+
+### Bind secrets
+
+[Bind secrets](/secrets/binding) at creation so real credentials never enter the VM — code inside the sandbox sees a stand-in token, and the platform swaps in the real value on outbound requests. Useful when the agent's `execute` tool needs to authenticate (for example, `git` or `gh`):
+
+```python
+sandbox = Sandbox.create(
+    name="deep-agent-runtime",
+    from_template="superserve/python-3.11",
+    secrets={"GITHUB_TOKEN": "github-token"},  # env var → stored secret name
+)
+backend = SuperserveSandbox(sandbox=sandbox)
+```
+
+### Run async
+
+The backend is synchronous, but the Deep Agents protocol runs it in a thread pool, so LangGraph's async entrypoints work unchanged:
+
+```python
+result = await agent.ainvoke(
+    {"messages": [{"role": "user", "content": "List the files in /tmp."}]}
+)
+```
