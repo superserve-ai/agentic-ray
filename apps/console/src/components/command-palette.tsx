@@ -20,9 +20,6 @@ import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 
-import { useUser } from "@/hooks/use-user"
-import { canReadPlatformTemplates } from "@/lib/admin/permissions"
-
 interface CommandItem {
   label: string
   icon: Icon
@@ -33,7 +30,6 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false)
   const [hoveredLabel, setHoveredLabel] = useState<string | null>(null)
   const router = useRouter()
-  const { user } = useUser()
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -128,13 +124,8 @@ export function CommandPalette() {
 
   const inputRef = useRef<HTMLInputElement>(null)
   const [mounted, setMounted] = useState(false)
-  const filteredNavigationItems = navigationItems.filter(
-    (item) => item.label !== "Templates" || canReadPlatformTemplates(user),
-  )
-  const filteredActionItems = actionItems.filter(
-    (item) =>
-      item.label !== "Create template" || canReadPlatformTemplates(user),
-  )
+  const filteredNavigationItems = navigationItems
+  const filteredActionItems = actionItems
 
   useEffect(() => {
     setMounted(true)

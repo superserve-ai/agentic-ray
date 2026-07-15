@@ -252,11 +252,13 @@ export async function listAllTeams(): Promise<TeamRecord[]> {
 async function findTeamInRegion(
   region: string,
   teamId: string,
-): Promise<TeamRecord | null> {
+): Promise<(TeamRecord & { home_region: string | null }) | null> {
   const admin = cellFor(region).createAdminClient()
   const { data: teams, error } = await admin
     .from("team")
-    .select("id, name, active_sandbox_count, max_sandboxes, created_at")
+    .select(
+      "id, name, active_sandbox_count, max_sandboxes, created_at, home_region",
+    )
     .eq("id", teamId)
     .limit(1)
 
@@ -272,19 +274,43 @@ async function findTeamInRegion(
     max_sandboxes: team.max_sandboxes as number,
     created_at: team.created_at as string,
     region,
+    home_region: (team.home_region as string | null) ?? null,
   }
 }
 
 /**
- * Find a team by id across all configured cells. Returns the first match
- * with its source region, or null if the team does not exist anywhere.
+ * Find a team by id across all configured cells, preferring the cell the
+ * team calls home. After a cross-cell migration the same team id exists in
+ * two cells at once: the live row in its new home and a detached fallback
+ * row in the old cell (kept for rollback until purge). The fallback row's
+ * home_region points at the new cell, so a row found in the cell it names
+ * as home is authoritative; a row that names a different home is only a
+ * pointer, used as a last resort if the home row is missing — including when
+ * the home cell itself is degraded and could not be read.
+ *
+ * A pointer naming a cell that is not configured is dangling: its
+ * authoritative cell was never consulted, and the region it would hand
+ * callers routes impersonation and key minting into the detached copy. That
+ * fails closed — the row is ignored (logged) rather than served.
  */
 export async function findTeamById(teamId: string): Promise<TeamRecord | null> {
   const regions = configuredRegions()
-  for (const region of regions) {
+  const { items } = await acrossCells(async (region) => {
     const team = await findTeamInRegion(region, teamId)
-    if (team) return team
+    return team ? [team] : []
+  })
+
+  let fallback: TeamRecord | null = null
+  for (const { home_region, ...record } of items) {
+    if (!home_region || home_region === record.region) return record
+    if (!regions.includes(home_region)) {
+      console.error(
+        `team directory: team ${record.id} row in cell ${record.region} names unconfigured home cell ${home_region}, ignoring detached row`,
+      )
+      continue
+    }
+    fallback ??= record
   }
 
-  return null
+  return fallback
 }
