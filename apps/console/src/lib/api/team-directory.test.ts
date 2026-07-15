@@ -416,4 +416,15 @@ describe("findTeamById home-region preference", () => {
     }
     await expect(findTeamById("t-1")).rejects.toThrow("primary down")
   })
+
+  it("ignores a pointer row whose home cell is not configured", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    regions = ["use"]
+    cellClients = {
+      use: cellClient([], [team("usw")]),
+    }
+    expect(await findTeamById("t-1")).toBeNull()
+    expect(errSpy).toHaveBeenCalledOnce()
+    errSpy.mockRestore()
+  })
 })

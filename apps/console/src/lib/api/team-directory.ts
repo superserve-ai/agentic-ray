@@ -287,8 +287,14 @@ async function findTeamInRegion(
  * as home is authoritative; a row that names a different home is only a
  * pointer, used as a last resort if the home row is missing — including when
  * the home cell itself is degraded and could not be read.
+ *
+ * A pointer naming a cell that is not configured is dangling: its
+ * authoritative cell was never consulted, and the region it would hand
+ * callers routes impersonation and key minting into the detached copy. That
+ * fails closed — the row is ignored (logged) rather than served.
  */
 export async function findTeamById(teamId: string): Promise<TeamRecord | null> {
+  const regions = configuredRegions()
   const { items } = await acrossCells(async (region) => {
     const team = await findTeamInRegion(region, teamId)
     return team ? [team] : []
@@ -297,6 +303,12 @@ export async function findTeamById(teamId: string): Promise<TeamRecord | null> {
   let fallback: TeamRecord | null = null
   for (const { home_region, ...record } of items) {
     if (!home_region || home_region === record.region) return record
+    if (!regions.includes(home_region)) {
+      console.error(
+        `team directory: team ${record.id} row in cell ${record.region} names unconfigured home cell ${home_region}, ignoring detached row`,
+      )
+      continue
+    }
     fallback ??= record
   }
 
