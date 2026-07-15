@@ -387,4 +387,33 @@ describe("findTeamById home-region preference", () => {
     const found = await findTeamById("t-1")
     expect(found?.region).toBe("use")
   })
+
+  const downCell = (message: string) =>
+    ({
+      from: vi.fn(() => {
+        throw new Error(message)
+      }),
+    }) as unknown as ReturnType<typeof cellClient>
+
+  it("serves the pointer row when the home cell is down", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    regions = ["use", "usw"]
+    cellClients = {
+      use: cellClient([], [team("usw")]),
+      usw: downCell("usw pooler unreachable"),
+    }
+    const found = await findTeamById("t-1")
+    expect(found?.region).toBe("use")
+    expect(errSpy).toHaveBeenCalledOnce()
+    errSpy.mockRestore()
+  })
+
+  it("still throws when the default cell fails during the lookup", async () => {
+    regions = ["use", "usw"]
+    cellClients = {
+      use: downCell("primary down"),
+      usw: cellClient([], [team("usw")]),
+    }
+    await expect(findTeamById("t-1")).rejects.toThrow("primary down")
+  })
 })

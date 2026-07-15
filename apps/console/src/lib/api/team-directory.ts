@@ -285,16 +285,18 @@ async function findTeamInRegion(
  * row in the old cell (kept for rollback until purge). The fallback row's
  * home_region points at the new cell, so a row found in the cell it names
  * as home is authoritative; a row that names a different home is only a
- * pointer, used as a last resort if the home row is missing.
+ * pointer, used as a last resort if the home row is missing — including when
+ * the home cell itself is degraded and could not be read.
  */
 export async function findTeamById(teamId: string): Promise<TeamRecord | null> {
-  const regions = configuredRegions()
-  let fallback: TeamRecord | null = null
-  for (const region of regions) {
+  const { items } = await acrossCells(async (region) => {
     const team = await findTeamInRegion(region, teamId)
-    if (!team) continue
-    const { home_region, ...record } = team
-    if (!home_region || home_region === region) return record
+    return team ? [team] : []
+  })
+
+  let fallback: TeamRecord | null = null
+  for (const { home_region, ...record } of items) {
+    if (!home_region || home_region === record.region) return record
     fallback ??= record
   }
 
