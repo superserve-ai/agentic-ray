@@ -8,6 +8,7 @@ import { usePostHog } from "posthog-js/react"
 import { useState } from "react"
 
 import { ErrorState } from "@/components/error-state"
+import { useQueryScope } from "@/components/query-provider"
 import { ActivitySection } from "@/components/sandboxes/activity-section"
 import { DeleteSandboxDialog } from "@/components/sandboxes/delete-sandbox-dialog"
 import { FilesSection } from "@/components/sandboxes/files-section"
@@ -135,6 +136,7 @@ export default function SandboxDetailPage() {
   const router = useRouter()
   const posthog = usePostHog()
   const sandboxId = params.sandbox_id
+  const queryScope = useQueryScope()
 
   const { data: sandbox, isPending, error, refetch } = useSandbox(sandboxId)
   const pauseMutation = usePauseSandbox()
@@ -145,7 +147,7 @@ export default function SandboxDetailPage() {
   const network = useSandboxNetwork(sandboxId)
 
   const { data: activity, isPending: activityPending } = useQuery({
-    queryKey: auditLogKeys.bySandbox(sandboxId),
+    queryKey: [...auditLogKeys.bySandbox(sandboxId), queryScope],
     queryFn: () => listActivityBySandboxAction(sandboxId),
     enabled: !!sandboxId,
     staleTime: 30_000,

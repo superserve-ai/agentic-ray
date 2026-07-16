@@ -2,6 +2,7 @@ import type { User } from "@supabase/supabase-js"
 import { describe, expect, it } from "vitest"
 
 import {
+  canReadPlatformActivity,
   canReadPlatformSandboxes,
   canReadPlatformTemplates,
   canReadPlatformTeams,
@@ -135,6 +136,19 @@ describe("platform resource read permissions", () => {
     ).toBe(true)
   })
 
+  it("requires the canonical activity permission only", () => {
+    expect(
+      canReadPlatformActivity(
+        user(
+          "person@example.com",
+          "email",
+          ["email"],
+          ["platform:activity:read"],
+        ),
+      ),
+    ).toBe(true)
+  })
+
   it("does not treat plural aliases as valid", () => {
     expect(
       canReadPlatformSandboxes(
@@ -156,9 +170,19 @@ describe("platform resource read permissions", () => {
         ),
       ),
     ).toBe(false)
+    expect(
+      canReadPlatformActivity(
+        user(
+          "person@example.com",
+          "email",
+          ["email"],
+          ["platform:activities:read"],
+        ),
+      ),
+    ).toBe(false)
   })
 
-  it("does not let team read imply sandbox or template access", () => {
+  it("does not let team read imply resource access", () => {
     expect(
       canReadPlatformSandboxes(
         user("person@example.com", "email", ["email"], ["platform:teams:read"]),
@@ -166,6 +190,11 @@ describe("platform resource read permissions", () => {
     ).toBe(false)
     expect(
       canReadPlatformTemplates(
+        user("person@example.com", "email", ["email"], ["platform:teams:read"]),
+      ),
+    ).toBe(false)
+    expect(
+      canReadPlatformActivity(
         user("person@example.com", "email", ["email"], ["platform:teams:read"]),
       ),
     ).toBe(false)
@@ -186,6 +215,13 @@ describe("platform resource read permissions", () => {
         }),
       ),
     ).toBe(false)
+    expect(
+      canReadPlatformActivity(
+        userWithMetadata({
+          userPermissions: ["platform:activity:read"],
+        }),
+      ),
+    ).toBe(false)
   })
 
   it("reads permissions from server-owned nested authorization claims", () => {
@@ -203,21 +239,36 @@ describe("platform resource read permissions", () => {
         }),
       ),
     ).toBe(true)
+    expect(
+      canReadPlatformActivity(
+        userWithMetadata({
+          appAuthorizationPermissions: ["platform:activity:read"],
+        }),
+      ),
+    ).toBe(true)
   })
 })
 
 describe("platform impersonation access", () => {
-  it("returns only canonical sandbox and template scopes", () => {
+  it("returns only canonical resource scopes", () => {
     expect(
       platformImpersonationReadScopes(
         user(
           "person@example.com",
           "google",
           ["google"],
-          ["platform:sandbox:read", "platform:template:read"],
+          [
+            "platform:sandbox:read",
+            "platform:template:read",
+            "platform:activity:read",
+          ],
         ),
       ),
-    ).toEqual(["platform:sandbox:read", "platform:template:read"])
+    ).toEqual([
+      "platform:sandbox:read",
+      "platform:template:read",
+      "platform:activity:read",
+    ])
   })
 
   it("returns only the matching scope when a single permission is present", () => {
@@ -241,6 +292,16 @@ describe("platform impersonation access", () => {
         ),
       ),
     ).toEqual(["platform:template:read"])
+    expect(
+      platformImpersonationReadScopes(
+        user(
+          "person@example.com",
+          "google",
+          ["google"],
+          ["platform:activity:read"],
+        ),
+      ),
+    ).toEqual(["platform:activity:read"])
   })
 
   it("does not include teams read", () => {
@@ -264,6 +325,16 @@ describe("platform impersonation access", () => {
           "google",
           ["google"],
           ["platform:sandbox:read"],
+        ),
+      ),
+    ).toBe(true)
+    expect(
+      canStartPlatformImpersonation(
+        user(
+          "a@superserve.ai",
+          "google",
+          ["google"],
+          ["platform:activity:read"],
         ),
       ),
     ).toBe(true)

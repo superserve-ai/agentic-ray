@@ -210,7 +210,7 @@ export async function getAuthApiKeyForUser(
     const scopes = platformImpersonationReadScopes(user)
     if (scopes.length === 0) {
       throw new Error(
-        "Forbidden: impersonation requires platform sandbox or template read access",
+        "Forbidden: impersonation requires a supported platform read permission",
       )
     }
 
