@@ -146,7 +146,12 @@ export default function SandboxDetailPage() {
 
   const network = useSandboxNetwork(sandboxId)
 
-  const { data: activity, isPending: activityPending } = useQuery({
+  const {
+    data: activity,
+    isPending: activityPending,
+    error: activityError,
+    refetch: refetchActivity,
+  } = useQuery({
     queryKey: [...auditLogKeys.bySandbox(sandboxId), queryScope],
     queryFn: () => listActivityBySandboxAction(sandboxId),
     enabled: !!sandboxId,
@@ -269,7 +274,12 @@ export default function SandboxDetailPage() {
         <PreviewSection sandbox={sandbox} onStart={handleStart} />
 
         {/* Layer 7: activity (history, lower priority) */}
-        <ActivitySection activity={activity} isPending={activityPending} />
+        <ActivitySection
+          activity={activity}
+          isPending={activityPending}
+          error={activityError}
+          onRetry={() => void refetchActivity()}
+        />
 
         {/* Layer 8: unified egress log (connections + secret requests) */}
         <NetworkLogTable
