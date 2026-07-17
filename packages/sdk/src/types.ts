@@ -118,7 +118,10 @@ export interface PreviewPortList {
 }
 
 export interface PreviewTokenOptions {
-  /** Token lifetime in seconds (1–604800). Omit to live until rotation. */
+  /**
+   * Token lifetime in seconds (1–604800). Omit intentionally for a
+   * long-running machine credential that lives until rotation or unpublish.
+   */
   expiresInSeconds?: number
 }
 

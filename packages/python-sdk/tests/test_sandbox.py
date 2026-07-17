@@ -130,10 +130,10 @@ class TestPreviewAuthentication:
                 assert sandbox.publish_preview_port(3000).token_version == 1
                 assert json.loads(publish.calls.last.request.content) == {"port": 3000}
                 assert sandbox.list_preview_ports().ports[0].port == 3000
-                assert (
-                    sandbox.get_preview_token(3000).header
-                    == "X-Superserve-Preview-Token"
-                )
+                credential = sandbox.get_preview_token(3000)
+                assert credential.header == "X-Superserve-Preview-Token"
+                assert "spv1.secret" not in repr(credential)
+                assert "spv1.secret" not in str(credential)
                 signed = sandbox.get_signed_preview_url(3000, expires_in_seconds=3600)
                 assert signed.endswith("?superserve_preview_token=spv1.secret")
                 assert json.loads(mint.calls.last.request.content) == {

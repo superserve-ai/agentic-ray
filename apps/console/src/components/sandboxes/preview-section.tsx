@@ -26,6 +26,9 @@ import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 import { sandboxHostFor } from "@/lib/sandbox-host"
 
 const DEFAULT_PORT_SUGGESTION = "3000"
+const PREVIEW_LINK_TTL_SECONDS = 3600
+const PREVIEW_LINK_REFRESH_MARGIN_MS = 60_000
+const PREVIEW_LINK_REFRESH_RETRY_MS = 30_000
 
 function previewUrl(sandboxId: string, port: number): string {
   return `https://${port}-${sandboxId}.${sandboxHostFor(sandboxId)}`
@@ -224,27 +227,67 @@ function PortRow({
 
   useEffect(() => {
     let cancelled = false
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined
+    let hasCredential = false
+    let errorShown = false
+
     if (previewAccess !== "private") {
       setAccessUrl(displayUrl)
-      return () => {
-        cancelled = true
-      }
+      return
     }
+
     setAccessUrl(null)
-    void mintSandboxPreviewToken(sandboxId, port, 3600)
-      .then((credential) => {
+
+    const scheduleRefresh = (delayMs: number) => {
+      refreshTimer = setTimeout(() => void refreshCredential(), delayMs)
+    }
+
+    const refreshCredential = async () => {
+      try {
+        const credential = await mintSandboxPreviewToken(
+          sandboxId,
+          port,
+          PREVIEW_LINK_TTL_SECONDS,
+        )
         if (cancelled) return
         const signed = new URL(displayUrl)
         signed.searchParams.set(credential.query_param, credential.token)
         setAccessUrl(signed.toString())
-      })
-      .catch(() => {
-        if (!cancelled) {
-          addToast(`Could not authorize preview port ${port}`, "error")
+        hasCredential = true
+        errorShown = false
+
+        const parsedExpiry = credential.expires_at
+          ? Date.parse(credential.expires_at)
+          : Number.NaN
+        const expiresAt = Number.isFinite(parsedExpiry)
+          ? parsedExpiry
+          : Date.now() + PREVIEW_LINK_TTL_SECONDS * 1000
+        scheduleRefresh(
+          Math.max(
+            1000,
+            expiresAt - Date.now() - PREVIEW_LINK_REFRESH_MARGIN_MS,
+          ),
+        )
+      } catch {
+        if (cancelled) return
+        if (!errorShown) {
+          addToast(
+            hasCredential
+              ? `Could not refresh preview authorization for port ${port}; retrying`
+              : `Could not authorize preview port ${port}`,
+            "error",
+          )
+          errorShown = true
         }
-      })
+        scheduleRefresh(PREVIEW_LINK_REFRESH_RETRY_MS)
+      }
+    }
+
+    void refreshCredential()
+
     return () => {
       cancelled = true
+      if (refreshTimer) clearTimeout(refreshTimer)
     }
   }, [addToast, displayUrl, port, previewAccess, sandboxId])
 

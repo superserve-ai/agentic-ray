@@ -461,6 +461,23 @@ describe("Sandbox instance methods", () => {
     )
   })
 
+  it("rejects malformed preview-port list entries", async () => {
+    const sandbox = await makeSandbox()
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({
+          preview_access: "private",
+          ports: [{ token_version: 2 }],
+        }),
+      ),
+    )
+
+    await expect(sandbox.listPreviewPorts()).rejects.toThrow(
+      "Invalid list-preview-ports response",
+    )
+  })
+
   it("mints a header token and a short-lived signed URL", async () => {
     const sandbox = await makeSandbox()
     const response = {

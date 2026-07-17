@@ -6,7 +6,7 @@
  * URLs use the test host from src/test/setup.ts (sandbox.test.superserve.ai).
  */
 
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -299,6 +299,60 @@ describe("PreviewSection — active sandbox", () => {
     expect(link).toHaveClass("ph-no-capture")
     expect(screen.queryByText(/signed-token/)).not.toBeInTheDocument()
     expect(mintPreviewToken).toHaveBeenCalledWith("sbx-1", 3000, 3600)
+  })
+
+  it("refreshes private signed URLs before they expire", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"))
+    listPreviewPorts.mockResolvedValue({
+      preview_access: "private",
+      ports: [{ port: 3000, token_version: 1 }],
+    })
+    mintPreviewToken
+      .mockResolvedValueOnce({
+        token: "first-token",
+        port: 3000,
+        header: "X-Superserve-Preview-Token",
+        query_param: "superserve_preview_token",
+        token_version: 1,
+        preview_access: "private",
+        expires_at: "2026-01-01T01:00:00Z",
+      })
+      .mockResolvedValueOnce({
+        token: "refreshed-token",
+        port: 3000,
+        header: "X-Superserve-Preview-Token",
+        query_param: "superserve_preview_token",
+        token_version: 1,
+        preview_access: "private",
+        expires_at: "2026-01-01T01:59:00Z",
+      })
+
+    try {
+      render(
+        <PreviewSection
+          sandbox={{ ...makeSandbox(), preview_access: "private" }}
+        />,
+      )
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      expect(mintPreviewToken).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(59 * 60 * 1000)
+      })
+
+      expect(mintPreviewToken).toHaveBeenCalledTimes(2)
+      expect(
+        screen.getByRole("link", { name: "Open preview in new tab" }),
+      ).toHaveAttribute(
+        "href",
+        `${url(3000)}/?superserve_preview_token=refreshed-token`,
+      )
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("updates the preview policy from the settings toggle", async () => {

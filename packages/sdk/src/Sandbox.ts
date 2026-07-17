@@ -437,13 +437,19 @@ export class Sandbox {
       url: `${this._config.baseUrl}/sandboxes/${this.id}/preview-ports`,
       headers: { "X-API-Key": this._config.apiKey },
     })
+    const ports = (raw.ports ?? []).map((item) => {
+      if (item.port === undefined || item.token_version === undefined) {
+        throw new SandboxError("Invalid list-preview-ports response")
+      }
+      return {
+        port: item.port,
+        tokenVersion: item.token_version,
+      }
+    })
     return {
       previewAccess: (raw.preview_access ??
         "legacy_public") as PreviewPortList["previewAccess"],
-      ports: (raw.ports ?? []).map((item) => ({
-        port: item.port ?? 0,
-        tokenVersion: item.token_version ?? 0,
-      })),
+      ports,
     }
   }
 
@@ -472,7 +478,11 @@ export class Sandbox {
     })
   }
 
-  /** Mint a header/query credential for an already-published port. */
+  /**
+   * Mint a header/query credential for an already-published port.
+   * Omitting `expiresInSeconds` intentionally creates a long-running machine
+   * credential that remains valid until this port is rotated or unpublished.
+   */
   async getPreviewToken(
     port: number,
     options: PreviewTokenOptions = {},

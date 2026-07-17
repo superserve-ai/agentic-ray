@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { redactPreviewToken } from "@/lib/preview-token-redaction"
+
 import {
   attachSandboxSecret,
   detachSandboxSecret,
@@ -101,7 +103,7 @@ describe("sandbox preview ports", () => {
       token: "secret",
       port: 3000,
       header: "X-Superserve-Preview-Token",
-      query_param: "superserve_preview_token",
+      query_param: "mint_preview_credential",
       token_version: 2,
       preview_access: "private",
     }
@@ -113,10 +115,17 @@ describe("sandbox preview ports", () => {
         }),
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ ...credential, token_version: 3 }), {
-          status: 201,
-          headers: { "Content-Type": "application/json" },
-        }),
+        new Response(
+          JSON.stringify({
+            ...credential,
+            query_param: "rotated_preview_credential",
+            token_version: 3,
+          }),
+          {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
       )
 
     await mintSandboxPreviewToken("sbx-1", 3000, 60)
@@ -129,5 +138,13 @@ describe("sandbox preview ports", () => {
     expect(fetchSpy.mock.calls[1]?.[0]).toBe(
       "/api/sandboxes/sbx-1/preview-ports/3000/token/rotate/",
     )
+    expect(
+      redactPreviewToken({
+        name: "/preview?rotated_preview_credential=secret",
+        duration: 0,
+        entryType: "resource",
+        startTime: 0,
+      }).name,
+    ).toBe("/preview?rotated_preview_credential=redacted")
   })
 })

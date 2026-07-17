@@ -71,7 +71,7 @@ class PreviewPortList(BaseModel):
 
 
 class PreviewToken(BaseModel):
-    token: str
+    token: str = Field(repr=False)
     port: int
     header: str
     query_param: str

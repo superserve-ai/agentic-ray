@@ -1,3 +1,5 @@
+import { registerPreviewTokenQueryParam } from "@/lib/preview-token-redaction"
+
 import { apiClient, apiClientList, type PagedResult } from "./client"
 import type {
   CreateSandboxRequest,
@@ -122,7 +124,7 @@ export async function mintSandboxPreviewToken(
   port: number,
   expiresInSeconds?: number,
 ): Promise<PreviewTokenResponse> {
-  return apiClient<PreviewTokenResponse>(
+  const credential = await apiClient<PreviewTokenResponse>(
     `/sandboxes/${id}/preview-ports/${port}/token`,
     {
       method: "POST",
@@ -133,14 +135,18 @@ export async function mintSandboxPreviewToken(
       ),
     },
   )
+  registerPreviewTokenQueryParam(credential.query_param)
+  return credential
 }
 
 export async function rotateSandboxPreviewToken(
   id: string,
   port: number,
 ): Promise<PreviewTokenResponse> {
-  return apiClient<PreviewTokenResponse>(
+  const credential = await apiClient<PreviewTokenResponse>(
     `/sandboxes/${id}/preview-ports/${port}/token/rotate`,
     { method: "POST" },
   )
+  registerPreviewTokenQueryParam(credential.query_param)
+  return credential
 }
