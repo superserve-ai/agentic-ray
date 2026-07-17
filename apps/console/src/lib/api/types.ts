@@ -1,4 +1,6 @@
 export type SandboxStatus = "active" | "paused" | "resuming" | "failed"
+export type PreviewAccess = "legacy_public" | "public" | "private"
+export type PreviewAccessPolicy = Exclude<PreviewAccess, "legacy_public">
 
 export interface NetworkConfig {
   allow_out?: string[]
@@ -18,6 +20,7 @@ export interface SandboxListItem {
   auto_delete_at?: string
   network?: NetworkConfig
   metadata: Record<string, string>
+  preview_access?: PreviewAccess
   created_at: string
 }
 
@@ -57,6 +60,7 @@ export interface CreateSandboxRequest {
   secrets?: Record<string, string>
   metadata?: Record<string, string>
   network?: NetworkConfig
+  preview_access?: PreviewAccessPolicy
 }
 
 export interface SandboxPatch {
@@ -66,6 +70,27 @@ export interface SandboxPatch {
   auto_delete_seconds?: number | null
   /** A number sets the auto-pause timeout; null disables it. */
   timeout_seconds?: number | null
+  preview_access?: PreviewAccessPolicy
+}
+
+export interface PublishedPreviewPort {
+  port: number
+  token_version: number
+}
+
+export interface PreviewPortList {
+  preview_access: PreviewAccess
+  ports: PublishedPreviewPort[]
+}
+
+export interface PreviewTokenResponse {
+  token: string
+  port: number
+  header: string
+  query_param: string
+  token_version: number
+  preview_access: PreviewAccess
+  expires_at?: string
 }
 
 export type SortDirection = "asc" | "desc"

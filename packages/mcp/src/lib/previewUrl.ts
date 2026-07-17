@@ -1,11 +1,9 @@
 /**
- * Build the public preview URL for a port inside a sandbox.
+ * Build the data-plane preview URL for a port inside a sandbox.
  *
  * Superserve's edge proxy routes `https://{port}-{sandboxId}.{sandboxHost}` to
- * whatever process is listening on `{port}` in the sandbox — with **no
- * authentication**. Anything reachable on a listening port is therefore
- * internet-exposed. This is pure string construction (no network call); the URL
- * only resolves while the sandbox is active and a process is bound to the port.
+ * a published port in the sandbox. Authentication is enforced separately by
+ * the edge proxy according to the sandbox's preview policy.
  *
  * The host map mirrors the SDK's `deriveSandboxHost` (packages/sdk/src/config.ts)
  * — the data plane is `boxd-{id}.{host}`, previews are `{port}-{id}.{host}`. Keep
@@ -19,7 +17,7 @@ const DEFAULT_SANDBOX_HOST = "sandbox.superserve.ai"
 /** Sandbox ids are UUIDs; refuse anything that could escape the hostname. */
 const SANDBOX_ID_RE = /^[A-Za-z0-9-]+$/
 
-const MIN_PORT = 1
+const MIN_PORT = 1024
 const MAX_PORT = 65535
 
 /** Raised for an out-of-range port or a malformed sandbox id. */
@@ -50,9 +48,9 @@ export function deriveSandboxHost(baseUrl: string): string {
 }
 
 /**
- * Build the public preview URL for `port` on `sandboxId`.
+ * Build the preview URL for `port` on `sandboxId`.
  *
- * @throws {PreviewUrlError} when the port is not an integer in [1, 65535] or the
+ * @throws {PreviewUrlError} when the port is not an integer in [1024, 65535] or the
  * sandbox id contains characters that are not URL-host-safe.
  */
 export function buildPreviewUrl(

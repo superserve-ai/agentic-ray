@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { createSdkClient } from "../src/client.js"
 import {
   buildPreviewUrl,
   deriveSandboxHost,
@@ -39,6 +40,7 @@ describe("buildPreviewUrl", () => {
 
   it("rejects out-of-range and non-integer ports", () => {
     expect(() => buildPreviewUrl("id", 0)).toThrow(PreviewUrlError)
+    expect(() => buildPreviewUrl("id", 80)).toThrow(PreviewUrlError)
     expect(() => buildPreviewUrl("id", 65536)).toThrow(PreviewUrlError)
     expect(() => buildPreviewUrl("id", 80.5)).toThrow(PreviewUrlError)
     expect(() => buildPreviewUrl("id", -1)).toThrow(PreviewUrlError)
@@ -46,10 +48,95 @@ describe("buildPreviewUrl", () => {
 
   // A sandbox id is caller-controlled; a `.`/`/`/`@` could re-point the host.
   it("rejects a sandbox id that is not host-safe", () => {
-    expect(() => buildPreviewUrl("evil.example.com", 80)).toThrow(
+    expect(() => buildPreviewUrl("evil.example.com", 8080)).toThrow(
       PreviewUrlError,
     )
-    expect(() => buildPreviewUrl("id/../../x", 80)).toThrow(PreviewUrlError)
-    expect(() => buildPreviewUrl("a@b", 80)).toThrow(PreviewUrlError)
+    expect(() => buildPreviewUrl("id/../../x", 8080)).toThrow(PreviewUrlError)
+    expect(() => buildPreviewUrl("a@b", 8080)).toThrow(PreviewUrlError)
+  })
+})
+
+describe("SDK client preview publication", () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("publishes a strict public port and returns its clean URL", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ port: 8080, token_version: 1 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            preview_access: "public",
+            ports: [{ port: 8080, token_version: 1 }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+    const client = createSdkClient({
+      apiKey: "ss_test",
+      baseUrl: "https://api.superserve.ai",
+    })
+
+    await expect(client.previewUrl("sbx-1", 8080, 60)).resolves.toEqual({
+      url: "https://8080-sbx-1.sandbox.superserve.ai",
+      previewAccess: "public",
+      authenticated: false,
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const [, publishInit] = fetchMock.mock.calls[0] as [URL, RequestInit]
+    expect(publishInit.method).toBe("POST")
+    expect(JSON.parse(publishInit.body as string)).toEqual({ port: 8080 })
+  })
+
+  it("mints an expiring signed link for a private port", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ port: 8080, token_version: 1 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            preview_access: "private",
+            ports: [{ port: 8080, token_version: 1 }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            token: "private-secret",
+            query_param: "superserve_preview_token",
+            preview_access: "private",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+    const client = createSdkClient({
+      apiKey: "ss_test",
+      baseUrl: "https://api.superserve.ai",
+    })
+
+    const link = await client.previewUrl("sbx-1", 8080, 90)
+    expect(link).toEqual({
+      url: "https://8080-sbx-1.sandbox.superserve.ai/?superserve_preview_token=private-secret",
+      previewAccess: "private",
+      authenticated: true,
+    })
+    const [, tokenInit] = fetchMock.mock.calls[2] as [URL, RequestInit]
+    expect(JSON.parse(tokenInit.body as string)).toEqual({
+      expires_in_seconds: 90,
+    })
   })
 })

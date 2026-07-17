@@ -27,6 +27,8 @@ import type {
   NetworkConfig,
   NetworkEvent,
   NetworkLogPage,
+  PreviewAccess,
+  PreviewAccessPolicy,
   SandboxInfo,
   SecretInfo,
   TemplateInfo,
@@ -46,6 +48,7 @@ import { buildPreviewUrl, DEFAULT_BASE_URL } from "./lib/previewUrl.js"
 
 /** Hang guard for the direct control-plane network-log GET. */
 const NETWORK_LOG_TIMEOUT_MS = 30_000
+const PREVIEW_REQUEST_TIMEOUT_MS = 30_000
 
 /**
  * Raw `GET /sandboxes/{id}/network` shape. The SDK's snake→camel converters
@@ -107,6 +110,7 @@ export interface SandboxSummary {
   name: string
   status: string
   metadata: Record<string, string>
+  previewAccess: PreviewAccess
 }
 
 export interface TemplateSummary {
@@ -131,6 +135,8 @@ export interface CreateInput {
   secrets?: Record<string, string>
   /** Egress allow/deny rules (host patterns). */
   network?: NetworkConfig
+  /** Strict preview policy. New MCP-created sandboxes default to public. */
+  previewAccess?: PreviewAccessPolicy
 }
 
 export interface UpdateInput {
@@ -140,6 +146,7 @@ export interface UpdateInput {
   autoDeleteSeconds?: number | null
   /** A number sets the auto-pause timeout; null disables it. */
   timeoutSeconds?: number | null
+  previewAccess?: PreviewAccessPolicy
 }
 
 export interface ExecInput {
@@ -178,6 +185,12 @@ export interface SecretSummary {
   lastUsedAt?: string
 }
 
+export interface PreviewLink {
+  url: string
+  previewAccess: PreviewAccess
+  authenticated: boolean
+}
+
 export interface SandboxClient {
   create(input: CreateInput): Promise<SandboxSummary>
   update(id: string, input: UpdateInput): Promise<void>
@@ -185,8 +198,12 @@ export interface SandboxClient {
   listTemplates(namePrefix?: string): Promise<TemplateSummary[]>
   createTemplate(input: TemplateCreateInput): Promise<TemplateSummary>
   info(id: string): Promise<SandboxInfo>
-  /** Public URL for a listening port. Pure construction — no network call. */
-  previewUrl(id: string, port: number): string
+  /** Publish a port and return a browser-ready URL for its current policy. */
+  previewUrl(
+    id: string,
+    port: number,
+    expiresInSeconds: number,
+  ): Promise<PreviewLink>
   /**
    * Recent egress events for a sandbox (newest first). Read-only control-plane
    * audit — must NOT resume a paused sandbox.
@@ -224,7 +241,13 @@ function defaultName(): string {
 }
 
 function toSummary(s: SandboxInfo): SandboxSummary {
-  return { id: s.id, name: s.name, status: s.status, metadata: s.metadata }
+  return {
+    id: s.id,
+    name: s.name,
+    status: s.status,
+    metadata: s.metadata,
+    previewAccess: s.previewAccess,
+  }
 }
 
 function toTemplateSummary(t: TemplateInfo): TemplateSummary {
@@ -265,6 +288,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         envVars: input.envVars,
         secrets: input.secrets,
         network: input.network,
+        previewAccess: input.previewAccess ?? "public",
         ...conn,
       })
       return {
@@ -272,13 +296,14 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         name: sb.name,
         status: sb.status,
         metadata: sb.metadata,
+        previewAccess: sb.previewAccess,
       }
     },
 
     async update(id, input) {
       // updateById (not connect().update()) so patching a paused sandbox —
       // e.g. arming auto-delete — does not resume it. Requires @superserve/sdk
-      // >= 0.7.8; MIN_SDK_VERSION in mcp-publish.yml tracks this floor.
+      // >= 0.7.9; MIN_SDK_VERSION in mcp-publish.yml tracks this floor.
       await Sandbox.updateById(
         id,
         {
@@ -286,6 +311,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
           network: input.network,
           autoDeleteSeconds: input.autoDeleteSeconds,
           timeoutSeconds: input.timeoutSeconds,
+          previewAccess: input.previewAccess,
         },
         conn,
       )
@@ -338,9 +364,67 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
       return found
     },
 
-    // Pure string construction; no resume, no network call.
-    previewUrl(id, port) {
-      return buildPreviewUrl(id, port, config.baseUrl)
+    // Preview publication is control-plane-only, so this does not activate a
+    // paused sandbox. Private policies get an expiring browser bootstrap token.
+    async previewUrl(id, port, expiresInSeconds) {
+      const previewUrl = buildPreviewUrl(id, port, config.baseUrl)
+      const base = config.baseUrl ?? DEFAULT_BASE_URL
+      const encodedId = encodeURIComponent(id)
+      const requestJson = async <T>(
+        path: string,
+        init: RequestInit = {},
+      ): Promise<T> => {
+        const res = await fetch(new URL(path, base), {
+          ...init,
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": config.apiKey,
+            ...init.headers,
+          },
+          signal: AbortSignal.timeout(PREVIEW_REQUEST_TIMEOUT_MS),
+        })
+        if (!res.ok) {
+          if (res.status === 404)
+            throw new NotFoundError(`Sandbox ${id} or preview port not found`)
+          if (res.status === 401 || res.status === 403)
+            throw new AuthenticationError("Authentication failed")
+          throw new SandboxError(
+            `Preview publication request failed (HTTP ${res.status})`,
+          )
+        }
+        return (await res.json()) as T
+      }
+
+      await requestJson<{ port: number; token_version: number }>(
+        `/sandboxes/${encodedId}/preview-ports`,
+        { method: "POST", body: JSON.stringify({ port }) },
+      )
+      const policy = await requestJson<{ preview_access?: PreviewAccess }>(
+        `/sandboxes/${encodedId}/preview-ports`,
+      )
+      const previewAccess = policy.preview_access ?? "legacy_public"
+      if (previewAccess !== "private") {
+        return { url: previewUrl, previewAccess, authenticated: false }
+      }
+
+      const credential = await requestJson<{
+        token?: string
+        query_param?: string
+        preview_access?: PreviewAccess
+      }>(`/sandboxes/${encodedId}/preview-ports/${port}/token`, {
+        method: "POST",
+        body: JSON.stringify({ expires_in_seconds: expiresInSeconds }),
+      })
+      if (!credential.token || !credential.query_param) {
+        throw new SandboxError("Invalid preview-token response")
+      }
+      const signed = new URL(previewUrl)
+      signed.searchParams.set(credential.query_param, credential.token)
+      return {
+        url: signed.toString(),
+        previewAccess: credential.preview_access ?? previewAccess,
+        authenticated: true,
+      }
     },
 
     // Direct control-plane GET so reading the audit log never activates
@@ -452,6 +536,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         name: sb.name,
         status: "active",
         metadata: sb.metadata,
+        previewAccess: sb.previewAccess,
       }
     },
 

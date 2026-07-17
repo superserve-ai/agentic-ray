@@ -5,12 +5,13 @@ import {
   BrowserIcon,
   CaretRightIcon,
   CopyIcon,
+  LockKeyIcon,
   PlusIcon,
   TrashIcon,
 } from "@phosphor-icons/react"
 import { Alert, Button, cn, Input, useToast } from "@superserve/ui"
 import { usePostHog } from "posthog-js/react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { EmptyState } from "@/components/empty-state"
@@ -19,7 +20,8 @@ import {
   MIN_PREVIEW_PORT,
   usePreviewPorts,
 } from "@/hooks/use-preview-ports"
-import type { SandboxResponse } from "@/lib/api/types"
+import { mintSandboxPreviewToken, patchSandbox } from "@/lib/api/sandboxes"
+import type { PreviewAccess, SandboxResponse } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 
 const SANDBOX_HOST =
@@ -45,7 +47,7 @@ export function PreviewSection({ sandbox, onStart }: PreviewSectionProps) {
         <h2 className="text-sm font-semibold text-foreground">Preview</h2>
       </div>
       {isActive ? (
-        <PreviewPorts sandbox={sandbox} />
+        <PreviewPorts key={sandbox.id} sandbox={sandbox} />
       ) : (
         <EmptyState
           icon={BrowserIcon}
@@ -63,20 +65,50 @@ export function PreviewSection({ sandbox, onStart }: PreviewSectionProps) {
 
 function PreviewPorts({ sandbox }: { sandbox: SandboxResponse }) {
   const { addToast } = useToast()
-  const { ports, canAddPort, addPort, removePort } = usePreviewPorts(sandbox.id)
+  const {
+    ports,
+    previewAccess,
+    canAddPort,
+    isLoading,
+    addPort,
+    removePort,
+    setPreviewAccess,
+  } = usePreviewPorts(sandbox.id, sandbox.preview_access ?? "legacy_public")
   const [draft, setDraft] = useState("")
   const [expanded, setExpanded] = useState<number | null>(null)
+  const [policyPending, setPolicyPending] = useState(false)
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     const trimmed = draft.trim()
     if (!trimmed) return
     const port = Number(trimmed)
-    const result = addPort(port)
+    const result = await addPort(port)
     if (!result.ok) {
       addToast(result.error ?? "Could not add port", "error")
       return
     }
     setDraft("")
+  }
+
+  const handlePolicyToggle = async () => {
+    const next: Exclude<PreviewAccess, "legacy_public"> =
+      previewAccess === "private" ? "public" : "private"
+    setPolicyPending(true)
+    try {
+      await patchSandbox(sandbox.id, { preview_access: next })
+      setPreviewAccess(next)
+      setExpanded(null)
+      addToast(
+        next === "private"
+          ? "Preview authentication enabled"
+          : "Published previews are now public",
+        "success",
+      )
+    } catch {
+      addToast("Could not update preview access", "error")
+    } finally {
+      setPolicyPending(false)
+    }
   }
 
   return (
@@ -85,7 +117,7 @@ function PreviewPorts({ sandbox }: { sandbox: SandboxResponse }) {
         className="flex items-center gap-2"
         onSubmit={(e) => {
           e.preventDefault()
-          handleAdd()
+          void handleAdd()
         }}
       >
         <Input
@@ -111,13 +143,32 @@ function PreviewPorts({ sandbox }: { sandbox: SandboxResponse }) {
         </Button>
       </form>
 
-      <Alert variant="warning">
-        Preview URLs are public — anyone with the link can reach this port
-        without signing in. Don&apos;t expose services that handle sensitive
-        data.
+      <Alert variant={previewAccess === "private" ? "default" : "warning"}>
+        <div className="flex items-center justify-between gap-4">
+          <span>
+            {previewAccess === "private"
+              ? "Published preview ports require a per-port credential. Browser links use a short-lived signed URL."
+              : previewAccess === "public"
+                ? "Only published ports are reachable, but anyone with a published URL can open it."
+                : "Legacy public mode exposes every listening port. Enable authentication to move onto explicit publication."}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={policyPending}
+            onClick={() => void handlePolicyToggle()}
+          >
+            {previewAccess === "private"
+              ? "Make published ports public"
+              : "Require authentication"}
+          </Button>
+        </div>
       </Alert>
 
-      {ports.length === 0 ? (
+      {isLoading ? (
+        <p className="font-mono text-xs text-muted">Loading preview ports…</p>
+      ) : ports.length === 0 ? (
         <p className="font-mono text-xs text-muted">
           Add the port your dev server runs on (e.g. {DEFAULT_PORT_SUGGESTION}).
         </p>
@@ -128,12 +179,17 @@ function PreviewPorts({ sandbox }: { sandbox: SandboxResponse }) {
               key={port}
               sandboxId={sandbox.id}
               port={port}
+              previewAccess={previewAccess}
               isExpanded={expanded === port}
               onToggle={() =>
                 setExpanded((current) => (current === port ? null : port))
               }
-              onRemove={() => {
-                removePort(port)
+              onRemove={async () => {
+                const result = await removePort(port)
+                if (!result.ok) {
+                  addToast(result.error ?? "Could not unpublish port", "error")
+                  return
+                }
                 setExpanded((current) => (current === port ? null : current))
               }}
             />
@@ -147,25 +203,60 @@ function PreviewPorts({ sandbox }: { sandbox: SandboxResponse }) {
 interface PortRowProps {
   sandboxId: string
   port: number
+  previewAccess: PreviewAccess
   isExpanded: boolean
   onToggle: () => void
-  onRemove: () => void
+  onRemove: () => Promise<void>
 }
 
 function PortRow({
   sandboxId,
   port,
+  previewAccess,
   isExpanded,
   onToggle,
   onRemove,
 }: PortRowProps) {
   const { addToast } = useToast()
   const posthog = usePostHog()
-  const url = previewUrl(sandboxId, port)
+  const displayUrl = previewUrl(sandboxId, port)
+  const [accessUrl, setAccessUrl] = useState<string | null>(
+    previewAccess === "private" ? null : displayUrl,
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    if (previewAccess !== "private") {
+      setAccessUrl(displayUrl)
+      return () => {
+        cancelled = true
+      }
+    }
+    setAccessUrl(null)
+    void mintSandboxPreviewToken(sandboxId, port, 3600)
+      .then((credential) => {
+        if (cancelled) return
+        const signed = new URL(displayUrl)
+        signed.searchParams.set(credential.query_param, credential.token)
+        setAccessUrl(signed.toString())
+      })
+      .catch(() => {
+        if (!cancelled) {
+          addToast(`Could not authorize preview port ${port}`, "error")
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [addToast, displayUrl, port, previewAccess, sandboxId])
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(url)
+      if (!accessUrl) {
+        addToast("Preparing authenticated preview URL", "error")
+        return
+      }
+      await navigator.clipboard.writeText(accessUrl)
       addToast("Preview URL copied", "success")
     } catch {
       addToast("Couldn't copy to clipboard", "error")
@@ -199,28 +290,52 @@ function PortRow({
           <span className="shrink-0 font-mono text-xs text-foreground tabular-nums">
             :{port}
           </span>
-          <span className="truncate font-mono text-xs text-muted">{url}</span>
+          {previewAccess === "private" && (
+            <span
+              aria-label="Authentication required"
+              title="Authentication required"
+              className="shrink-0 text-primary"
+            >
+              <LockKeyIcon className="size-3.5" weight="light" />
+            </span>
+          )}
+          <span className="truncate font-mono text-xs text-muted">
+            {displayUrl}
+          </span>
         </button>
 
         <div className="flex shrink-0 items-center gap-1">
           <IconButton label="Copy preview URL" onClick={handleCopy}>
             <CopyIcon className="size-3.5" weight="light" />
           </IconButton>
+          {accessUrl ? (
+            <IconButton
+              label="Open preview in new tab"
+              render="anchor"
+              href={accessUrl}
+              onOpen={handleOpen}
+            >
+              <ArrowSquareOutIcon className="size-3.5" weight="light" />
+            </IconButton>
+          ) : (
+            <IconButton
+              label="Preparing authenticated preview URL"
+              onClick={() => {}}
+              disabled
+            >
+              <ArrowSquareOutIcon className="size-3.5" weight="light" />
+            </IconButton>
+          )}
           <IconButton
-            label="Open preview in new tab"
-            render="anchor"
-            href={url}
-            onOpen={handleOpen}
+            label={`Remove port ${port}`}
+            onClick={() => void onRemove()}
           >
-            <ArrowSquareOutIcon className="size-3.5" weight="light" />
-          </IconButton>
-          <IconButton label={`Remove port ${port}`} onClick={onRemove}>
             <TrashIcon className="size-3.5" weight="light" />
           </IconButton>
         </div>
       </div>
 
-      {isExpanded && (
+      {isExpanded && accessUrl && (
         <div className="border-t border-dashed border-border p-3">
           <div className="relative border border-dashed border-border bg-surface">
             <CornerBrackets size="sm" />
@@ -248,10 +363,10 @@ function PortRow({
                 the standard pattern for embedding a user's own app preview. */}
             {/* oxlint-disable react/iframe-missing-sandbox -- cross-origin frame: allow-scripts+allow-same-origin cannot escape into the console origin */}
             <iframe
-              src={url}
+              src={accessUrl}
               title={`Preview of port ${port}`}
-              className="h-[420px] w-full"
-              sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-downloads"
+              className="ph-no-capture h-[420px] w-full"
+              sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
               referrerPolicy="no-referrer"
             />
             {/* oxlint-enable react/iframe-missing-sandbox */}
@@ -266,7 +381,7 @@ type IconButtonProps = {
   label: string
   children: React.ReactNode
 } & (
-  | { render?: "button"; onClick: () => void }
+  | { render?: "button"; onClick: () => void; disabled?: boolean }
   | { render: "anchor"; href: string; onOpen: () => void }
 )
 
@@ -283,7 +398,7 @@ function IconButton(props: IconButtonProps) {
         aria-label={props.label}
         title={props.label}
         onClick={props.onOpen}
-        className={className}
+        className={cn(className, "ph-no-capture")}
       >
         {props.children}
       </a>
@@ -296,6 +411,7 @@ function IconButton(props: IconButtonProps) {
       aria-label={props.label}
       title={props.label}
       onClick={props.onClick}
+      disabled={props.disabled}
       className={className}
     >
       {props.children}

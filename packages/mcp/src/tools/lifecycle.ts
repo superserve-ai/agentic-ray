@@ -43,6 +43,7 @@ interface CreateArgs {
   secrets?: Record<string, string>
   allow_out?: string[]
   deny_out?: string[]
+  preview_access?: "public" | "private"
 }
 
 interface UpdateArgs {
@@ -52,6 +53,7 @@ interface UpdateArgs {
   deny_out?: string[]
   auto_delete_seconds?: number | null
   timeout_seconds?: number | null
+  preview_access?: "public" | "private"
 }
 
 interface TemplateCreateArgs {
@@ -68,6 +70,7 @@ interface TemplateCreateArgs {
 interface PreviewUrlArgs {
   sandbox_id: string
   port: number
+  expires_in_seconds?: number
 }
 
 interface NetworkLogArgs {
@@ -178,6 +181,13 @@ export function registerLifecycleTools(
             "Egress deny rules — CIDRs only (use '0.0.0.0/0' to deny all egress). Combine deny_out: ['0.0.0.0/0'] " +
               "with allow_out to lock the sandbox down to just the allowed destinations.",
           ),
+        preview_access: z
+          .enum(["public", "private"])
+          .optional()
+          .describe(
+            "Preview policy for explicitly published ports. 'private' requires a per-port credential; " +
+              "'public' requires publication but no credential (default).",
+          ),
       },
       annotations: {
         readOnlyHint: false,
@@ -197,6 +207,7 @@ export function registerLifecycleTools(
       secrets,
       allow_out,
       deny_out,
+      preview_access,
     }) => {
       try {
         const s = await client.create({
@@ -209,6 +220,7 @@ export function registerLifecycleTools(
           envVars: env_vars,
           secrets,
           network: toNetwork(allow_out, deny_out),
+          previewAccess: preview_access,
         })
         return toolOk(
           `created sandbox ${s.id} (${s.name}), status ${s.status}`,
@@ -604,6 +616,13 @@ export function registerLifecycleTools(
             "Idle timeout before the sandbox is auto-paused (max 604800 = 7 days). Pass null to " +
               "disable auto-pause. Omit to leave unchanged.",
           ),
+        preview_access: z
+          .enum(["public", "private"])
+          .optional()
+          .describe(
+            "Change preview access for published ports. 'private' requires a per-port credential; " +
+              "'public' keeps unpublished ports closed but removes authentication from published ones.",
+          ),
       },
       annotations: {
         readOnlyHint: false,
@@ -624,6 +643,7 @@ export function registerLifecycleTools(
       deny_out,
       auto_delete_seconds,
       timeout_seconds,
+      preview_access,
     }) => {
       try {
         await client.update(sandbox_id, {
@@ -631,6 +651,7 @@ export function registerLifecycleTools(
           network: toNetwork(allow_out, deny_out),
           autoDeleteSeconds: auto_delete_seconds,
           timeoutSeconds: timeout_seconds,
+          previewAccess: preview_access,
         })
         return toolOk(`updated ${sandbox_id}`, { id: sandbox_id })
       } catch (e) {
@@ -643,32 +664,44 @@ export function registerLifecycleTools(
     server,
     "sandbox_preview_url",
     {
-      title: "Get a port's public URL",
+      title: "Publish a port and get its preview URL",
       description:
-        "Return the public preview URL for a port in a sandbox. Any process listening on that port is reachable " +
-        "at this URL over the public internet with NO authentication — share it carefully, and only expose ports " +
-        "you intend to be public. This just builds the URL; it does not verify a process is listening (start one " +
-        "with sandbox_exec, e.g. `python3 -m http.server 8000`, and find listeners with `ss -ltnp`).",
+        "Publish a sandbox port and return a browser-ready preview URL. Private sandboxes receive an expiring " +
+        "signed URL; strict public sandboxes receive a public URL, and unpublished ports remain closed. This does " +
+        "not verify that a process is listening (start one with sandbox_exec, e.g. `python3 -m http.server 8000`).",
       inputSchema: {
         sandbox_id: z.string().describe("ID of the sandbox."),
         port: z
           .number()
           .int()
-          .min(1)
+          .min(1024)
           .max(65535)
           .describe("The port a process is (or will be) listening on."),
+        expires_in_seconds: z
+          .number()
+          .int()
+          .min(1)
+          .max(MAX_TIMEOUT_SECONDS)
+          .optional()
+          .describe(
+            "Private signed-link lifetime in seconds (default 3600, max 604800 = 7 days). Ignored for public previews.",
+          ),
       },
       annotations: {
-        readOnlyHint: true,
+        readOnlyHint: false,
         destructiveHint: false,
         idempotentHint: true,
         openWorldHint: true,
       },
     },
-    async ({ sandbox_id, port }) => {
+    async ({ sandbox_id, port, expires_in_seconds }) => {
       try {
-        const url = client.previewUrl(sandbox_id, port)
-        return toolOk(url, { sandbox_id, port, url })
+        const link = await client.previewUrl(
+          sandbox_id,
+          port,
+          expires_in_seconds ?? 3600,
+        )
+        return toolOk(link.url, { sandbox_id, port, ...link })
       } catch (e) {
         return toolError(formatSdkError(e))
       }

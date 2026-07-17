@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -16,6 +16,15 @@ class SandboxStatus(str, Enum):
     PAUSED = "paused"
     RESUMING = "resuming"
     FAILED = "failed"
+
+
+class PreviewAccess(str, Enum):
+    LEGACY_PUBLIC = "legacy_public"
+    PUBLIC = "public"
+    PRIVATE = "private"
+
+
+PreviewAccessPolicy = Literal["public", "private"]
 
 
 class NetworkConfig(BaseModel):
@@ -46,8 +55,29 @@ class SandboxInfo(BaseModel):
     auto_delete_at: Optional[datetime] = None
     network: Optional[NetworkConfig] = None
     metadata: dict[str, str] = Field(default_factory=dict)
+    preview_access: PreviewAccess = PreviewAccess.LEGACY_PUBLIC
     # Secrets bound to this sandbox, when any are attached.
     secrets: Optional[list[SandboxSecretBinding]] = None
+
+
+class PublishedPreviewPort(BaseModel):
+    port: int
+    token_version: int
+
+
+class PreviewPortList(BaseModel):
+    preview_access: PreviewAccess
+    ports: list[PublishedPreviewPort] = Field(default_factory=list)
+
+
+class PreviewToken(BaseModel):
+    token: str
+    port: int
+    header: str
+    query_param: str
+    token_version: int
+    preview_access: PreviewAccess
+    expires_at: Optional[datetime] = None
 
 
 class CommandResult(BaseModel):
@@ -67,6 +97,7 @@ def build_update_body(
     network: "NetworkConfig | None",
     auto_delete_seconds: int | None,
     timeout_seconds: int | None,
+    preview_access: PreviewAccessPolicy | None,
 ) -> dict[str, Any]:
     """Serialize sandbox update args to the wire body. UNSET fields are omitted;
     an explicit None for auto_delete_seconds / timeout_seconds clears them."""
@@ -82,6 +113,8 @@ def build_update_body(
             "allow_out": network.allow_out,
             "deny_out": network.deny_out,
         }
+    if preview_access is not None:
+        body["preview_access"] = preview_access
     return body
 
 
@@ -133,6 +166,7 @@ def to_sandbox_info(raw: dict[str, Any]) -> SandboxInfo:
         ),
         network=network,
         metadata=raw.get("metadata", {}),
+        preview_access=PreviewAccess(raw.get("preview_access", "legacy_public")),
         secrets=secrets,
     )
 

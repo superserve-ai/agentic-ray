@@ -3,7 +3,7 @@ name: Publish MCP Server
 # Tag-triggered (mcp-v0.1.0 -> 0.1.0). Publishes @superserve/mcp to npm (Trusted
 # Publishing + provenance), then registers server.json in the MCP Registry.
 # Prereqs: npm Trusted Publisher configured for @superserve/mcp; @superserve/sdk
-# >= 0.7.8 published; mcp.superserve.ai live; public repo (OIDC + provenance).
+# >= 0.7.9 published; mcp.superserve.ai live; public repo (OIDC + provenance).
 
 on:
   push:
@@ -48,7 +48,7 @@ jobs:
         working-directory: packages/mcp
         run: |
           set -euo pipefail
-          MIN_SDK_VERSION="0.7.8"
+          MIN_SDK_VERSION="0.7.9"
           SDK_VERSION="$(npm view @superserve/sdk version)"
           test -n "$SDK_VERSION"
           if [ "$(printf '%s\n%s\n' "$MIN_SDK_VERSION" "$SDK_VERSION" | sort -V | head -n1)" != "$MIN_SDK_VERSION" ]; then

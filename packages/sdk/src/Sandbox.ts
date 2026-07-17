@@ -25,12 +25,17 @@ import type {
   ConnectionOptions,
   NetworkLogOptions,
   NetworkLogPage,
+  PreviewPortList,
+  PreviewToken,
+  PreviewTokenOptions,
+  PublishedPreviewPort,
   SandboxCreateOptions,
   SandboxInfo,
   SandboxListOptions,
   SandboxSecretBinding,
   SandboxStatus,
   SandboxUpdateOptions,
+  SignedPreviewUrlOptions,
 } from "./types.js"
 import { toNetworkLogPage, toSandboxInfo } from "./types.js"
 
@@ -46,6 +51,9 @@ export class Sandbox {
 
   /** User-supplied metadata tags at construction time. Call getInfo() to refresh. */
   readonly metadata: Record<string, string>
+
+  /** Preview policy at construction time. Call getInfo() to refresh. */
+  readonly previewAccess: SandboxInfo["previewAccess"]
 
   /**
    * Secrets bound to this sandbox (env-var → secret) at construction time,
@@ -78,6 +86,7 @@ export class Sandbox {
     this.name = info.name
     this.status = info.status
     this.metadata = info.metadata
+    this.previewAccess = info.previewAccess
     this.secrets = info.secrets
     this._accessToken = accessToken
     this._config = config
@@ -173,6 +182,8 @@ export class Sandbox {
         deny_out: options.network.denyOut,
       }
     }
+    if (options.previewAccess !== undefined)
+      body.preview_access = options.previewAccess
 
     const raw = await request<ApiSandboxResponse>({
       method: "POST",
@@ -392,16 +403,17 @@ export class Sandbox {
         deny_out: options.network.denyOut,
       }
     }
+    if (options.previewAccess !== undefined)
+      body.preview_access = options.previewAccess
     return body
   }
 
   /**
-   * Build the public preview URL for a port running inside this sandbox.
+   * Build the preview URL for a port running inside this sandbox.
    *
-   * The edge proxy exposes any user-app port at `https://{port}-{id}.{host}`,
-   * so this is pure string construction — no network call. The sandbox must
-   * be running and a server must be listening on `port` for the URL to
-   * resolve. Call once per port to preview several services at once.
+   * This is pure string construction. Under strict public/private policies,
+   * publish the port first; private URLs also need a header token or a signed
+   * URL from `getSignedPreviewUrl()`.
    *
    * @throws {ValidationError} if `port` is not an integer in [1024, 65535].
    *
@@ -413,6 +425,148 @@ export class Sandbox {
    */
   getPreviewUrl(port: number): string {
     return previewUrl(this.id, this._config.sandboxHost, port)
+  }
+
+  /** List the sandbox's explicitly published preview ports and policy. */
+  async listPreviewPorts(): Promise<PreviewPortList> {
+    const raw = await request<{
+      preview_access?: string
+      ports?: Array<{ port?: number; token_version?: number }>
+    }>({
+      method: "GET",
+      url: `${this._config.baseUrl}/sandboxes/${this.id}/preview-ports`,
+      headers: { "X-API-Key": this._config.apiKey },
+    })
+    return {
+      previewAccess: (raw.preview_access ??
+        "legacy_public") as PreviewPortList["previewAccess"],
+      ports: (raw.ports ?? []).map((item) => ({
+        port: item.port ?? 0,
+        tokenVersion: item.token_version ?? 0,
+      })),
+    }
+  }
+
+  /** Publish a port. Idempotent; an existing token generation is preserved. */
+  async publishPreviewPort(port: number): Promise<PublishedPreviewPort> {
+    this.getPreviewUrl(port) // validate against the shared proxy contract
+    const raw = await request<{ port?: number; token_version?: number }>({
+      method: "POST",
+      url: `${this._config.baseUrl}/sandboxes/${this.id}/preview-ports`,
+      headers: { "X-API-Key": this._config.apiKey },
+      body: { port },
+    })
+    if (raw.port === undefined || raw.token_version === undefined) {
+      throw new SandboxError("Invalid publish-preview-port response")
+    }
+    return { port: raw.port, tokenVersion: raw.token_version }
+  }
+
+  /** Unpublish a port and revoke every outstanding token for it. */
+  async unpublishPreviewPort(port: number): Promise<void> {
+    this.getPreviewUrl(port)
+    await requestVoid({
+      method: "DELETE",
+      url: `${this._config.baseUrl}/sandboxes/${this.id}/preview-ports/${port}`,
+      headers: { "X-API-Key": this._config.apiKey },
+    })
+  }
+
+  /** Mint a header/query credential for an already-published port. */
+  async getPreviewToken(
+    port: number,
+    options: PreviewTokenOptions = {},
+  ): Promise<PreviewToken> {
+    this.getPreviewUrl(port)
+    const raw = await request<{
+      token?: string
+      port?: number
+      header?: string
+      query_param?: string
+      token_version?: number
+      preview_access?: string
+      expires_at?: string
+    }>({
+      method: "POST",
+      url: `${this._config.baseUrl}/sandboxes/${this.id}/preview-ports/${port}/token`,
+      headers: { "X-API-Key": this._config.apiKey },
+      body:
+        options.expiresInSeconds === undefined
+          ? {}
+          : { expires_in_seconds: options.expiresInSeconds },
+    })
+    if (
+      !raw.token ||
+      raw.port === undefined ||
+      !raw.header ||
+      !raw.query_param ||
+      raw.token_version === undefined
+    ) {
+      throw new SandboxError("Invalid preview-token response")
+    }
+    return {
+      token: raw.token,
+      port: raw.port,
+      header: raw.header,
+      queryParam: raw.query_param,
+      tokenVersion: raw.token_version,
+      previewAccess: (raw.preview_access ??
+        "legacy_public") as PreviewToken["previewAccess"],
+      expiresAt: raw.expires_at ? new Date(raw.expires_at) : undefined,
+    }
+  }
+
+  /**
+   * Build a browser-ready private preview URL. The proxy exchanges its query
+   * token for a secure host cookie and removes the token from the address bar.
+   */
+  async getSignedPreviewUrl(
+    port: number,
+    options: SignedPreviewUrlOptions = {},
+  ): Promise<string> {
+    const credential = await this.getPreviewToken(port, {
+      expiresInSeconds: options.expiresInSeconds ?? 60,
+    })
+    const url = new URL(this.getPreviewUrl(port))
+    url.searchParams.set(credential.queryParam, credential.token)
+    return url.toString()
+  }
+
+  /** Rotate only this port's token generation and return a fresh token. */
+  async rotatePreviewToken(port: number): Promise<PreviewToken> {
+    this.getPreviewUrl(port)
+    const raw = await request<{
+      token?: string
+      port?: number
+      header?: string
+      query_param?: string
+      token_version?: number
+      preview_access?: string
+      expires_at?: string
+    }>({
+      method: "POST",
+      url: `${this._config.baseUrl}/sandboxes/${this.id}/preview-ports/${port}/token/rotate`,
+      headers: { "X-API-Key": this._config.apiKey },
+    })
+    if (
+      !raw.token ||
+      raw.port === undefined ||
+      !raw.header ||
+      !raw.query_param ||
+      raw.token_version === undefined
+    ) {
+      throw new SandboxError("Invalid rotate-preview-token response")
+    }
+    return {
+      token: raw.token,
+      port: raw.port,
+      header: raw.header,
+      queryParam: raw.query_param,
+      tokenVersion: raw.token_version,
+      previewAccess: (raw.preview_access ??
+        "legacy_public") as PreviewToken["previewAccess"],
+      expiresAt: raw.expires_at ? new Date(raw.expires_at) : undefined,
+    }
   }
 
   /**

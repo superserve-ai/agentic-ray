@@ -13,6 +13,12 @@ import { SandboxError } from "./errors.js"
 
 export type SandboxStatus = "active" | "paused" | "resuming" | "failed"
 
+/** Current preview-routing policy returned by the API. */
+export type PreviewAccess = "legacy_public" | "public" | "private"
+
+/** Strict preview policy callers can select at create/update time. */
+export type PreviewAccessPolicy = Exclude<PreviewAccess, "legacy_public">
+
 export interface NetworkConfig {
   allowOut?: string[]
   denyOut?: string[]
@@ -32,6 +38,8 @@ export interface SandboxInfo {
   autoDeleteAt?: Date
   network?: NetworkConfig
   metadata: Record<string, string>
+  /** Preview routing policy. `legacy_public` is returned for compatibility sandboxes. */
+  previewAccess: PreviewAccess
   /** Secrets bound to this sandbox (env-var → secret), when any are attached. */
   secrets?: SandboxSecretBinding[]
 }
@@ -69,6 +77,12 @@ export interface SandboxCreateOptions extends ConnectionOptions {
    */
   secrets?: Record<string, string>
   network?: NetworkConfig
+  /**
+   * Opt into explicit preview publication. Both values require a published
+   * port; `private` additionally requires that port's token. Omit to preserve
+   * legacy all-port routing for older clients.
+   */
+  previewAccess?: PreviewAccessPolicy
 }
 
 export interface SandboxListOptions extends ConnectionOptions {
@@ -89,6 +103,38 @@ export interface SandboxUpdateOptions {
    * `undefined` leaves it unchanged.
    */
   timeoutSeconds?: number | null
+  /** Move the sandbox onto a strict public/private preview policy. */
+  previewAccess?: PreviewAccessPolicy
+}
+
+export interface PublishedPreviewPort {
+  port: number
+  tokenVersion: number
+}
+
+export interface PreviewPortList {
+  previewAccess: PreviewAccess
+  ports: PublishedPreviewPort[]
+}
+
+export interface PreviewTokenOptions {
+  /** Token lifetime in seconds (1–604800). Omit to live until rotation. */
+  expiresInSeconds?: number
+}
+
+export interface SignedPreviewUrlOptions {
+  /** Signed-link lifetime in seconds. Defaults to 60. */
+  expiresInSeconds?: number
+}
+
+export interface PreviewToken {
+  token: string
+  port: number
+  header: string
+  queryParam: string
+  tokenVersion: number
+  previewAccess: PreviewAccess
+  expiresAt?: Date
 }
 
 // ---------------------------------------------------------------------------
@@ -183,6 +229,7 @@ export interface ApiSandboxResponse {
   auto_delete_at?: string
   network?: { allow_out?: string[]; deny_out?: string[] }
   metadata?: Record<string, string>
+  preview_access?: string
   secrets?: Array<{
     env_key?: string
     secret_name?: string
@@ -250,6 +297,7 @@ export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
       ? { allowOut: raw.network.allow_out, denyOut: raw.network.deny_out }
       : undefined,
     metadata: raw.metadata ?? {},
+    previewAccess: (raw.preview_access ?? "legacy_public") as PreviewAccess,
     secrets: raw.secrets?.map((s) => ({
       envKey: s.env_key ?? "",
       secretName: s.secret_name ?? "",

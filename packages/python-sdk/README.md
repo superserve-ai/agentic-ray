@@ -30,6 +30,24 @@ text = sandbox.files.read_text("/app/data.txt")
 sandbox.kill()
 ```
 
+## Preview URLs
+
+Use an explicit preview policy for new sandboxes, publish only the ports you
+intend to expose, and request a signed link for private browser access:
+
+```python
+sandbox = Sandbox.create(name="private-preview", preview_access="private")
+sandbox.publish_preview_port(3000)
+
+browser_url = sandbox.get_signed_preview_url(3000, expires_in_seconds=300)
+credential = sandbox.get_preview_token(3000)
+# Machine clients: {credential.header: credential.token}
+```
+
+`public` still requires explicit port publication but no credential. Omitting
+`preview_access` preserves legacy all-listening-port routing for compatibility.
+See the [preview URL guide](https://docs.superserve.ai/sandbox/preview-urls).
+
 ## Authentication
 
 Set the `SUPERSERVE_API_KEY` environment variable:

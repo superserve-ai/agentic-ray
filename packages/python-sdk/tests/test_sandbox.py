@@ -77,6 +77,76 @@ class TestGetPreviewUrl:
                 sandbox._close_http_client()
 
 
+class TestPreviewAuthentication:
+    def _make(self, router: respx.MockRouter) -> Sandbox:
+        router.post(f"{API}/sandboxes").mock(
+            return_value=httpx.Response(
+                200, json={**_raw(), "preview_access": "private"}
+            )
+        )
+        return Sandbox.create(name="private", preview_access="private")
+
+    def test_publish_list_mint_signed_rotate_and_unpublish(self) -> None:
+        with respx.mock() as router:
+            sandbox = self._make(router)
+            publish = router.post(f"{API}/sandboxes/sbx-1/preview-ports").mock(
+                return_value=httpx.Response(
+                    200, json={"port": 3000, "token_version": 1}
+                )
+            )
+            router.get(f"{API}/sandboxes/sbx-1/preview-ports").mock(
+                return_value=httpx.Response(
+                    200,
+                    json={
+                        "preview_access": "private",
+                        "ports": [{"port": 3000, "token_version": 1}],
+                    },
+                )
+            )
+            token_payload = {
+                "token": "spv1.secret",
+                "port": 3000,
+                "header": "X-Superserve-Preview-Token",
+                "query_param": "superserve_preview_token",
+                "token_version": 1,
+                "preview_access": "private",
+            }
+            mint = router.post(f"{API}/sandboxes/sbx-1/preview-ports/3000/token").mock(
+                return_value=httpx.Response(200, json=token_payload)
+            )
+            rotate = router.post(
+                f"{API}/sandboxes/sbx-1/preview-ports/3000/token/rotate"
+            ).mock(
+                return_value=httpx.Response(
+                    200, json={**token_payload, "token_version": 2}
+                )
+            )
+            unpublish = router.delete(f"{API}/sandboxes/sbx-1/preview-ports/3000").mock(
+                return_value=httpx.Response(204)
+            )
+
+            try:
+                assert sandbox.preview_access.value == "private"
+                assert sandbox.publish_preview_port(3000).token_version == 1
+                assert json.loads(publish.calls.last.request.content) == {"port": 3000}
+                assert sandbox.list_preview_ports().ports[0].port == 3000
+                assert (
+                    sandbox.get_preview_token(3000).header
+                    == "X-Superserve-Preview-Token"
+                )
+                signed = sandbox.get_signed_preview_url(3000, expires_in_seconds=3600)
+                assert signed.endswith("?superserve_preview_token=spv1.secret")
+                assert json.loads(mint.calls.last.request.content) == {
+                    "expires_in_seconds": 3600
+                }
+                assert sandbox.rotate_preview_token(3000).token_version == 2
+                assert rotate.call_count == 1
+                assert sandbox.unpublish_preview_port(3000) is None
+                assert unpublish.call_count == 1
+            finally:
+                sandbox._close_http_client()
+
+
 class TestCreate:
     def test_posts_and_returns_instance(self) -> None:
         with respx.mock() as router:
@@ -93,6 +163,23 @@ class TestCreate:
                 assert b"my-box" in route.calls.last.request.content
                 # access_token stored privately
                 assert sandbox._access_token == "tok"
+            finally:
+                sandbox._close_http_client()
+
+    def test_sends_preview_access(self) -> None:
+        with respx.mock() as router:
+            route = router.post(f"{API}/sandboxes").mock(
+                return_value=httpx.Response(
+                    200, json={**_raw(), "preview_access": "private"}
+                )
+            )
+            sandbox = Sandbox.create(name="my-box", preview_access="private")
+            try:
+                assert (
+                    json.loads(route.calls.last.request.content)["preview_access"]
+                    == "private"
+                )
+                assert sandbox.preview_access.value == "private"
             finally:
                 sandbox._close_http_client()
 

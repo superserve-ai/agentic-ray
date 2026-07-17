@@ -1,6 +1,9 @@
 import { apiClient, apiClientList, type PagedResult } from "./client"
 import type {
   CreateSandboxRequest,
+  PreviewPortList,
+  PreviewTokenResponse,
+  PublishedPreviewPort,
   ResumeResponse,
   SandboxListItem,
   SandboxListParams,
@@ -86,5 +89,58 @@ export async function detachSandboxSecret(
   return apiClient<void>(
     `/sandboxes/${id}/secrets/${encodeURIComponent(envKey)}`,
     { method: "DELETE" },
+  )
+}
+
+export async function listSandboxPreviewPorts(
+  id: string,
+): Promise<PreviewPortList> {
+  return apiClient<PreviewPortList>(`/sandboxes/${id}/preview-ports`)
+}
+
+export async function publishSandboxPreviewPort(
+  id: string,
+  port: number,
+): Promise<PublishedPreviewPort> {
+  return apiClient<PublishedPreviewPort>(`/sandboxes/${id}/preview-ports`, {
+    method: "POST",
+    body: JSON.stringify({ port }),
+  })
+}
+
+export async function unpublishSandboxPreviewPort(
+  id: string,
+  port: number,
+): Promise<void> {
+  return apiClient<void>(`/sandboxes/${id}/preview-ports/${port}`, {
+    method: "DELETE",
+  })
+}
+
+export async function mintSandboxPreviewToken(
+  id: string,
+  port: number,
+  expiresInSeconds?: number,
+): Promise<PreviewTokenResponse> {
+  return apiClient<PreviewTokenResponse>(
+    `/sandboxes/${id}/preview-ports/${port}/token`,
+    {
+      method: "POST",
+      body: JSON.stringify(
+        expiresInSeconds === undefined
+          ? {}
+          : { expires_in_seconds: expiresInSeconds },
+      ),
+    },
+  )
+}
+
+export async function rotateSandboxPreviewToken(
+  id: string,
+  port: number,
+): Promise<PreviewTokenResponse> {
+  return apiClient<PreviewTokenResponse>(
+    `/sandboxes/${id}/preview-ports/${port}/token/rotate`,
+    { method: "POST" },
   )
 }

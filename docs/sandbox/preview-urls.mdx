@@ -1,0 +1,200 @@
+---
+title: "Preview URLs"
+sidebarTitle: Preview URLs
+description: Publish sandbox ports with public access or per-port authentication.
+---
+
+Preview URLs route a hostname such as
+`https://3000-{sandbox-id}.sandbox.superserve.ai` to a process listening inside
+your sandbox. Use an explicit preview policy and publish only the ports you
+intend to expose.
+
+## Access policies
+
+| Policy          | Which ports are reachable?      | Credential required? |
+| --------------- | ------------------------------- | -------------------- |
+| `public`        | Explicitly published ports only | No                   |
+| `private`       | Explicitly published ports only | Yes, per port        |
+| `legacy_public` | Every listening port            | No                   |
+
+`legacy_public` exists only so sandboxes created by older clients keep working.
+New clients should explicitly choose `public` or `private`; the compatibility
+mode cannot be selected through create or update APIs.
+
+<Warning>
+  Moving a legacy sandbox to `public` or `private` immediately closes every port
+  that has not been published. Publish the intended ports before changing the
+  policy if you need a seamless transition.
+</Warning>
+
+## Create a strict sandbox
+
+<CodeGroup>
+```typescript TypeScript
+const sandbox = await Sandbox.create({
+  name: "web-app",
+  previewAccess: "private",
+})
+```
+
+```python Python
+sandbox = Sandbox.create(
+    name="web-app",
+    preview_access="private",
+)
+```
+
+</CodeGroup>
+
+Use `public` when the published service is intentionally internet-accessible.
+Use `private` when every request must carry a per-port credential. You can
+change the policy later with `update`:
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.update({ previewAccess: "private" })
+```
+
+```python Python
+sandbox.update(preview_access="private")
+```
+
+</CodeGroup>
+
+## Publish a port
+
+Start the service, then publish its port. Publication is idempotent and keeps
+the port's current token generation when repeated.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.spawn("npm run dev -- --host 0.0.0.0")
+await sandbox.publishPreviewPort(3000)
+
+const url = sandbox.getPreviewUrl(3000)
+
+````
+
+```python Python
+# AsyncSandbox shown because spawn is an async session API.
+await sandbox.commands.spawn("npm run dev -- --host 0.0.0.0")
+await sandbox.publish_preview_port(3000)
+
+url = sandbox.get_preview_url(3000)
+````
+
+</CodeGroup>
+
+`getPreviewUrl` / `get_preview_url` only constructs the hostname. It does not
+publish the port or add credentials. Ports must be integers from `1024` through
+`65535`.
+
+List the current server-side publication state with `listPreviewPorts()` /
+`list_preview_ports()`. The result includes the effective policy and every
+published port, but never includes tokens.
+
+## Authenticate a private preview
+
+Private preview credentials are scoped to one published port. A token for port
+`3000` cannot open port `8080` on the same sandbox.
+
+### Machine clients and reverse proxies
+
+Mint a token and send it using the header name returned by the API:
+
+<CodeGroup>
+```typescript TypeScript
+const credential = await sandbox.getPreviewToken(3000)
+
+await fetch(sandbox.getPreviewUrl(3000), {
+headers: { [credential.header]: credential.token },
+})
+
+````
+
+```python Python
+credential = sandbox.get_preview_token(3000)
+
+response = httpx.get(
+    sandbox.get_preview_url(3000),
+    headers={credential.header: credential.token},
+)
+````
+
+</CodeGroup>
+
+Omit the expiry to keep a token valid until that port is rotated or
+unpublished. For limited-lived machine credentials, pass `expiresInSeconds` /
+`expires_in_seconds` from `1` to `604800` seconds.
+
+### Browsers, iframes, and WebSockets
+
+Browsers cannot attach a custom header to a navigation. Request a signed URL
+instead:
+
+<CodeGroup>
+```typescript TypeScript
+const url = await sandbox.getSignedPreviewUrl(3000, {
+  expiresInSeconds: 300,
+})
+```
+
+```python Python
+url = sandbox.get_signed_preview_url(3000, expires_in_seconds=300)
+```
+
+</CodeGroup>
+
+The SDK defaults signed links to 60 seconds. On first navigation, the edge
+proxy verifies the query token, stores it in a secure host-scoped cookie, and
+redirects to the same URL without the token. Asset requests and WebSocket
+upgrades then use the cookie automatically.
+
+<Note>
+  Treat signed URLs as secrets until the initial redirect removes their query
+  token. Avoid logging them or placing them in analytics and referrer data.
+</Note>
+
+## Revoke access
+
+Rotate a port to invalidate all of its existing header tokens, signed links,
+and browser cookies without affecting other ports:
+
+<CodeGroup>
+```typescript TypeScript
+const fresh = await sandbox.rotatePreviewToken(3000)
+```
+
+```python Python
+fresh = sandbox.rotate_preview_token(3000)
+```
+
+</CodeGroup>
+
+Unpublishing closes the port at the edge and revokes its credentials:
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.unpublishPreviewPort(3000)
+```
+
+```python Python
+sandbox.unpublish_preview_port(3000)
+```
+
+</CodeGroup>
+
+Unpublish is idempotent and retry-safe. Under a strict policy the edge returns
+`404` for an unpublished port before revealing sandbox status or checking a
+credential.
+
+## MCP and console
+
+The console's Preview panel uses the same server-backed published-port list.
+For private sandboxes it mints a signed browser URL without displaying the
+credential.
+
+The MCP `sandbox_preview_url` tool publishes the requested port. It returns a
+clean URL for a `public` sandbox and a one-hour signed URL by default for a
+`private` sandbox. Set `expires_in_seconds` to choose another private-link
+lifetime.

@@ -1,8 +1,32 @@
 "use client"
 
 import posthog from "posthog-js"
+import type { CapturedNetworkRequest } from "posthog-js"
 import { PostHogProvider as PHProvider } from "posthog-js/react"
 import type React from "react"
+
+const PREVIEW_TOKEN_QUERY_PARAM = "superserve_preview_token"
+
+export function redactPreviewToken(
+  request: CapturedNetworkRequest,
+): CapturedNetworkRequest {
+  if (!request.name.includes(PREVIEW_TOKEN_QUERY_PARAM)) return request
+
+  try {
+    const url = new URL(request.name)
+    if (!url.searchParams.has(PREVIEW_TOKEN_QUERY_PARAM)) return request
+    url.searchParams.set(PREVIEW_TOKEN_QUERY_PARAM, "redacted")
+    return { ...request, name: url.toString() }
+  } catch {
+    return {
+      ...request,
+      name: request.name.replace(
+        /([?&]superserve_preview_token=)[^&#]*/g,
+        "$1redacted",
+      ),
+    }
+  }
+}
 
 if (typeof window !== "undefined") {
   const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
@@ -19,6 +43,9 @@ if (typeof window !== "undefined") {
         session_recording: {
           maskAllInputs: true,
           maskTextSelector: "[data-mask]",
+          recordHeaders: false,
+          recordBody: false,
+          maskCapturedNetworkRequestFn: redactPreviewToken,
         },
       })
       // First-touch attribution: if the user landed directly on the console

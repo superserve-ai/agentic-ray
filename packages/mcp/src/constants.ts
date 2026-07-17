@@ -24,9 +24,8 @@ export const SERVER_INSTRUCTIONS =
   "Secrets: bind stored credentials via the secrets argument on sandbox_create or sandbox_attach_secret " +
   "instead of putting raw keys in env_vars; discover them with secret_list. Network: allow_out adds allowed " +
   "destinations and deny_out blocks CIDRs (on sandbox_create or sandbox_update) — for a strict allowlist " +
-  "combine allow_out with deny_out:['0.0.0.0/0']; audit egress with sandbox_network_log. Get a public URL " +
-  "for a listening port with sandbox_preview_url (the URL is unauthenticated — anything bound to that port " +
-  "is internet-exposed)."
+  "combine allow_out with deny_out:['0.0.0.0/0']; audit egress with sandbox_network_log. Publish a listening " +
+  "port and get a browser-ready link with sandbox_preview_url; private sandboxes receive an expiring signed URL."
 
 /**
  * Server version. Kept in sync with `package.json` `version`

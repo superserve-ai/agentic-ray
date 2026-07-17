@@ -85,6 +85,44 @@ class TestAsyncSandboxSmoke:
             finally:
                 await sbx._close_http_client()
 
+    async def test_authenticated_preview_flow(self) -> None:
+        with respx.mock() as router:
+            router.post(f"{API}/sandboxes").mock(
+                return_value=httpx.Response(
+                    200, json={**_raw(), "preview_access": "private"}
+                )
+            )
+            router.post(f"{API}/sandboxes/sbx-1/preview-ports").mock(
+                return_value=httpx.Response(
+                    200, json={"port": 3000, "token_version": 1}
+                )
+            )
+            router.post(f"{API}/sandboxes/sbx-1/preview-ports/3000/token").mock(
+                return_value=httpx.Response(
+                    200,
+                    json={
+                        "token": "spv1.async",
+                        "port": 3000,
+                        "header": "X-Superserve-Preview-Token",
+                        "query_param": "superserve_preview_token",
+                        "token_version": 1,
+                        "preview_access": "private",
+                    },
+                )
+            )
+            router.delete(f"{API}/sandboxes/sbx-1/preview-ports/3000").mock(
+                return_value=httpx.Response(204)
+            )
+
+            sbx = await AsyncSandbox.create(name="x", preview_access="private")
+            try:
+                assert (await sbx.publish_preview_port(3000)).port == 3000
+                signed = await sbx.get_signed_preview_url(3000, expires_in_seconds=600)
+                assert signed.endswith("?superserve_preview_token=spv1.async")
+                assert await sbx.unpublish_preview_port(3000) is None
+            finally:
+                await sbx._close_http_client()
+
     async def test_kill_swallows_404(self) -> None:
         with respx.mock() as router:
             router.post(f"{API}/sandboxes/sbx-1/activate").mock(

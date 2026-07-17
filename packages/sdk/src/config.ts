@@ -158,12 +158,10 @@ export const MIN_PREVIEW_PORT = 1024
 export const MAX_PREVIEW_PORT = 65535
 
 /**
- * Build the public preview URL for a port running inside a sandbox.
+ * Build the preview URL for a port running inside a sandbox.
  *
- * The edge proxy routes `https://{port}-{id}.{host}` straight to that port
- * on the VM, so this is pure string construction — no network call. The
- * sandbox must be running and a server must be listening on `port` for the
- * URL to resolve.
+ * This is pure string construction — no network call. Under strict policies,
+ * the port must be published first; private previews also require a token.
  *
  * Always uses the per-sandbox subdomain form (never the shared-host mode):
  * a browser opening the URL can't send the `X-Superserve-Sandbox-Id` header.

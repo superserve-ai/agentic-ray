@@ -118,6 +118,26 @@ describe("Sandbox statics", () => {
     expect(body).toEqual({ name: "my-sandbox", auto_delete_seconds: 3600 })
   })
 
+  it("Sandbox.create sends a strict preview policy when requested", async () => {
+    const mock = vi.fn(async () =>
+      jsonResponse({ ...baseSandbox, preview_access: "private" }),
+    )
+    vi.stubGlobal("fetch", mock)
+
+    const sandbox = await Sandbox.create({
+      ...commonOpts,
+      name: "my-sandbox",
+      previewAccess: "private",
+    })
+
+    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({
+      name: "my-sandbox",
+      preview_access: "private",
+    })
+    expect(sandbox.previewAccess).toBe("private")
+  })
+
   it("sandbox.update sets and clears auto_delete_seconds", async () => {
     const mock = vi.fn(async () => jsonResponse(baseSandbox))
     vi.stubGlobal("fetch", mock)
@@ -164,6 +184,23 @@ describe("Sandbox statics", () => {
     await sandbox.update({ timeoutSeconds: null })
     ;[, init] = patchMock.mock.calls[1] as [string, RequestInit]
     expect(JSON.parse(init.body as string)).toEqual({ timeout_seconds: null })
+  })
+
+  it("sandbox.update changes preview_access", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(baseSandbox)),
+    )
+    const sandbox = await Sandbox.create({ ...commonOpts, name: "my-sandbox" })
+
+    const patchMock = vi.fn(async () => noContentResponse())
+    vi.stubGlobal("fetch", patchMock)
+    await sandbox.update({ previewAccess: "private" })
+
+    const [, init] = patchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({
+      preview_access: "private",
+    })
   })
 
   it("Sandbox.updateById PATCHes directly without activating", async () => {
@@ -390,6 +427,96 @@ describe("Sandbox instance methods", () => {
       vi.fn(async () => jsonResponse({ id: "sbx-1", status: "active" })),
     )
     await expect(sandbox.resume()).rejects.toThrow(/missing access_token/)
+  })
+
+  it("publishes, lists, and unpublishes preview ports", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ port: 3000, token_version: 2 }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          preview_access: "private",
+          ports: [{ port: 3000, token_version: 2 }],
+        }),
+      )
+      .mockResolvedValueOnce(noContentResponse())
+    vi.stubGlobal("fetch", mock)
+
+    await expect(sandbox.publishPreviewPort(3000)).resolves.toEqual({
+      port: 3000,
+      tokenVersion: 2,
+    })
+    await expect(sandbox.listPreviewPorts()).resolves.toEqual({
+      previewAccess: "private",
+      ports: [{ port: 3000, tokenVersion: 2 }],
+    })
+    await expect(sandbox.unpublishPreviewPort(3000)).resolves.toBeUndefined()
+
+    expect((mock.mock.calls[0] as [string])[0]).toMatch(
+      /\/sandboxes\/sbx-1\/preview-ports$/,
+    )
+    expect((mock.mock.calls[2] as [string, RequestInit])[1].method).toBe(
+      "DELETE",
+    )
+  })
+
+  it("mints a header token and a short-lived signed URL", async () => {
+    const sandbox = await makeSandbox()
+    const response = {
+      token: "spv1.token",
+      port: 3000,
+      header: "X-Superserve-Preview-Token",
+      query_param: "superserve_preview_token",
+      token_version: 3,
+      preview_access: "private",
+      expires_at: "2026-01-01T01:00:00Z",
+    }
+    const mock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(response))
+      .mockResolvedValueOnce(jsonResponse(response))
+    vi.stubGlobal("fetch", mock)
+
+    const token = await sandbox.getPreviewToken(3000, {
+      expiresInSeconds: 3600,
+    })
+    expect(token.header).toBe("X-Superserve-Preview-Token")
+    expect(token.tokenVersion).toBe(3)
+    const [, tokenInit] = mock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(tokenInit.body as string)).toEqual({
+      expires_in_seconds: 3600,
+    })
+
+    const signed = await sandbox.getSignedPreviewUrl(3000)
+    expect(signed).toBe(
+      "https://3000-sbx-1.sandbox.superserve.ai/?superserve_preview_token=spv1.token",
+    )
+    const [, signedInit] = mock.mock.calls[1] as [string, RequestInit]
+    expect(JSON.parse(signedInit.body as string)).toEqual({
+      expires_in_seconds: 60,
+    })
+  })
+
+  it("rotates one preview port token", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi.fn(async () =>
+      jsonResponse({
+        token: "spv1.fresh",
+        port: 8080,
+        header: "X-Superserve-Preview-Token",
+        query_param: "superserve_preview_token",
+        token_version: 4,
+        preview_access: "private",
+      }),
+    )
+    vi.stubGlobal("fetch", mock)
+
+    const token = await sandbox.rotatePreviewToken(8080)
+    expect(token.tokenVersion).toBe(4)
+    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).toMatch(/\/preview-ports\/8080\/token\/rotate$/)
+    expect(init.method).toBe("POST")
   })
 })
 
