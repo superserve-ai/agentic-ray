@@ -26,10 +26,13 @@ import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
 import { Pagination } from "@/components/pagination"
+import { useQueryScope } from "@/components/query-provider"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
 import { useActivityPage } from "@/hooks/use-activity"
 import { useListParams } from "@/hooks/use-list-params"
+import { useUser } from "@/hooks/use-user"
+import { canReadPlatformActivity } from "@/lib/admin/permissions"
 import { ACTIVITY_SORT_COLUMNS, type ActivityListParams } from "@/lib/api/types"
 
 const CATEGORY_TABS = [
@@ -60,6 +63,10 @@ function parseDateRange(
 
 function AuditLogsPageContent() {
   const searchParams = useSearchParams()
+  const queryScope = useQueryScope()
+  const { user, loading: userLoading } = useUser()
+  const canReadCurrentScope =
+    queryScope === "self" || canReadPlatformActivity(user)
 
   const {
     page,
@@ -108,7 +115,9 @@ function AuditLogsPageContent() {
   }
 
   const { data, isPending, error, refetch, isPlaceholderData } =
-    useActivityPage(params)
+    useActivityPage(params, {
+      enabled: queryScope === "self" || (!userLoading && canReadCurrentScope),
+    })
   const logs = data?.items ?? []
   const total = data?.total ?? 0
 
@@ -137,6 +146,15 @@ function AuditLogsPageContent() {
   // stale page during a params change — never treat its total as empty.
   const isEmpty =
     !isPending && !error && !isPlaceholderData && total === 0 && !hasFilters
+
+  if (queryScope !== "self" && !userLoading && !canReadCurrentScope) {
+    return (
+      <div className="flex h-full flex-col">
+        <PageHeader title="Audit Logs" />
+        <ErrorState message="Your account does not have platform activity read access for this team." />
+      </div>
+    )
+  }
 
   if (isPending) {
     return (
