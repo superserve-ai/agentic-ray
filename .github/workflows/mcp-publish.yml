@@ -48,7 +48,7 @@ jobs:
         working-directory: packages/mcp
         run: |
           set -euo pipefail
-          MIN_SDK_VERSION="0.7.9"
+          MIN_SDK_VERSION="0.8.0"
           SDK_VERSION="$(npm view @superserve/sdk version)"
           test -n "$SDK_VERSION"
           if [ "$(printf '%s\n%s\n' "$MIN_SDK_VERSION" "$SDK_VERSION" | sort -V | head -n1)" != "$MIN_SDK_VERSION" ]; then

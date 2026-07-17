@@ -12,9 +12,13 @@ import {
 import Image from "next/image"
 
 import { useUser } from "@/hooks/use-user"
-import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
+import {
+  canReadPlatformTeams,
+  canViewOtherUsersAccount,
+} from "@/lib/admin/permissions"
 
 import {
+  adminNavItem,
   bottomNavItems,
   mainNavItems,
   userManagementNavItem,
@@ -35,6 +39,7 @@ export function Sidebar() {
   const { user } = useUser()
   const navItems = [
     ...mainNavItems,
+    ...(canReadPlatformTeams(user) ? [adminNavItem] : []),
     ...(canViewOtherUsersAccount(user) ? [userManagementNavItem] : []),
   ]
 

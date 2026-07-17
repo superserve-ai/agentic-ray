@@ -23,14 +23,12 @@ import {
 import { mintSandboxPreviewToken, patchSandbox } from "@/lib/api/sandboxes"
 import type { PreviewAccess, SandboxResponse } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
-
-const SANDBOX_HOST =
-  process.env.NEXT_PUBLIC_SANDBOX_HOST ?? "sandbox.superserve.ai"
+import { sandboxHostFor } from "@/lib/sandbox-host"
 
 const DEFAULT_PORT_SUGGESTION = "3000"
 
 function previewUrl(sandboxId: string, port: number): string {
-  return `https://${port}-${sandboxId}.${SANDBOX_HOST}`
+  return `https://${port}-${sandboxId}.${sandboxHostFor(sandboxId)}`
 }
 
 interface PreviewSectionProps {

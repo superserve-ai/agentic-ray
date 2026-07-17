@@ -207,7 +207,11 @@
           },
           {
             "group": "Billing",
-            "pages": ["GET /billing/pricing", "GET /billing/pricing/public"]
+            "pages": [
+              "GET /billing/summary",
+              "GET /billing/pricing",
+              "GET /billing/pricing/public"
+            ]
           },
           {
             "group": "Team Management",
@@ -232,6 +236,10 @@
         "anchor": "Cookbook",
         "icon": "utensils",
         "groups": [
+          {
+            "group": "Recipes",
+            "pages": ["cookbook/pr-loop"]
+          },
           {
             "group": "MCP",
             "tag": "NEW",

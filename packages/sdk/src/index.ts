@@ -2,7 +2,13 @@
  * Superserve SDK — sandbox infrastructure for running code in isolated cloud environments.
  */
 
-export { MAX_PREVIEW_PORT, MIN_PREVIEW_PORT, previewUrl } from "./config.js"
+export {
+  MAX_PREVIEW_PORT,
+  MIN_PREVIEW_PORT,
+  previewUrl,
+  resolveConfig,
+} from "./config.js"
+export type { ResolvedConfig } from "./config.js"
 export {
   AuthenticationError,
   BuildError,

@@ -1,0 +1,38 @@
+{
+  "name": "@superserve/loops",
+  "version": "0.1.8",
+  "description": "Agent loops that run on Superserve sandboxes — a warm, isolated runtime for loop engineering.",
+  "bin": {
+    "superserve-loops": "install/cli.ts"
+  },
+  "files": [
+    "install",
+    "lib",
+    "pr-loop"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "add": "bun run install/cli.ts",
+    "loop": "bun run pr-loop/loop.ts",
+    "e2e": "bun run e2e/scenario.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "bunx oxlint",
+    "format": "bunx oxfmt --write",
+    "format:check": "bunx oxfmt --check"
+  },
+  "dependencies": {
+    "@superserve/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@superserve/typescript-config": "workspace:*",
+    "@types/node": "^25.5.2",
+    "typescript": "^5.7.0",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^4.0.18",
+    "yaml": "^2.9.0"
+  }
+}

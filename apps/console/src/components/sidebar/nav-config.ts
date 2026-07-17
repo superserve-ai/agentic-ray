@@ -10,6 +10,7 @@ import {
   LifebuoyIcon,
   StackIcon,
   LockKeyIcon,
+  ShieldCheckIcon,
   UsersIcon,
 } from "@phosphor-icons/react"
 
@@ -24,6 +25,12 @@ export const userManagementNavItem: NavItem = {
   label: "User Management",
   href: "/user-management",
   icon: UsersIcon,
+}
+
+export const adminNavItem: NavItem = {
+  label: "Admin",
+  href: "/admin",
+  icon: ShieldCheckIcon,
 }
 
 export const mainNavItems: NavItem[] = [

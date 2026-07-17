@@ -124,6 +124,8 @@ export function CommandPalette() {
 
   const inputRef = useRef<HTMLInputElement>(null)
   const [mounted, setMounted] = useState(false)
+  const filteredNavigationItems = navigationItems
+  const filteredActionItems = actionItems
 
   useEffect(() => {
     setMounted(true)
@@ -189,7 +191,7 @@ export function CommandPalette() {
                   heading="Navigation"
                   className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-muted [&_[cmdk-group-heading]]:uppercase"
                 >
-                  {navigationItems.map((item) => (
+                  {filteredNavigationItems.map((item) => (
                     <Command.Item
                       key={item.label}
                       onSelect={item.onSelect}
@@ -222,7 +224,7 @@ export function CommandPalette() {
                   heading="Actions"
                   className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-muted [&_[cmdk-group-heading]]:uppercase"
                 >
-                  {actionItems.map((item) => (
+                  {filteredActionItems.map((item) => (
                     <Command.Item
                       key={item.label}
                       onSelect={item.onSelect}

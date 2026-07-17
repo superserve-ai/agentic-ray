@@ -1,0 +1,35 @@
+# Installed by `superserve-loops add pr-loop`. Runs on every PR code change
+# (a commit pushed to a PR) — no idle cron. One warm-sandbox tick per event, then it sleeps.
+# Note: `pull_request` from a forked repo gets a read-only token, so reviews on fork PRs need
+# the cross-repo PAT path (see below) or `pull_request_target` (the loop runs PR code only in
+# the sandbox, never on the runner). Add `schedule:` back if you also want a safety-net sweep.
+name: loop-pr-loop
+on:
+  pull_request:
+    types: [opened, synchronize, reopened] # synchronize = new commits pushed to the PR
+  workflow_dispatch: {}
+concurrency:
+  # Serialize per repo: all PR reviews share one warm sandbox, so don't run two at once.
+  group: loop-pr-loop
+  cancel-in-progress: false
+# Least privilege: clone the repo + post the review and ready-to-merge / needs-human labels.
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  tick:
+    # Fork PRs can't read repo secrets or write with the built-in token — skip them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: oven-sh/setup-bun@v2
+      # Runs the PUBLISHED loop — no loop source is vendored into this repo, and no repo
+      # checkout is needed (the sandbox clones the target repo itself). `@stable` is a
+      # Superserve-gated channel, so blessed updates roll out here without editing this file.
+      # --pr focuses the tick on the changed PR; empty on manual dispatch → sweep all.
+      - run: bunx @superserve/loops@stable run pr-loop --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
+        env:
+          SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}
+          SUPERSERVE_CLAUDE_SECRET: claude-oauth
+          # Reviews post as github-actions[bot] via the workflow's built-in token.
+          GITHUB_TOKEN: ${{ github.token }}

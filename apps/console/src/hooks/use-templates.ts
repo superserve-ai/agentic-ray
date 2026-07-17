@@ -8,6 +8,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query"
 
+import { useQueryScope } from "@/components/query-provider"
 import { ApiError, type PagedResult } from "@/lib/api/client"
 import { templateKeys } from "@/lib/api/query-keys"
 import {
@@ -32,8 +33,9 @@ const TERMINAL_BUILD_STATUSES = new Set(["ready", "failed", "cancelled"])
 
 /** Paginated template list backing the Templates page. */
 export function useTemplatesPage(params: TemplateListParams) {
+  const queryScope = useQueryScope()
   return useQuery({
-    queryKey: templateKeys.list(params),
+    queryKey: [...templateKeys.list(params), queryScope],
     queryFn: () => listTemplatesPaged(params),
     // Keep the current page on screen while the next page/sort/filter loads.
     placeholderData: keepPreviousData,
@@ -47,8 +49,9 @@ export function useTemplatesPage(params: TemplateListParams) {
  * which needs every template to choose from.
  */
 export function useTemplates() {
+  const queryScope = useQueryScope()
   return useQuery({
-    queryKey: templateKeys.fullList(),
+    queryKey: [...templateKeys.fullList(), queryScope],
     queryFn: () => listTemplates(),
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,
@@ -56,8 +59,9 @@ export function useTemplates() {
 }
 
 export function useTemplate(id: string | null) {
+  const queryScope = useQueryScope()
   return useQuery({
-    queryKey: templateKeys.detail(id ?? ""),
+    queryKey: [...templateKeys.detail(id ?? ""), queryScope],
     queryFn: () => getTemplate(id as string),
     enabled: !!id,
     refetchInterval: (query) => {
@@ -70,8 +74,9 @@ export function useTemplate(id: string | null) {
 }
 
 export function useTemplateBuilds(templateId: string | null) {
+  const queryScope = useQueryScope()
   return useQuery({
-    queryKey: templateKeys.builds(templateId ?? ""),
+    queryKey: [...templateKeys.builds(templateId ?? ""), queryScope],
     queryFn: () => listTemplateBuilds(templateId as string, { limit: 20 }),
     enabled: !!templateId,
     refetchInterval: (query) => {
@@ -86,8 +91,12 @@ export function useTemplateBuild(
   templateId: string | null,
   buildId: string | null,
 ) {
+  const queryScope = useQueryScope()
   return useQuery({
-    queryKey: templateKeys.build(templateId ?? "", buildId ?? ""),
+    queryKey: [
+      ...templateKeys.build(templateId ?? "", buildId ?? ""),
+      queryScope,
+    ],
     queryFn: () => getTemplateBuild(templateId as string, buildId as string),
     enabled: !!templateId && !!buildId,
     refetchInterval: (query) => {

@@ -3,7 +3,11 @@
 import crypto from "node:crypto"
 
 import { resolveActiveTeam } from "@/lib/api/active-team"
-import type { TeamMembership } from "@/lib/api/team-directory"
+import {
+  invalidateMembershipDirectory,
+  type TeamMembership,
+} from "@/lib/api/team-directory"
+import { provisionTeam } from "@/lib/api/team-provisioning"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -94,26 +98,12 @@ async function getOrCreateTeamForUser(
   const active = await resolveActiveTeam(userId)
   if (active) return active
 
-  // No team — create one in the default cell and add user as owner
-  const admin = cellFor(DEFAULT_REGION).createAdminClient()
-  const { data: team, error: teamErr } = await admin
-    .from("team")
-    .insert({ name: email })
-    .select("id")
-    .single()
-
-  if (teamErr) throw new Error(`Failed to create team: ${teamErr.message}`)
-
-  const { error: memberErr } = await admin.from("team_member").insert({
-    team_id: team.id,
-    profile_id: userId,
-    role: "owner",
-  })
-
-  if (memberErr)
-    throw new Error(`Failed to add team member: ${memberErr.message}`)
-
-  return { teamId: team.id as string, region: DEFAULT_REGION }
+  // No team yet — provision one through the full RBAC chain (same helper the
+  // create-team and proxy-auth paths use), so a first API-key action can't
+  // leave the user with a legacy-only team the control plane rejects.
+  const team = await provisionTeam(DEFAULT_REGION, userId, email, email)
+  invalidateMembershipDirectory(userId)
+  return { teamId: team.id, region: DEFAULT_REGION }
 }
 
 export async function listApiKeysAction() {

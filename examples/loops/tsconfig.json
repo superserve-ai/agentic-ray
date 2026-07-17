@@ -1,0 +1,21 @@
+{
+  "extends": "@superserve/typescript-config/library.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@superserve/sdk": ["../../packages/sdk/src/index.ts"],
+      "@superserve/sdk/*": ["../../packages/sdk/src/*"]
+    }
+  },
+  "include": [
+    "e2e/**/*.ts",
+    "install/**/*.ts",
+    "lib/**/*.ts",
+    "pr-loop/**/*.ts",
+    "tests/**/*.ts",
+    "vitest.config.ts"
+  ]
+}

@@ -7,7 +7,7 @@ let cellClients: Record<string, ReturnType<typeof cellClient>> = {}
 // Minimal per-cell client: team_member memberships and team name lookups.
 function cellClient(
   memberships: Array<{ team_id: string }>,
-  teams: Array<{ id: string; name: string }> = [],
+  teams: Array<{ id: string; name: string; home_region?: string | null }> = [],
   rbac: Array<{ team_id: string; status: string }> = [],
 ) {
   const from = vi.fn((table: string) => {
@@ -29,6 +29,12 @@ function cellClient(
       return {
         select: () => ({
           in: async () => ({ data: teams, error: null }),
+          eq: (_col: string, id: string) => ({
+            limit: async () => ({
+              data: teams.filter((t) => t.id === id),
+              error: null,
+            }),
+          }),
         }),
       }
     }
@@ -49,6 +55,7 @@ vi.mock("@/lib/cells", () => ({
 
 import {
   clearMembershipDirectoryCache,
+  findTeamById,
   listTeamMembershipsForUser,
   listTeamMembershipsForUserDetailed,
   listTeamsForUser,
@@ -335,5 +342,89 @@ describe("membershipExistsInCell", () => {
       ),
     }
     expect(await membershipExistsInCell("use", "u1", "t1")).toBe(false)
+  })
+})
+
+describe("findTeamById home-region preference", () => {
+  // After a cross-cell migration the team id exists in two cells: the live
+  // row in its new home and a detached pointer row in the old cell whose
+  // home_region names the new home. The lookup must return the home row.
+  const team = (home_region: string | null) => ({
+    id: "t-1",
+    name: "acme",
+    active_sandbox_count: 0,
+    max_sandboxes: 10,
+    created_at: "2026-01-01",
+    home_region,
+  })
+
+  it("prefers the cell the team names as home over an earlier pointer row", async () => {
+    regions = ["use", "usw"]
+    cellClients = {
+      use: cellClient([], [team("usw")]),
+      usw: cellClient([], [team("usw")]),
+    }
+    const found = await findTeamById("t-1")
+    expect(found?.region).toBe("usw")
+  })
+
+  it("falls back to the pointer row when the home row is missing", async () => {
+    regions = ["use", "usw"]
+    cellClients = {
+      use: cellClient([], [team("usw")]),
+      usw: cellClient([], []),
+    }
+    const found = await findTeamById("t-1")
+    expect(found?.region).toBe("use")
+  })
+
+  it("returns a row whose home_region is unset (pre-migration schema)", async () => {
+    regions = ["use", "usw"]
+    cellClients = {
+      use: cellClient([], [team(null)]),
+      usw: cellClient([], []),
+    }
+    const found = await findTeamById("t-1")
+    expect(found?.region).toBe("use")
+  })
+
+  const downCell = (message: string) =>
+    ({
+      from: vi.fn(() => {
+        throw new Error(message)
+      }),
+    }) as unknown as ReturnType<typeof cellClient>
+
+  it("serves the pointer row when the home cell is down", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    regions = ["use", "usw"]
+    cellClients = {
+      use: cellClient([], [team("usw")]),
+      usw: downCell("usw pooler unreachable"),
+    }
+    const found = await findTeamById("t-1")
+    expect(found?.region).toBe("use")
+    expect(errSpy).toHaveBeenCalledOnce()
+    errSpy.mockRestore()
+  })
+
+  it("still throws when the default cell fails during the lookup", async () => {
+    regions = ["use", "usw"]
+    cellClients = {
+      use: downCell("primary down"),
+      usw: cellClient([], [team("usw")]),
+    }
+    await expect(findTeamById("t-1")).rejects.toThrow("primary down")
+  })
+
+  it("ignores a pointer row whose home cell is not configured", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    regions = ["use"]
+    cellClients = {
+      use: cellClient([], [team("usw")]),
+    }
+    expect(await findTeamById("t-1")).toBeNull()
+    expect(errSpy).toHaveBeenCalledOnce()
+    errSpy.mockRestore()
   })
 })

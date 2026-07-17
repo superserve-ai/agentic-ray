@@ -11,7 +11,7 @@ on:
       - "package.json"
       - "bun.lock"
       - "turbo.json"
-      - ".github/workflows/ci.yml"
+      - ".github/workflows/**"
   pull_request:
     branches: [main]
     paths:
@@ -22,7 +22,7 @@ on:
       - "package.json"
       - "bun.lock"
       - "turbo.json"
-      - ".github/workflows/ci.yml"
+      - ".github/workflows/**"
 
 jobs:
   ci:

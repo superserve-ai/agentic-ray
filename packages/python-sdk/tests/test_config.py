@@ -74,9 +74,14 @@ class TestRegionDerivation:
         assert cfg.base_url == "https://api.superserve.ai"
         assert cfg.sandbox_host == "sandbox.superserve.ai"
 
-    def test_unknown_region_falls_back_to_default(self) -> None:
-        # `usw` won't enter the known-regions map until its DNS is live.
+    def test_usw_region_key_resolves_mapped_endpoints(self) -> None:
         cfg = resolve_config(api_key=f"ss_live_usw_{_TAIL}")
+        assert cfg.base_url == "https://api-usw.superserve.ai"
+        assert cfg.sandbox_host == "usw-sandbox.superserve.ai"
+
+    def test_unconfigured_region_falls_back_to_default(self) -> None:
+        # A syntactically valid region token that isn't in _KNOWN_REGIONS.
+        cfg = resolve_config(api_key=f"ss_live_apac_{_TAIL}")
         assert cfg.base_url == DEFAULT_BASE_URL
         assert cfg.sandbox_host == DEFAULT_SANDBOX_HOST
 
@@ -107,6 +112,20 @@ class TestRegionDerivation:
         monkeypatch.setenv("SUPERSERVE_BASE_URL", "https://env.example.com")
         cfg = resolve_config(api_key=f"ss_live_use_{_TAIL}")
         assert cfg.base_url == "https://env.example.com"
+
+    def test_empty_env_base_url_is_unset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A whitespace-only override must not shadow region derivation.
+        monkeypatch.setenv("SUPERSERVE_BASE_URL", "   ")
+        cfg = resolve_config(api_key=f"ss_live_usw_{_TAIL}")
+        assert cfg.base_url == "https://api-usw.superserve.ai"
+        assert cfg.sandbox_host == "usw-sandbox.superserve.ai"
+
+    def test_empty_explicit_base_url_is_unset(self) -> None:
+        cfg = resolve_config(api_key=f"ss_live_use_{_TAIL}", base_url="")
+        assert cfg.base_url == "https://api.superserve.ai"
+        assert cfg.sandbox_host == "sandbox.superserve.ai"
 
     def test_region_key_sourced_from_env_var(
         self, monkeypatch: pytest.MonkeyPatch
@@ -162,6 +181,12 @@ class TestDeriveSandboxHost:
             == "staging-sandbox.superserve.ai"
         )
 
+    def test_usw(self) -> None:
+        assert (
+            _derive_sandbox_host("https://api-usw.superserve.ai")
+            == "usw-sandbox.superserve.ai"
+        )
+
     def test_other(self) -> None:
         assert (
             _derive_sandbox_host("https://custom.example.com") == DEFAULT_SANDBOX_HOST
@@ -177,6 +202,16 @@ class TestDataPlaneTarget:
         target = data_plane_target("abc-123", "sandbox.superserve.ai")
         assert target.url == "https://sandbox.superserve.ai"
         assert target.headers["X-Superserve-Sandbox-Id"] == "abc-123"
+
+    def test_every_launched_region_uses_shared_origin(self) -> None:
+        # Extend per cell launch: a region resolvable from a key must also
+        # take the pooled shared-origin path server-side, or its data-plane
+        # traffic silently downgrades to per-sandbox TLS origins.
+        for region in ("use", "usw"):
+            config = resolve_config(api_key=f"ss_live_{region}_{'a' * 32}")
+            target = data_plane_target("abc-123", config.sandbox_host)
+            assert target.url == f"https://{config.sandbox_host}"
+            assert target.headers["X-Superserve-Sandbox-Id"] == "abc-123"
 
     def test_shared_host_on_staging(self) -> None:
         target = data_plane_target("xyz", "staging-sandbox.superserve.ai")

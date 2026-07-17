@@ -16,6 +16,7 @@
 import {
   AuthenticationError,
   NotFoundError,
+  resolveConfig,
   Sandbox,
   SandboxError,
   Secret,
@@ -44,7 +45,7 @@ import {
   parseLsOutput,
   validateAbsolutePath,
 } from "./lib/listing.js"
-import { buildPreviewUrl, DEFAULT_BASE_URL } from "./lib/previewUrl.js"
+import { buildPreviewUrl } from "./lib/previewUrl.js"
 
 /** Hang guard for the direct control-plane network-log GET. */
 const NETWORK_LOG_TIMEOUT_MS = 30_000
@@ -275,6 +276,15 @@ function toSecretSummary(s: SecretInfo): SecretSummary {
 /** Real client backed by `@superserve/sdk`. */
 export function createSdkClient(config: ClientConfig): SandboxClient {
   const conn = { apiKey: config.apiKey, baseUrl: config.baseUrl }
+  // Region-resolved endpoints (key prefix → cell), the single source the SDK
+  // uses internally — so our direct preview/network calls hit the same cell
+  // as the SDK-backed sandbox ops instead of defaulting to the primary.
+  // resolveConfig is exported as of @superserve/sdk 0.8.0 — the current
+  // MIN_SDK_VERSION floor in mcp-publish.yml (max across features).
+  const resolved = resolveConfig({
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl,
+  })
 
   return {
     async create(input) {
@@ -367,8 +377,8 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
     // Preview publication is control-plane-only, so this does not activate a
     // paused sandbox. Private policies get an expiring browser bootstrap token.
     async previewUrl(id, port, expiresInSeconds) {
-      const previewUrl = buildPreviewUrl(id, port, config.baseUrl)
-      const base = config.baseUrl ?? DEFAULT_BASE_URL
+      const previewUrl = buildPreviewUrl(id, port, resolved.sandboxHost)
+      const base = resolved.baseUrl
       const encodedId = encodeURIComponent(id)
       const requestJson = async <T>(
         path: string,
@@ -433,7 +443,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
     // non-resuming static equivalent. Trusted control-plane endpoint, API-key
     // auth, bounded by `limit` and a request timeout.
     async networkLog(id, opts) {
-      const base = config.baseUrl ?? DEFAULT_BASE_URL
+      const base = resolved.baseUrl
       const url = new URL(`${base}/sandboxes/${encodeURIComponent(id)}/network`)
       if (opts.limit !== undefined)
         url.searchParams.set("limit", String(opts.limit))

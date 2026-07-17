@@ -5,9 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { DateRangeFilter, parseDateInput } from "./date-range-filter"
 
 describe("DateRangeFilter", () => {
+  // The calendar opens on the current month (`new Date()`), and the inverted-range
+  // test clicks hardcoded June 2026 days. Pin the clock to mid-June 2026 so those
+  // days always render, regardless of when the suite runs. Fake only `Date` —
+  // userEvent relies on real timers.
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] })
-    vi.setSystemTime(new Date("2026-06-15T12:00:00.000Z"))
+    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"))
   })
 
   afterEach(() => {
