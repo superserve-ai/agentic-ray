@@ -27,6 +27,7 @@ apps/
   ui-docs/                 # UI component docs (Vite)
 packages/
   cli/                     # TypeScript CLI (@superserve/cli)
+  pi/                      # Pi sandbox extension (@superserve/pi)
   python-sdk/              # Python SDK (superserve on PyPI)
   sdk/                     # TypeScript SDK (@superserve/sdk)
   ui/                      # Shared UI components (@superserve/ui)
@@ -62,6 +63,11 @@ For more (per-package targets, dependency management, etc.), see [CONTRIBUTING.m
 
 - TypeScript: [`@superserve/sdk`](https://www.npmjs.com/package/@superserve/sdk) — `bun add @superserve/sdk`
 - Python: [`superserve`](https://pypi.org/project/superserve/) — `uv add superserve`
+
+## Agent integrations
+
+- Pi: [`@superserve/pi`](./packages/pi) — routes Pi's shell and filesystem
+  tools into a Superserve microVM with fail-closed execution
 
 Full reference at [docs.superserve.ai](https://docs.superserve.ai/?utm_source=github&utm_medium=readme).
 

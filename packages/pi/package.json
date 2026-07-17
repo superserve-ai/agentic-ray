@@ -1,0 +1,67 @@
+{
+  "name": "@superserve/pi",
+  "version": "0.1.0",
+  "description": "Run Pi coding-agent tools in isolated Superserve sandboxes",
+  "keywords": [
+    "agents",
+    "ai",
+    "firecracker",
+    "pi-package",
+    "sandbox",
+    "superserve"
+  ],
+  "homepage": "https://superserve.ai?utm_source=npm&utm_medium=package_meta",
+  "bugs": {
+    "url": "https://github.com/superserve-ai/superserve/issues"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/superserve-ai/superserve.git",
+    "directory": "packages/pi"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "bunx oxlint",
+    "format": "bunx oxfmt --write",
+    "format:check": "bunx oxfmt --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@superserve/sdk": "^0.8.0"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.80.9",
+    "@superserve/typescript-config": "workspace:*",
+    "@types/node": "^25.5.2",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.80.9 <0.81.0"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "pi": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  }
+}
