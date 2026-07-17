@@ -2,10 +2,12 @@ import type { User } from "@supabase/supabase-js"
 
 export const PLATFORM_SANDBOX_READ_PERMISSION = "platform:sandbox:read"
 export const PLATFORM_TEMPLATE_READ_PERMISSION = "platform:template:read"
+export const PLATFORM_ACTIVITY_READ_PERMISSION = "platform:activity:read"
 export const PLATFORM_TEAMS_READ_PERMISSION = "platform:teams:read"
 export type PlatformImpersonationReadScope =
   | typeof PLATFORM_SANDBOX_READ_PERMISSION
   | typeof PLATFORM_TEMPLATE_READ_PERMISSION
+  | typeof PLATFORM_ACTIVITY_READ_PERMISSION
 
 const DEFAULT_STAFF_DOMAIN = "superserve.ai"
 
@@ -65,6 +67,12 @@ export function canReadPlatformTemplates(
   return hasPermission(user, PLATFORM_TEMPLATE_READ_PERMISSION)
 }
 
+export function canReadPlatformActivity(
+  user: User | null | undefined,
+): boolean {
+  return hasPermission(user, PLATFORM_ACTIVITY_READ_PERMISSION)
+}
+
 export function canReadPlatformTeams(user: User | null | undefined): boolean {
   return (
     isGoogleStaffUser(user) &&
@@ -82,6 +90,9 @@ export function platformImpersonationReadScopes(
   }
   if (canReadPlatformTemplates(user)) {
     scopes.push(PLATFORM_TEMPLATE_READ_PERMISSION)
+  }
+  if (canReadPlatformActivity(user)) {
+    scopes.push(PLATFORM_ACTIVITY_READ_PERMISSION)
   }
 
   return scopes

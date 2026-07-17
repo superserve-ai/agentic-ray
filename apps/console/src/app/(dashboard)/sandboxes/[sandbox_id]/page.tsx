@@ -8,6 +8,7 @@ import { usePostHog } from "posthog-js/react"
 import { useState } from "react"
 
 import { ErrorState } from "@/components/error-state"
+import { useQueryScope } from "@/components/query-provider"
 import { ActivitySection } from "@/components/sandboxes/activity-section"
 import { DeleteSandboxDialog } from "@/components/sandboxes/delete-sandbox-dialog"
 import { FilesSection } from "@/components/sandboxes/files-section"
@@ -135,6 +136,7 @@ export default function SandboxDetailPage() {
   const router = useRouter()
   const posthog = usePostHog()
   const sandboxId = params.sandbox_id
+  const queryScope = useQueryScope()
 
   const { data: sandbox, isPending, error, refetch } = useSandbox(sandboxId)
   const pauseMutation = usePauseSandbox()
@@ -144,8 +146,13 @@ export default function SandboxDetailPage() {
 
   const network = useSandboxNetwork(sandboxId)
 
-  const { data: activity, isPending: activityPending } = useQuery({
-    queryKey: auditLogKeys.bySandbox(sandboxId),
+  const {
+    data: activity,
+    isPending: activityPending,
+    error: activityError,
+    refetch: refetchActivity,
+  } = useQuery({
+    queryKey: [...auditLogKeys.bySandbox(sandboxId), queryScope],
     queryFn: () => listActivityBySandboxAction(sandboxId),
     enabled: !!sandboxId,
     staleTime: 30_000,
@@ -267,7 +274,12 @@ export default function SandboxDetailPage() {
         <PreviewSection sandbox={sandbox} onStart={handleStart} />
 
         {/* Layer 7: activity (history, lower priority) */}
-        <ActivitySection activity={activity} isPending={activityPending} />
+        <ActivitySection
+          activity={activity}
+          isPending={activityPending}
+          error={activityError}
+          onRetry={() => void refetchActivity()}
+        />
 
         {/* Layer 8: unified egress log (connections + secret requests) */}
         <NetworkLogTable

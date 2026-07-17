@@ -1,12 +1,26 @@
 "use server"
 
+import type { User } from "@supabase/supabase-js"
+
+import { getImpersonationContext } from "@/lib/admin/impersonation"
+import { canReadPlatformActivity } from "@/lib/admin/permissions"
 import { resolveActiveTeam } from "@/lib/api/active-team"
 import type { TeamMembership } from "@/lib/api/team-directory"
 import { cellFor } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
-async function getTeam(userId: string): Promise<TeamMembership | null> {
-  return resolveActiveTeam(userId).catch(() => null)
+async function getTeam(user: User): Promise<TeamMembership | null> {
+  const impersonation = await getImpersonationContext(user)
+  if (impersonation) {
+    if (!canReadPlatformActivity(user)) {
+      throw new Error(
+        "Forbidden: platform activity read access required while viewing another team",
+      )
+    }
+    return { teamId: impersonation.teamId, region: impersonation.region }
+  }
+
+  return resolveActiveTeam(user.id).catch(() => null)
 }
 
 export async function listActivityBySandboxAction(
@@ -19,7 +33,7 @@ export async function listActivityBySandboxAction(
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const team = await getTeam(user.id)
+  const team = await getTeam(user)
   if (!team) return []
 
   const admin = cellFor(team.region).createAdminClient()

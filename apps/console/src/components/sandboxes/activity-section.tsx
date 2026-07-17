@@ -12,6 +12,7 @@ import {
 } from "@superserve/ui"
 
 import { EmptyState } from "@/components/empty-state"
+import { ErrorState } from "@/components/error-state"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import type { ActivityResponse } from "@/lib/api/types"
 import { formatTime } from "@/lib/format"
@@ -20,9 +21,16 @@ import { ACTIVITY_STATUS_VARIANT, formatDuration } from "@/lib/sandbox-utils"
 interface ActivitySectionProps {
   activity: ActivityResponse[] | undefined
   isPending: boolean
+  error: Error | null
+  onRetry?: () => void
 }
 
-export function ActivitySection({ activity, isPending }: ActivitySectionProps) {
+export function ActivitySection({
+  activity,
+  isPending,
+  error,
+  onRetry,
+}: ActivitySectionProps) {
   return (
     <>
       <div className="flex h-10 items-center border-b border-border px-4">
@@ -41,6 +49,14 @@ export function ActivitySection({ activity, isPending }: ActivitySectionProps) {
               <div className="h-3 w-12 animate-pulse bg-muted/20" />
             </div>
           ))}
+        </div>
+      ) : error ? (
+        <div className="border-b border-border">
+          <ErrorState
+            title="Unable to load activity"
+            message={error.message}
+            onRetry={onRetry}
+          />
         </div>
       ) : !activity || activity.length === 0 ? (
         <div className="border-b border-border py-10">
