@@ -47,7 +47,11 @@ describe("impersonation key rows", () => {
       "admin-1",
       "team-1",
       "use",
-      ["platform:sandbox:read", "platform:template:read"],
+      [
+        "platform:sandbox:read",
+        "platform:template:read",
+        "platform:activity:read",
+      ],
       7,
     )
 
@@ -56,7 +60,11 @@ describe("impersonation key rows", () => {
     expect(upserts[0]).toMatchObject({
       team_id: "team-1",
       name: IMPERSONATION_KEY_NAME,
-      scopes: ["platform:sandbox:read", "platform:template:read"],
+      scopes: [
+        "platform:sandbox:read",
+        "platform:template:read",
+        "platform:activity:read",
+      ],
       created_by: "admin-1",
       revoked_at: null,
     })

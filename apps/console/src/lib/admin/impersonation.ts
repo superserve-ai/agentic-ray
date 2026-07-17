@@ -134,8 +134,8 @@ export async function readImpersonationContext(): Promise<ImpersonationContext |
 
 /**
  * The team the current request should act as: the target team only when the
- * user has platform sandbox read access AND a valid impersonation cookie is
- * present; otherwise null (callers fall back to the user's own team).
+ * user has a supported platform read permission and a valid impersonation
+ * cookie is present; otherwise null (callers fall back to the user's own team).
  */
 export async function getImpersonationTeamId(
   user: User | null | undefined,

@@ -266,6 +266,7 @@ describe("proxy-auth impersonation", () => {
     vi.mocked(platformImpersonationReadScopes).mockReturnValue([
       "platform:sandbox:read",
       "platform:template:read",
+      "platform:activity:read",
     ])
     vi.mocked(ensureImpersonationKeyRow).mockResolvedValue(
       "ss_live_impersonation",
@@ -281,7 +282,11 @@ describe("proxy-auth impersonation", () => {
       "admin",
       "team-1",
       "use",
-      ["platform:sandbox:read", "platform:template:read"],
+      [
+        "platform:sandbox:read",
+        "platform:template:read",
+        "platform:activity:read",
+      ],
       expect.any(Number),
     )
   })
@@ -317,7 +322,7 @@ describe("proxy-auth impersonation", () => {
         "team-1",
       ),
     ).rejects.toThrow(
-      /impersonation requires platform sandbox or template read access/,
+      /impersonation requires a supported platform read permission/,
     )
   })
 })
