@@ -1,0 +1,88 @@
+---
+title: "Agno"
+sidebarTitle: Agno
+description: Run code from Agno agents in isolated Superserve sandboxes with SuperserveTools.
+icon: "/logos/integrations/agno.svg"
+---
+
+Agno includes a `SuperserveTools` toolkit for running agent-generated code in isolated cloud sandboxes. The sandbox persists across tool calls, so files and installed packages remain available throughout the session.
+
+<Note>
+  `SuperserveTools` is available in Agno 2.7.4 and later.
+</Note>
+
+## Setup
+
+Install Agno, the OpenAI model provider, and the Superserve SDK:
+
+```bash
+uv pip install -U "agno>=2.7.4" openai superserve
+export OPENAI_API_KEY=sk-...
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+See [API keys](/api-key) to create a Superserve API key.
+
+## Run an Agno agent in a sandbox
+
+`SuperserveTools` gives the agent tools for Python and shell execution, file operations, sandbox inspection, preview URLs, and lifecycle management.
+
+```python
+from agno.agent import Agent
+from agno.models.openai import OpenAIResponses
+from agno.tools.superserve import SuperserveTools
+
+agent = Agent(
+    name="Sandboxed Python Agent",
+    model=OpenAIResponses(id="gpt-5.5"),
+    tools=[SuperserveTools(timeout=600)],
+    instructions=[
+        "Execute requested code with run_python_code or run_command.",
+        "Return the code and its actual execution output.",
+    ],
+)
+
+agent.print_response(
+    "Generate the first 10 Fibonacci numbers, then calculate their sum and average."
+)
+```
+
+The toolkit creates a Python-ready sandbox on the first tool call. With `persistent=True`, the default, Agno stores its ID in session state and reuses the same sandbox across tool calls and runs in that session. Sync and async agents use the same sandbox automatically.
+
+## Configure the sandbox
+
+Pass Superserve sandbox options directly to the toolkit:
+
+```python
+tools = [
+    SuperserveTools(
+        template="superserve/node-22",
+        timeout=600,
+        auto_delete_seconds=3600,
+        secrets={"OPENAI_API_KEY": "openai-prod"},
+        enable_pause_sandbox=True,
+        enable_resume_sandbox=True,
+    )
+]
+```
+
+| Option | Purpose |
+| --- | --- |
+| `template` | Select the sandbox runtime. The default is `superserve/code-interpreter`. |
+| `sandbox_id` | Connect the toolkit to an existing sandbox. |
+| `timeout` | Set the sandbox lifetime before it is automatically stopped. |
+| `auto_delete_seconds` | Set a hard time-to-live after which the sandbox is deleted. |
+| `secrets` | Bind [team secrets](/secrets/binding) without exposing their values in the sandbox. |
+| `enable_pause_sandbox` and `enable_resume_sandbox` | Let the agent pause and resume its current sandbox. |
+| `all` | Enable every toolkit function, including opt-in lifecycle and secret tools. |
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Agno toolkit reference" icon="book" href="https://docs.agno.com/tools/toolkits/others/superserve">
+    Review every toolkit option and function.
+  </Card>
+  <Card title="Agno cookbook example" icon="github" href="https://github.com/agno-agi/agno/blob/main/cookbook/91_tools/superserve_tools.py">
+    Open the runnable example in the Agno repository.
+  </Card>
+</CardGroup>
