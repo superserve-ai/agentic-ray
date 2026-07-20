@@ -148,6 +148,27 @@ describe("Commands.spawn", () => {
     })
   })
 
+  it("splits oversized stdin writes into capped frames", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    const commands = new Commands(makeDeps())
+
+    const session = await commands.spawn("cat")
+    const ws = last()
+    ws.sent.length = 0 // drop the start frame
+
+    session.stdin.write("x".repeat(100 * 1024))
+
+    // 100 KiB at a 32 KiB cap: 32 + 32 + 32 + 4.
+    expect(ws.sent.length).toBe(4)
+    let total = 0
+    for (const frame of ws.sent as Uint8Array[]) {
+      expect(frame[0]).toBe(CH_STDIN)
+      expect(frame.length).toBeLessThanOrEqual(32 * 1024 + 1)
+      total += frame.length - 1
+    }
+    expect(total).toBe(100 * 1024)
+  })
+
   it("decodes a multi-byte UTF-8 rune split across frames", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket)
     const commands = new Commands(makeDeps())

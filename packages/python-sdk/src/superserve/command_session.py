@@ -27,6 +27,10 @@ _CH_STDIN = 0
 _CH_STDOUT = 1
 _CH_STDERR = 2
 
+# Cap on a single stdin frame; larger writes are split transparently so no
+# frame ever approaches the data plane's per-message limit.
+_STDIN_CHUNK_BYTES = 32 * 1024
+
 
 def _retrieve_exception(fut: "asyncio.Future[Any]") -> None:
     # Touch the result so asyncio doesn't warn when it's never awaited.
@@ -109,7 +113,9 @@ class AsyncStdin:
         if not self._is_open():
             return
         raw = data.encode() if isinstance(data, str) else bytes(data)
-        await self._ws.send(bytes([_CH_STDIN]) + raw)
+        for off in range(0, len(raw), _STDIN_CHUNK_BYTES):
+            chunk = raw[off : off + _STDIN_CHUNK_BYTES]
+            await self._ws.send(bytes([_CH_STDIN]) + chunk)
 
     async def close(self) -> None:
         """Close stdin, signalling EOF."""
@@ -200,9 +206,26 @@ class AsyncCommandSession:
             # settled and the socket is always closed — never a hang or a leak.
             if not self._result.done():
                 self._flush()
+                # Surface the server's close code/reason — an unexplained drop
+                # is the hardest failure to debug. 1009 means a single frame
+                # exceeded the server's message size limit.
+                code = getattr(self._ws, "close_code", None)
+                reason = getattr(self._ws, "close_reason", None)
+                if code == 1009:
+                    detail = (
+                        "a message exceeded the server's size limit; send "
+                        "large payloads via the files API or split stdin writes"
+                    )
+                elif reason:
+                    detail = reason
+                elif code is not None:
+                    detail = f"close code {code}"
+                else:
+                    detail = "connection dropped"
                 self._result.set_exception(
                     SandboxError(
-                        "exec/connect: connection closed before the command finished"
+                        "exec/connect: connection closed before the command "
+                        f"finished ({detail})"
                     )
                 )
             with contextlib.suppress(Exception):

@@ -142,6 +142,31 @@ async def test_stdin_and_control_frames(monkeypatch):
     await session.close()
 
 
+async def test_stdin_write_chunks_large_payloads(monkeypatch):
+    conns: list[FakeConnection] = []
+
+    async def connect(uri, subprotocols=None):
+        c = FakeConnection(uri, subprotocols)
+        conns.append(c)
+        return c
+
+    patch_connect(monkeypatch, connect)
+
+    session = await spawn_command(make_deps(), "cat")
+    c = conns[-1]
+    c.sent.clear()  # drop the start frame
+
+    await session.stdin.write(b"x" * (100 * 1024))
+
+    # 100 KiB at a 32 KiB cap: 32 + 32 + 32 + 4.
+    assert len(c.sent) == 4
+    assert all(f[0] == 0x00 for f in c.sent)
+    assert all(len(f) <= 32 * 1024 + 1 for f in c.sent)
+    assert b"".join(bytes(f[1:]) for f in c.sent) == b"x" * (100 * 1024)
+
+    await session.close()
+
+
 async def test_decodes_multibyte_rune_split_across_frames(monkeypatch):
     conns: list[FakeConnection] = []
 

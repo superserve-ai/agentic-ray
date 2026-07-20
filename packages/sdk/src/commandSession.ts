@@ -23,6 +23,10 @@ const CH_STDIN = 0x00
 const CH_STDOUT = 0x01
 const CH_STDERR = 0x02
 
+// Cap on a single stdin frame; larger writes are split transparently so no
+// frame ever approaches the data plane's per-message limit.
+const STDIN_CHUNK_BYTES = 32 * 1024
+
 const encoder = new TextEncoder()
 
 /** @internal Connection inputs, satisfied by Commands' own deps. */
@@ -140,10 +144,13 @@ class Session implements CommandSession {
       write: (data) => {
         if (ws.readyState !== WebSocket.OPEN) return
         const bytes = typeof data === "string" ? encoder.encode(data) : data
-        const frame = new Uint8Array(bytes.length + 1)
-        frame[0] = CH_STDIN
-        frame.set(bytes, 1)
-        ws.send(frame)
+        for (let off = 0; off < bytes.length; off += STDIN_CHUNK_BYTES) {
+          const chunk = bytes.subarray(off, off + STDIN_CHUNK_BYTES)
+          const frame = new Uint8Array(chunk.length + 1)
+          frame[0] = CH_STDIN
+          frame.set(chunk, 1)
+          ws.send(frame)
+        }
       },
       close: () => {
         if (ws.readyState === WebSocket.OPEN) {
@@ -153,7 +160,7 @@ class Session implements CommandSession {
     }
 
     ws.addEventListener("message", (ev) => this._onMessage(ev, options))
-    ws.addEventListener("close", () => this._onClose())
+    ws.addEventListener("close", (ev) => this._onClose(ev))
 
     const signal = options.signal
     if (signal) {
@@ -229,10 +236,17 @@ class Session implements CommandSession {
     if (ev.finished) this._finish(ev.exit_code ?? 0)
   }
 
-  private _onClose(): void {
+  private _onClose(ev: CloseEvent): void {
+    // Surface the server's close code/reason — an unexplained drop is the
+    // hardest failure to debug. 1009 means a single frame exceeded the
+    // server's message size limit.
+    const detail =
+      ev.code === 1009
+        ? "a message exceeded the server's size limit; send large payloads via the files API or split stdin writes"
+        : ev.reason || `close code ${ev.code}`
     this._fail(
       new SandboxError(
-        "exec/connect: connection closed before the command finished",
+        `exec/connect: connection closed before the command finished (${detail})`,
       ),
     )
   }
