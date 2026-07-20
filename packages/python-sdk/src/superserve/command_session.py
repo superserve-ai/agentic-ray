@@ -27,8 +27,10 @@ _CH_STDIN = 0
 _CH_STDOUT = 1
 _CH_STDERR = 2
 
-# Cap on a single stdin frame; larger writes are split transparently so no
-# frame ever approaches the data plane's per-message limit.
+# Cap on a single stdin frame; larger writes are split transparently. Must
+# stay under the smallest per-message limit enforced by any deployed server
+# (64 KiB historically; newer servers allow more) — raising it can break
+# sessions against servers that still enforce the older limit.
 _STDIN_CHUNK_BYTES = 32 * 1024
 
 
@@ -113,9 +115,15 @@ class AsyncStdin:
         if not self._is_open():
             return
         raw = data.encode() if isinstance(data, str) else bytes(data)
+        # memoryview slices avoid copying the payload a second time; each
+        # frame is assembled once, directly from the source bytes.
+        view = memoryview(raw)
         for off in range(0, len(raw), _STDIN_CHUNK_BYTES):
-            chunk = raw[off : off + _STDIN_CHUNK_BYTES]
-            await self._ws.send(bytes([_CH_STDIN]) + chunk)
+            chunk = view[off : off + _STDIN_CHUNK_BYTES]
+            frame = bytearray(1 + len(chunk))
+            frame[0] = _CH_STDIN
+            frame[1:] = chunk
+            await self._ws.send(frame)
 
     async def close(self) -> None:
         """Close stdin, signalling EOF."""
@@ -213,8 +221,9 @@ class AsyncCommandSession:
                 reason = getattr(self._ws, "close_reason", None)
                 if code == 1009:
                     detail = (
-                        "a message exceeded the server's size limit; send "
-                        "large payloads via the files API or split stdin writes"
+                        "a message exceeded the server's size limit — usually "
+                        "an oversized command string; keep the command small "
+                        "and send bulk data via stdin or the files API"
                     )
                 elif reason:
                     detail = reason

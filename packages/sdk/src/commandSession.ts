@@ -23,9 +23,12 @@ const CH_STDIN = 0x00
 const CH_STDOUT = 0x01
 const CH_STDERR = 0x02
 
-// Cap on a single stdin frame; larger writes are split transparently so no
-// frame ever approaches the data plane's per-message limit.
-const STDIN_CHUNK_BYTES = 32 * 1024
+// Cap on a single stdin frame; larger writes are split transparently. Must
+// stay under the smallest per-message limit enforced by any deployed server
+// (64 KiB historically; newer servers allow more) — raising it can break
+// sessions against servers that still enforce the older limit.
+// Exported for tests.
+export const STDIN_CHUNK_BYTES = 32 * 1024
 
 const encoder = new TextEncoder()
 
@@ -242,7 +245,7 @@ class Session implements CommandSession {
     // server's message size limit.
     const detail =
       ev.code === 1009
-        ? "a message exceeded the server's size limit; send large payloads via the files API or split stdin writes"
+        ? "a message exceeded the server's size limit — usually an oversized command string; keep the command small and send bulk data via stdin or the files API"
         : ev.reason || `close code ${ev.code}`
     this._fail(
       new SandboxError(

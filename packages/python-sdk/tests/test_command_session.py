@@ -8,7 +8,11 @@ import json
 import pytest
 import websockets
 
-from superserve.command_session import AsyncSpawnDeps, spawn_command
+from superserve.command_session import (
+    _STDIN_CHUNK_BYTES,
+    AsyncSpawnDeps,
+    spawn_command,
+)
 from superserve.errors import SandboxError
 
 _EOF = object()
@@ -156,13 +160,13 @@ async def test_stdin_write_chunks_large_payloads(monkeypatch):
     c = conns[-1]
     c.sent.clear()  # drop the start frame
 
-    await session.stdin.write(b"x" * (100 * 1024))
+    payload = b"x" * (3 * _STDIN_CHUNK_BYTES + 100)
+    await session.stdin.write(payload)
 
-    # 100 KiB at a 32 KiB cap: 32 + 32 + 32 + 4.
-    assert len(c.sent) == 4
+    assert len(c.sent) == -(-len(payload) // _STDIN_CHUNK_BYTES)
     assert all(f[0] == 0x00 for f in c.sent)
-    assert all(len(f) <= 32 * 1024 + 1 for f in c.sent)
-    assert b"".join(bytes(f[1:]) for f in c.sent) == b"x" * (100 * 1024)
+    assert all(len(f) <= _STDIN_CHUNK_BYTES + 1 for f in c.sent)
+    assert b"".join(bytes(f[1:]) for f in c.sent) == payload
 
     await session.close()
 

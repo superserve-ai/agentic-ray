@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { Commands, type CommandsDeps } from "../src/commands.js"
+import { STDIN_CHUNK_BYTES } from "../src/commandSession.js"
 import { SandboxError } from "../src/errors.js"
 
 const CH_STDIN = 0x00
@@ -156,17 +157,17 @@ describe("Commands.spawn", () => {
     const ws = last()
     ws.sent.length = 0 // drop the start frame
 
-    session.stdin.write("x".repeat(100 * 1024))
+    const payloadSize = 3 * STDIN_CHUNK_BYTES + 100
+    session.stdin.write("x".repeat(payloadSize))
 
-    // 100 KiB at a 32 KiB cap: 32 + 32 + 32 + 4.
-    expect(ws.sent.length).toBe(4)
+    expect(ws.sent.length).toBe(Math.ceil(payloadSize / STDIN_CHUNK_BYTES))
     let total = 0
     for (const frame of ws.sent as Uint8Array[]) {
       expect(frame[0]).toBe(CH_STDIN)
-      expect(frame.length).toBeLessThanOrEqual(32 * 1024 + 1)
+      expect(frame.length).toBeLessThanOrEqual(STDIN_CHUNK_BYTES + 1)
       total += frame.length - 1
     }
-    expect(total).toBe(100 * 1024)
+    expect(total).toBe(payloadSize)
   })
 
   it("decodes a multi-byte UTF-8 rune split across frames", async () => {

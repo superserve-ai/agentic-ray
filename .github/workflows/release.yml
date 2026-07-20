@@ -45,10 +45,12 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
+      # Bump package.json + the User-Agent constant together (they must match).
       - name: Bump version
         run: |
           cd packages/sdk
           node -e "const fs=require('fs'); const p=require('./package.json'); p.version='${{ inputs.version }}'; fs.writeFileSync('./package.json', JSON.stringify(p, null, 2) + '\n');"
+          node -e "const fs=require('fs'); const f='./src/http.ts'; const s=fs.readFileSync(f,'utf8').replace(/const SDK_VERSION = \"[^\"]+\"/, 'const SDK_VERSION = \"${{ inputs.version }}\"'); fs.writeFileSync(f, s);"
 
       - name: Build
         run: bunx turbo run build --filter=@superserve/sdk
@@ -78,12 +80,14 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v4
 
-      # Bump pyproject + __version__ together (they must match).
+      # Bump pyproject + __version__ + the User-Agent constant together (they
+      # must match).
       - name: Bump version
         run: |
           cd packages/python-sdk
           python3 -c "import re; p=open('pyproject.toml').read(); p=re.sub(r'version = \"[^\"]+\"', 'version = \"${{ inputs.version }}\"', p, count=1); open('pyproject.toml','w').write(p)"
           python3 -c "import re; p=open('src/superserve/__init__.py').read(); p=re.sub(r'__version__ = \"[^\"]+\"', '__version__ = \"${{ inputs.version }}\"', p, count=1); open('src/superserve/__init__.py','w').write(p)"
+          python3 -c "import re; p=open('src/superserve/_http.py').read(); p=re.sub(r'SDK_VERSION = \"[^\"]+\"', 'SDK_VERSION = \"${{ inputs.version }}\"', p, count=1); open('src/superserve/_http.py','w').write(p)"
 
       # uv workspace puts artifacts in the repo-root dist/.
       - name: Build

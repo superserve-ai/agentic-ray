@@ -7,7 +7,9 @@ How to publish new versions of the Superserve SDKs.
 From the repo root:
 
 ```bash
-# 1. Bump packages/sdk/package.json version
+# 1. Bump the version in BOTH places (keep them identical):
+#    - packages/sdk/package.json
+#    - packages/sdk/src/http.ts → SDK_VERSION (feeds the User-Agent)
 # 2. Build + publish
 bunx turbo run build --filter=@superserve/sdk
 cd packages/sdk
@@ -24,10 +26,11 @@ cd packages/sdk && bun publish --access public
 
 ## Python SDK to PyPI
 
-**Important:** `uv build` must run from the **repo root** (uv workspaces put artifacts in root `dist/`). Bump the version in two places (keep them identical):
+**Important:** `uv build` must run from the **repo root** (uv workspaces put artifacts in root `dist/`). Bump the version in three places (keep them identical):
 
 1. `packages/python-sdk/pyproject.toml` → `version = "..."`
 2. `packages/python-sdk/src/superserve/__init__.py` → `__version__ = "..."`
+3. `packages/python-sdk/src/superserve/_http.py` → `SDK_VERSION = "..."` (feeds the User-Agent)
 
 ```bash
 uv build --package superserve
