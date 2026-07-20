@@ -171,6 +171,40 @@ async def test_stdin_write_chunks_large_payloads(monkeypatch):
     await session.close()
 
 
+async def test_concurrent_writes_do_not_interleave(monkeypatch):
+    conns: list[FakeConnection] = []
+
+    async def connect(uri, subprotocols=None):
+        c = FakeConnection(uri, subprotocols)
+        conns.append(c)
+        return c
+
+    patch_connect(monkeypatch, connect)
+
+    session = await spawn_command(make_deps(), "cat")
+    c = conns[-1]
+
+    # Yield control on every send so unserialized chunk loops would interleave.
+    real_send = c.send
+
+    async def yielding_send(data):
+        await asyncio.sleep(0)
+        await real_send(data)
+
+    c.send = yielding_send
+    c.sent.clear()  # drop the start frame
+
+    a = b"a" * (2 * _STDIN_CHUNK_BYTES + 1)
+    b = b"b" * (2 * _STDIN_CHUNK_BYTES + 1)
+    await asyncio.gather(session.stdin.write(a), session.stdin.write(b))
+
+    stream = b"".join(bytes(f[1:]) for f in c.sent)
+    # Each payload must land contiguously, in either order.
+    assert stream in (a + b, b + a)
+
+    await session.close()
+
+
 async def test_decodes_multibyte_rune_split_across_frames(monkeypatch):
     conns: list[FakeConnection] = []
 

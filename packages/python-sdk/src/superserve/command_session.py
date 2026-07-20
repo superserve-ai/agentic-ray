@@ -109,6 +109,10 @@ class AsyncStdin:
     def __init__(self, ws: Any, is_open: Callable[[], bool]) -> None:
         self._ws = ws
         self._is_open = is_open
+        # Chunked sends await per chunk; the lock keeps concurrent write()
+        # calls from interleaving their chunks on the wire (the server
+        # forwards each frame to stdin with no reassembly).
+        self._lock = asyncio.Lock()
 
     async def write(self, data: Union[str, bytes]) -> None:
         """Write to stdin. ``str`` is UTF-8 encoded; ``bytes`` is sent as-is."""
@@ -118,18 +122,20 @@ class AsyncStdin:
         # memoryview slices avoid copying the payload a second time; each
         # frame is assembled once, directly from the source bytes.
         view = memoryview(raw)
-        for off in range(0, len(raw), _STDIN_CHUNK_BYTES):
-            chunk = view[off : off + _STDIN_CHUNK_BYTES]
-            frame = bytearray(1 + len(chunk))
-            frame[0] = _CH_STDIN
-            frame[1:] = chunk
-            await self._ws.send(frame)
+        async with self._lock:
+            for off in range(0, len(raw), _STDIN_CHUNK_BYTES):
+                chunk = view[off : off + _STDIN_CHUNK_BYTES]
+                frame = bytearray(1 + len(chunk))
+                frame[0] = _CH_STDIN
+                frame[1:] = chunk
+                await self._ws.send(frame)
 
     async def close(self) -> None:
         """Close stdin, signalling EOF."""
         if not self._is_open():
             return
-        await self._ws.send(json.dumps({"type": "stdin_close"}))
+        async with self._lock:
+            await self._ws.send(json.dumps({"type": "stdin_close"}))
 
 
 class AsyncCommandSession:
