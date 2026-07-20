@@ -78,9 +78,9 @@ export interface SandboxCreateOptions extends ConnectionOptions {
   secrets?: Record<string, string>
   network?: NetworkConfig
   /**
-   * Opt into explicit preview publication. Both values require a published
-   * port; `private` additionally requires that port's token. Omit to preserve
-   * legacy all-port routing for older clients.
+   * Opt into explicit preview publication and choose the default access for
+   * newly published ports. Each port can override it when published. Omit to
+   * use the backend's strict `public` default.
    */
   previewAccess?: PreviewAccessPolicy
 }
@@ -103,18 +103,26 @@ export interface SandboxUpdateOptions {
    * `undefined` leaves it unchanged.
    */
   timeoutSeconds?: number | null
-  /** Move the sandbox onto a strict public/private preview policy. */
+  /** Set the default access for newly published ports. Existing ports keep theirs. */
   previewAccess?: PreviewAccessPolicy
 }
 
 export interface PublishedPreviewPort {
   port: number
   tokenVersion: number
+  /** This port's routing mode. Independent of sibling published ports. */
+  access: PreviewAccessPolicy
 }
 
 export interface PreviewPortList {
+  /** Default access applied when a new port is published without an override. */
   previewAccess: PreviewAccess
   ports: PublishedPreviewPort[]
+}
+
+export interface PublishPreviewPortOptions {
+  /** Explicit mode for this port. Omit to use the sandbox default for new ports. */
+  access?: PreviewAccessPolicy
 }
 
 export interface PreviewTokenOptions {
@@ -136,6 +144,9 @@ export interface PreviewToken {
   header: string
   queryParam: string
   tokenVersion: number
+  /** The published port's current routing mode. */
+  access: PreviewAccessPolicy
+  /** Sandbox default for newly published ports. */
   previewAccess: PreviewAccess
   expiresAt?: Date
 }

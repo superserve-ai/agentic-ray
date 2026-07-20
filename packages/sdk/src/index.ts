@@ -46,6 +46,7 @@ export type {
   PreviewPortList,
   PreviewToken,
   PreviewTokenOptions,
+  PublishPreviewPortOptions,
   PublishedPreviewPort,
   ProviderShortcut,
   ProxyAuditEvent,

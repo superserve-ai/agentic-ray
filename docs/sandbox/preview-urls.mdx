@@ -11,15 +11,22 @@ intend to expose.
 
 ## Access policies
 
-| Policy          | Which ports are reachable?      | Credential required? |
-| --------------- | ------------------------------- | -------------------- |
-| `public`        | Explicitly published ports only | No                   |
-| `private`       | Explicitly published ports only | Yes, per port        |
-| `legacy_public` | Every listening port            | No                   |
+The sandbox's `previewAccess` / `preview_access` selects strict publication and
+sets the default access for each newly published port:
 
-`legacy_public` exists only so sandboxes created by older clients keep working.
-New clients should explicitly choose `public` or `private`; the compatibility
-mode cannot be selected through create or update APIs.
+| Sandbox policy  | Which ports are reachable?      | Default for a new port       |
+| --------------- | ------------------------------- | ---------------------------- |
+| `public`        | Explicitly published ports only | Public, no credential        |
+| `private`       | Explicitly published ports only | Private, credential required |
+| `legacy_public` | Every listening port            | Not applicable               |
+
+Every published port stores its own `public` or `private` access mode. Changing
+the sandbox default does not rewrite existing ports, so public and private ports
+can coexist in one sandbox.
+
+`legacy_public` exists only for sandboxes created before the publication
+migration. New sandboxes default to strict `public` when the field is omitted.
+The compatibility mode cannot be selected through create or update APIs.
 
 <Warning>
   Moving a legacy sandbox to `public` or `private` immediately closes every port
@@ -27,7 +34,7 @@ mode cannot be selected through create or update APIs.
   policy if you need a seamless transition.
 </Warning>
 
-## Create a strict sandbox
+## Choose the sandbox default
 
 <CodeGroup>
 ```typescript TypeScript
@@ -46,9 +53,9 @@ sandbox = Sandbox.create(
 
 </CodeGroup>
 
-Use `public` when the published service is intentionally internet-accessible.
-Use `private` when every request must carry a per-port credential. You can
-change the policy later with `update`:
+Use `public` when new ports should be internet-accessible by default. Use
+`private` when new ports should require a credential by default. You can change
+the default later with `update`; already-published ports keep their own mode:
 
 <CodeGroup>
 ```typescript TypeScript
@@ -63,13 +70,14 @@ sandbox.update(preview_access="private")
 
 ## Publish a port
 
-Start the service, then publish its port. Publication is idempotent and keeps
-the port's current token generation when repeated.
+Start the service, then publish its port. Omit the access option to use the
+sandbox default for a new port. An omitted option preserves the mode of an
+already-published port; pass an explicit mode to override just that port.
 
 <CodeGroup>
 ```typescript TypeScript
 await sandbox.commands.spawn("npm run dev -- --host 0.0.0.0")
-await sandbox.publishPreviewPort(3000)
+await sandbox.publishPreviewPort(3000, { access: "private" })
 
 const url = sandbox.getPreviewUrl(3000)
 
@@ -78,7 +86,7 @@ const url = sandbox.getPreviewUrl(3000)
 ```python Python
 # AsyncSandbox shown because spawn is an async session API.
 await sandbox.commands.spawn("npm run dev -- --host 0.0.0.0")
-await sandbox.publish_preview_port(3000)
+await sandbox.publish_preview_port(3000, access="private")
 
 url = sandbox.get_preview_url(3000)
 ````
@@ -90,10 +98,10 @@ publish the port or add credentials. Ports must be integers from `1024` through
 `65535`.
 
 List the current server-side publication state with `listPreviewPorts()` /
-`list_preview_ports()`. The result includes the effective policy and every
-published port, but never includes tokens.
+`list_preview_ports()`. The result includes the sandbox default and every
+published port's `access`, but never includes tokens.
 
-## Authenticate a private preview
+## Authenticate a private port
 
 Private preview credentials are scoped to one published port. A token for port
 `3000` cannot open port `8080` on the same sandbox.
@@ -190,11 +198,11 @@ credential.
 
 ## MCP and console
 
-The console's Preview panel uses the same server-backed published-port list.
-For private sandboxes it mints a signed browser URL without displaying the
-credential.
+The console's Preview panel uses the same server-backed published-port list. It
+mints a signed browser URL for each private port without displaying the
+credential; public sibling ports keep clean URLs.
 
 The MCP `sandbox_preview_url` tool publishes the requested port. It returns a
-clean URL for a `public` sandbox and a one-hour signed URL by default for a
-`private` sandbox. Set `expires_in_seconds` to choose another private-link
-lifetime.
+clean URL when that port is public and a one-hour signed URL by default when it
+is private. Re-publishing without an access override preserves an existing
+port's mode. Set `expires_in_seconds` to choose another private-link lifetime.

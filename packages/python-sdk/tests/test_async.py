@@ -94,7 +94,8 @@ class TestAsyncSandboxSmoke:
             )
             router.post(f"{API}/sandboxes/sbx-1/preview-ports").mock(
                 return_value=httpx.Response(
-                    200, json={"port": 3000, "token_version": 1}
+                    200,
+                    json={"port": 3000, "token_version": 1, "access": "private"},
                 )
             )
             router.post(f"{API}/sandboxes/sbx-1/preview-ports/3000/token").mock(
@@ -106,6 +107,7 @@ class TestAsyncSandboxSmoke:
                         "header": "X-Superserve-Preview-Token",
                         "query_param": "superserve_preview_token",
                         "token_version": 1,
+                        "access": "private",
                         "preview_access": "private",
                     },
                 )
@@ -116,7 +118,9 @@ class TestAsyncSandboxSmoke:
 
             sbx = await AsyncSandbox.create(name="x", preview_access="private")
             try:
-                assert (await sbx.publish_preview_port(3000)).port == 3000
+                published = await sbx.publish_preview_port(3000, access="private")
+                assert published.port == 3000
+                assert published.access == "private"
                 signed = await sbx.get_signed_preview_url(3000, expires_in_seconds=600)
                 assert signed.endswith("?superserve_preview_token=spv1.async")
                 assert await sbx.unpublish_preview_port(3000) is None

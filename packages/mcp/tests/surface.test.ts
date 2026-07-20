@@ -174,11 +174,12 @@ describe("sandbox_preview_url (in-memory, fake client)", () => {
     })
     expect(r.isError).toBe(false)
     expect(r.structured.url).toBe(`https://8000-${id}.sandbox.superserve.ai`)
+    expect(r.structured.access).toBe("public")
     expect(r.structured.previewAccess).toBe("public")
     expect(r.structured.authenticated).toBe(false)
   })
 
-  it("returns a signed URL for a private sandbox", async () => {
+  it("returns a signed URL for a private port", async () => {
     const created = await callTool(conn.client, "sandbox_create", {
       name: "private",
       preview_access: "private",
@@ -191,6 +192,7 @@ describe("sandbox_preview_url (in-memory, fake client)", () => {
       expires_in_seconds: 60,
     })
     expect(r.isError).toBe(false)
+    expect(r.structured.access).toBe("private")
     expect(r.structured.previewAccess).toBe("private")
     expect(r.structured.authenticated).toBe(true)
     expect(r.structured.url).toContain("superserve_preview_token=")

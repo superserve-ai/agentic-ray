@@ -3,7 +3,7 @@
  *
  * Superserve's edge proxy routes `https://{port}-{sandboxId}.{sandboxHost}` to
  * a published port in the sandbox. Authentication is enforced separately by
- * the edge proxy according to the sandbox's preview policy.
+ * the edge proxy according to that published port's access mode.
  *
  * The data plane is `boxd-{id}.{host}` and previews are `{port}-{id}.{host}`,
  * on the same `{host}` — the sandbox's region-resolved data-plane host, which

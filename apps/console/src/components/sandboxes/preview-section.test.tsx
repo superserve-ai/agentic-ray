@@ -125,13 +125,14 @@ beforeEach(() => {
     header: "X-Superserve-Preview-Token",
     query_param: "superserve_preview_token",
     token_version: 1,
+    access: "private",
     preview_access: "private",
   })
   patchSandbox.mockReset()
   patchSandbox.mockResolvedValue(undefined)
   publishPreviewPort.mockReset()
   publishPreviewPort.mockImplementation((_id: string, port: number) =>
-    Promise.resolve({ port, token_version: 1 }),
+    Promise.resolve({ port, token_version: 1, access: "public" }),
   )
   unpublishPreviewPort.mockReset()
   unpublishPreviewPort.mockResolvedValue(undefined)
@@ -276,16 +277,12 @@ describe("PreviewSection — active sandbox", () => {
     expect(screen.getByText(url(8080))).toBeInTheDocument()
   })
 
-  it("mints a signed URL for private previews without displaying the token", async () => {
+  it("uses the port mode to mint a signed URL even when the sandbox default is public", async () => {
     listPreviewPorts.mockResolvedValue({
-      preview_access: "private",
-      ports: [{ port: 3000, token_version: 1 }],
+      preview_access: "public",
+      ports: [{ port: 3000, token_version: 1, access: "private" }],
     })
-    render(
-      <PreviewSection
-        sandbox={{ ...makeSandbox(), preview_access: "private" }}
-      />,
-    )
+    render(<PreviewSection sandbox={makeSandbox()} />)
 
     expect(await screen.findByText(url(3000))).toBeInTheDocument()
     expect(screen.getByLabelText("Authentication required")).toBeInTheDocument()
@@ -301,12 +298,33 @@ describe("PreviewSection — active sandbox", () => {
     expect(mintPreviewToken).toHaveBeenCalledWith("sbx-1", 3000, 3600)
   })
 
+  it("uses a clean URL for a public port even when the sandbox default is private", async () => {
+    listPreviewPorts.mockResolvedValue({
+      preview_access: "private",
+      ports: [{ port: 3000, token_version: 1, access: "public" }],
+    })
+    render(
+      <PreviewSection
+        sandbox={{ ...makeSandbox(), preview_access: "private" }}
+      />,
+    )
+
+    const link = await screen.findByRole("link", {
+      name: "Open preview in new tab",
+    })
+    expect(link).toHaveAttribute("href", url(3000))
+    expect(
+      screen.queryByLabelText("Authentication required"),
+    ).not.toBeInTheDocument()
+    expect(mintPreviewToken).not.toHaveBeenCalled()
+  })
+
   it("refreshes private signed URLs before they expire", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-01-01T00:00:00Z"))
     listPreviewPorts.mockResolvedValue({
       preview_access: "private",
-      ports: [{ port: 3000, token_version: 1 }],
+      ports: [{ port: 3000, token_version: 1, access: "private" }],
     })
     mintPreviewToken
       .mockResolvedValueOnce({
@@ -315,6 +333,7 @@ describe("PreviewSection — active sandbox", () => {
         header: "X-Superserve-Preview-Token",
         query_param: "superserve_preview_token",
         token_version: 1,
+        access: "private",
         preview_access: "private",
         expires_at: "2026-01-01T01:00:00Z",
       })
@@ -324,6 +343,7 @@ describe("PreviewSection — active sandbox", () => {
         header: "X-Superserve-Preview-Token",
         query_param: "superserve_preview_token",
         token_version: 1,
+        access: "private",
         preview_access: "private",
         expires_at: "2026-01-01T01:59:00Z",
       })
@@ -357,16 +377,16 @@ describe("PreviewSection — active sandbox", () => {
 
   it("updates the preview policy from the settings toggle", async () => {
     render(<PreviewSection sandbox={makeSandbox()} />)
-    await screen.findByText(/only published ports are reachable/i)
+    await screen.findByText(/new preview ports default to public/i)
     await user.click(
-      screen.getByRole("button", { name: "Require authentication" }),
+      screen.getByRole("button", { name: "Default new ports to private" }),
     )
 
     expect(patchSandbox).toHaveBeenCalledWith("sbx-1", {
       preview_access: "private",
     })
     expect(addToast).toHaveBeenCalledWith(
-      "Preview authentication enabled",
+      "New preview ports will default to private",
       "success",
     )
   })

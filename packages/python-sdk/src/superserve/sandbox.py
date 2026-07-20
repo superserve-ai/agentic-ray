@@ -313,7 +313,7 @@ class Sandbox:
         return preview_url(self.id, self._config.sandbox_host, port)
 
     def list_preview_ports(self) -> PreviewPortList:
-        """Return the current preview policy and published ports."""
+        """Return the sandbox default and each published port's access mode."""
         self._require_live()
         raw = api_request(
             "GET",
@@ -326,15 +326,24 @@ class Sandbox:
             ports=[PublishedPreviewPort(**p) for p in raw.get("ports", [])],
         )
 
-    def publish_preview_port(self, port: int) -> PublishedPreviewPort:
-        """Publish a port. Re-publishing is idempotent."""
+    def publish_preview_port(
+        self, port: int, *, access: PreviewAccessPolicy | None = None
+    ) -> PublishedPreviewPort:
+        """Publish a port, optionally overriding its public/private access mode.
+
+        Omitting ``access`` uses the sandbox default for a new port and preserves
+        the current mode when the port is already published.
+        """
         self._require_live()
         self.get_preview_url(port)
+        body: dict[str, object] = {"port": port}
+        if access is not None:
+            body["access"] = access
         raw = api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/preview-ports",
             headers={"X-API-Key": self._config.api_key},
-            json_body={"port": port},
+            json_body=body,
             client=self._http_client,
         )
         return PublishedPreviewPort(**raw)

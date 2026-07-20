@@ -185,7 +185,7 @@ export function registerLifecycleTools(
           .enum(["public", "private"])
           .optional()
           .describe(
-            "Preview policy for explicitly published ports. 'private' requires a per-port credential; " +
+            "Default access for newly published ports. 'private' requires a per-port credential; " +
               "'public' requires publication but no credential (default).",
           ),
       },
@@ -620,8 +620,7 @@ export function registerLifecycleTools(
           .enum(["public", "private"])
           .optional()
           .describe(
-            "Change preview access for published ports. 'private' requires a per-port credential; " +
-              "'public' keeps unpublished ports closed but removes authentication from published ones.",
+            "Change the default access for newly published ports. Existing ports keep their own mode.",
           ),
       },
       annotations: {
@@ -666,8 +665,8 @@ export function registerLifecycleTools(
     {
       title: "Publish a port and get its preview URL",
       description:
-        "Publish a sandbox port and return a browser-ready preview URL. Private sandboxes receive an expiring " +
-        "signed URL; strict public sandboxes receive a public URL, and unpublished ports remain closed. This does " +
+        "Publish a sandbox port and return a browser-ready preview URL. Private ports receive an expiring " +
+        "signed URL; public ports receive a clean URL, and unpublished ports remain closed. This does " +
         "not verify that a process is listening (start one with sandbox_exec, e.g. `python3 -m http.server 8000`).",
       inputSchema: {
         sandbox_id: z.string().describe("ID of the sandbox."),

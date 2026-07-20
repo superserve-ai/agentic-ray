@@ -28,6 +28,7 @@ import type {
   PreviewPortList,
   PreviewToken,
   PreviewTokenOptions,
+  PublishPreviewPortOptions,
   PublishedPreviewPort,
   SandboxCreateOptions,
   SandboxInfo,
@@ -52,7 +53,7 @@ export class Sandbox {
   /** User-supplied metadata tags at construction time. Call getInfo() to refresh. */
   readonly metadata: Record<string, string>
 
-  /** Preview policy at construction time. Call getInfo() to refresh. */
+  /** Preview compatibility mode or new-port default at construction time. */
   readonly previewAccess: SandboxInfo["previewAccess"]
 
   /**
@@ -431,19 +432,25 @@ export class Sandbox {
   async listPreviewPorts(): Promise<PreviewPortList> {
     const raw = await request<{
       preview_access?: string
-      ports?: Array<{ port?: number; token_version?: number }>
+      ports?: Array<{ port?: number; token_version?: number; access?: string }>
     }>({
       method: "GET",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/preview-ports`,
       headers: { "X-API-Key": this._config.apiKey },
     })
     const ports = (raw.ports ?? []).map((item) => {
-      if (item.port === undefined || item.token_version === undefined) {
+      const access = item.access
+      if (
+        item.port === undefined ||
+        item.token_version === undefined ||
+        (access !== "public" && access !== "private")
+      ) {
         throw new SandboxError("Invalid list-preview-ports response")
       }
       return {
         port: item.port,
         tokenVersion: item.token_version,
+        access: access as PublishedPreviewPort["access"],
       }
     })
     return {
@@ -453,19 +460,40 @@ export class Sandbox {
     }
   }
 
-  /** Publish a port. Idempotent; an existing token generation is preserved. */
-  async publishPreviewPort(port: number): Promise<PublishedPreviewPort> {
+  /**
+   * Publish a port. Omit `access` to use the sandbox default for a new port and
+   * preserve an existing port's mode. An explicit mode changes only this port.
+   */
+  async publishPreviewPort(
+    port: number,
+    options: PublishPreviewPortOptions = {},
+  ): Promise<PublishedPreviewPort> {
     this.getPreviewUrl(port) // validate against the shared proxy contract
-    const raw = await request<{ port?: number; token_version?: number }>({
+    const raw = await request<{
+      port?: number
+      token_version?: number
+      access?: string
+    }>({
       method: "POST",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/preview-ports`,
       headers: { "X-API-Key": this._config.apiKey },
-      body: { port },
+      body:
+        options.access === undefined
+          ? { port }
+          : { port, access: options.access },
     })
-    if (raw.port === undefined || raw.token_version === undefined) {
+    if (
+      raw.port === undefined ||
+      raw.token_version === undefined ||
+      (raw.access !== "public" && raw.access !== "private")
+    ) {
       throw new SandboxError("Invalid publish-preview-port response")
     }
-    return { port: raw.port, tokenVersion: raw.token_version }
+    return {
+      port: raw.port,
+      tokenVersion: raw.token_version,
+      access: raw.access,
+    }
   }
 
   /** Unpublish a port and revoke every outstanding token for it. */
@@ -494,6 +522,7 @@ export class Sandbox {
       header?: string
       query_param?: string
       token_version?: number
+      access?: string
       preview_access?: string
       expires_at?: string
     }>({
@@ -510,7 +539,8 @@ export class Sandbox {
       raw.port === undefined ||
       !raw.header ||
       !raw.query_param ||
-      raw.token_version === undefined
+      raw.token_version === undefined ||
+      (raw.access !== "public" && raw.access !== "private")
     ) {
       throw new SandboxError("Invalid preview-token response")
     }
@@ -520,6 +550,7 @@ export class Sandbox {
       header: raw.header,
       queryParam: raw.query_param,
       tokenVersion: raw.token_version,
+      access: raw.access,
       previewAccess: (raw.preview_access ??
         "legacy_public") as PreviewToken["previewAccess"],
       expiresAt: raw.expires_at ? new Date(raw.expires_at) : undefined,
@@ -551,6 +582,7 @@ export class Sandbox {
       header?: string
       query_param?: string
       token_version?: number
+      access?: string
       preview_access?: string
       expires_at?: string
     }>({
@@ -563,7 +595,8 @@ export class Sandbox {
       raw.port === undefined ||
       !raw.header ||
       !raw.query_param ||
-      raw.token_version === undefined
+      raw.token_version === undefined ||
+      (raw.access !== "public" && raw.access !== "private")
     ) {
       throw new SandboxError("Invalid rotate-preview-token response")
     }
@@ -573,6 +606,7 @@ export class Sandbox {
       header: raw.header,
       queryParam: raw.query_param,
       tokenVersion: raw.token_version,
+      access: raw.access,
       previewAccess: (raw.preview_access ??
         "legacy_public") as PreviewToken["previewAccess"],
       expiresAt: raw.expires_at ? new Date(raw.expires_at) : undefined,

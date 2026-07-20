@@ -98,11 +98,10 @@ function PreviewPorts({ sandbox }: { sandbox: SandboxResponse }) {
     try {
       await patchSandbox(sandbox.id, { preview_access: next })
       setPreviewAccess(next)
-      setExpanded(null)
       addToast(
         next === "private"
-          ? "Preview authentication enabled"
-          : "Published previews are now public",
+          ? "New preview ports will default to private"
+          : "New preview ports will default to public",
         "success",
       )
     } catch {
@@ -148,10 +147,10 @@ function PreviewPorts({ sandbox }: { sandbox: SandboxResponse }) {
         <div className="flex items-center justify-between gap-4">
           <span>
             {previewAccess === "private"
-              ? "Published preview ports require a per-port credential. Browser links use a short-lived signed URL."
+              ? "New preview ports default to private. Existing ports keep their own access mode."
               : previewAccess === "public"
-                ? "Only published ports are reachable, but anyone with a published URL can open it."
-                : "Legacy public mode exposes every listening port. Enable authentication to move onto explicit publication."}
+                ? "New preview ports default to public. Existing private ports remain authenticated."
+                : "Legacy public mode exposes every listening port. Choose a default to move onto explicit publication."}
           </span>
           <Button
             type="button"
@@ -161,8 +160,8 @@ function PreviewPorts({ sandbox }: { sandbox: SandboxResponse }) {
             onClick={() => void handlePolicyToggle()}
           >
             {previewAccess === "private"
-              ? "Make published ports public"
-              : "Require authentication"}
+              ? "Default new ports to public"
+              : "Default new ports to private"}
           </Button>
         </div>
       </Alert>
@@ -175,23 +174,27 @@ function PreviewPorts({ sandbox }: { sandbox: SandboxResponse }) {
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {ports.map((port) => (
+          {ports.map((publishedPort) => (
             <PortRow
-              key={port}
+              key={publishedPort.port}
               sandboxId={sandbox.id}
-              port={port}
-              previewAccess={previewAccess}
-              isExpanded={expanded === port}
+              port={publishedPort.port}
+              access={publishedPort.access}
+              isExpanded={expanded === publishedPort.port}
               onToggle={() =>
-                setExpanded((current) => (current === port ? null : port))
+                setExpanded((current) =>
+                  current === publishedPort.port ? null : publishedPort.port,
+                )
               }
               onRemove={async () => {
-                const result = await removePort(port)
+                const result = await removePort(publishedPort.port)
                 if (!result.ok) {
                   addToast(result.error ?? "Could not unpublish port", "error")
                   return
                 }
-                setExpanded((current) => (current === port ? null : current))
+                setExpanded((current) =>
+                  current === publishedPort.port ? null : current,
+                )
               }}
             />
           ))}
@@ -204,7 +207,7 @@ function PreviewPorts({ sandbox }: { sandbox: SandboxResponse }) {
 interface PortRowProps {
   sandboxId: string
   port: number
-  previewAccess: PreviewAccess
+  access: Exclude<PreviewAccess, "legacy_public">
   isExpanded: boolean
   onToggle: () => void
   onRemove: () => Promise<void>
@@ -213,7 +216,7 @@ interface PortRowProps {
 function PortRow({
   sandboxId,
   port,
-  previewAccess,
+  access,
   isExpanded,
   onToggle,
   onRemove,
@@ -222,7 +225,7 @@ function PortRow({
   const posthog = usePostHog()
   const displayUrl = previewUrl(sandboxId, port)
   const [accessUrl, setAccessUrl] = useState<string | null>(
-    previewAccess === "private" ? null : displayUrl,
+    access === "private" ? null : displayUrl,
   )
 
   useEffect(() => {
@@ -231,7 +234,7 @@ function PortRow({
     let hasCredential = false
     let errorShown = false
 
-    if (previewAccess !== "private") {
+    if (access !== "private") {
       setAccessUrl(displayUrl)
       return
     }
@@ -289,7 +292,7 @@ function PortRow({
       cancelled = true
       if (refreshTimer) clearTimeout(refreshTimer)
     }
-  }, [addToast, displayUrl, port, previewAccess, sandboxId])
+  }, [access, addToast, displayUrl, port, sandboxId])
 
   const handleCopy = async () => {
     try {
@@ -331,7 +334,7 @@ function PortRow({
           <span className="shrink-0 font-mono text-xs text-foreground tabular-nums">
             :{port}
           </span>
-          {previewAccess === "private" && (
+          {access === "private" && (
             <span
               aria-label="Authentication required"
               title="Authentication required"

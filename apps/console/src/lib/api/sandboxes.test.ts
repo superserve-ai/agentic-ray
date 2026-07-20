@@ -61,7 +61,7 @@ describe("sandbox preview ports", () => {
       new Response(
         JSON.stringify({
           preview_access: "private",
-          ports: [{ port: 3000, token_version: 2 }],
+          ports: [{ port: 3000, token_version: 2, access: "private" }],
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
@@ -69,7 +69,7 @@ describe("sandbox preview ports", () => {
 
     await expect(listSandboxPreviewPorts("sbx-1")).resolves.toEqual({
       preview_access: "private",
-      ports: [{ port: 3000, token_version: 2 }],
+      ports: [{ port: 3000, token_version: 2, access: "private" }],
     })
     expect(fetchSpy.mock.calls[0]?.[0]).toBe(
       "/api/sandboxes/sbx-1/preview-ports/",
@@ -79,23 +79,46 @@ describe("sandbox preview ports", () => {
   it("publishes and unpublishes a port", async () => {
     fetchSpy
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ port: 3000, token_version: 1 }), {
-          status: 201,
-          headers: { "Content-Type": "application/json" },
-        }),
+        new Response(
+          JSON.stringify({ port: 3000, token_version: 1, access: "private" }),
+          {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
       )
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
 
-    await publishSandboxPreviewPort("sbx-1", 3000)
+    await publishSandboxPreviewPort("sbx-1", 3000, "private")
     await unpublishSandboxPreviewPort("sbx-1", 3000)
 
     const [, publishInit] = fetchSpy.mock.calls[0] as [string, RequestInit]
     expect(publishInit.method).toBe("POST")
-    expect(JSON.parse(publishInit.body as string)).toEqual({ port: 3000 })
+    expect(JSON.parse(publishInit.body as string)).toEqual({
+      port: 3000,
+      access: "private",
+    })
     expect(fetchSpy.mock.calls[1]?.[0]).toBe(
       "/api/sandboxes/sbx-1/preview-ports/3000/",
     )
     expect(fetchSpy.mock.calls[1]?.[1]).toMatchObject({ method: "DELETE" })
+  })
+
+  it("omits access when publishing with the sandbox default", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({ port: 3000, token_version: 1, access: "public" }),
+        {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    )
+
+    await publishSandboxPreviewPort("sbx-1", 3000)
+
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({ port: 3000 })
   })
 
   it("mints expiring credentials and rotates one port", async () => {
@@ -105,6 +128,7 @@ describe("sandbox preview ports", () => {
       header: "X-Superserve-Preview-Token",
       query_param: "mint_preview_credential",
       token_version: 2,
+      access: "private",
       preview_access: "private",
     }
     fetchSpy

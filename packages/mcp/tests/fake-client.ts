@@ -7,6 +7,7 @@ import type {
   NetworkEvent,
   NetworkLogPage,
   PreviewAccess,
+  PreviewAccessPolicy,
   SandboxInfo,
   SandboxSecretBinding,
   SandboxStatus,
@@ -33,7 +34,7 @@ interface FakeSandbox {
   autoDeleteSeconds?: number
   timeoutSeconds?: number
   previewAccess: PreviewAccess
-  publishedPorts: Set<number>
+  publishedPorts: Map<number, PreviewAccessPolicy>
 }
 
 export interface FakeClient {
@@ -84,7 +85,7 @@ export function createFakeClient(): FakeClient {
         autoDeleteSeconds: input.autoDeleteSeconds,
         timeoutSeconds: input.timeoutSeconds ?? 3600,
         previewAccess: input.previewAccess ?? "public",
-        publishedPorts: new Set(),
+        publishedPorts: new Map(),
         secrets: Object.entries(input.secrets ?? {}).map(
           ([envKey, secretName]) => ({ envKey, secretName, revoked: false }),
         ),
@@ -155,17 +156,23 @@ export function createFakeClient(): FakeClient {
     async previewUrl(id, port, _expiresInSeconds) {
       const sb = must(id)
       const url = buildPreviewUrl(id, port)
-      sb.publishedPorts.add(port)
-      if (sb.previewAccess !== "private") {
+      const existingAccess = sb.publishedPorts.get(port)
+      const access =
+        existingAccess ??
+        (sb.previewAccess === "private" ? "private" : "public")
+      sb.publishedPorts.set(port, access)
+      if (access === "public") {
         return {
           url,
+          access,
           previewAccess: sb.previewAccess,
           authenticated: false,
         }
       }
       return {
         url: `${url}/?superserve_preview_token=fake-token-${port}`,
-        previewAccess: "private",
+        access,
+        previewAccess: sb.previewAccess,
         authenticated: true,
       }
     },

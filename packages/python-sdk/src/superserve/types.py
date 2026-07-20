@@ -63,6 +63,7 @@ class SandboxInfo(BaseModel):
 class PublishedPreviewPort(BaseModel):
     port: int
     token_version: int
+    access: PreviewAccessPolicy
 
 
 class PreviewPortList(BaseModel):
@@ -76,6 +77,7 @@ class PreviewToken(BaseModel):
     header: str
     query_param: str
     token_version: int
+    access: PreviewAccessPolicy
     preview_access: PreviewAccess
     expires_at: Optional[datetime] = None
 

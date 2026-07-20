@@ -76,6 +76,7 @@ export interface SandboxPatch {
 export interface PublishedPreviewPort {
   port: number
   token_version: number
+  access: PreviewAccessPolicy
 }
 
 export interface PreviewPortList {
@@ -89,6 +90,7 @@ export interface PreviewTokenResponse {
   header: string
   query_param: string
   token_version: number
+  access: PreviewAccessPolicy
   preview_access: PreviewAccess
   expires_at?: string
 }

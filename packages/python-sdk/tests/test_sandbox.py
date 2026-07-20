@@ -91,7 +91,8 @@ class TestPreviewAuthentication:
             sandbox = self._make(router)
             publish = router.post(f"{API}/sandboxes/sbx-1/preview-ports").mock(
                 return_value=httpx.Response(
-                    200, json={"port": 3000, "token_version": 1}
+                    200,
+                    json={"port": 3000, "token_version": 1, "access": "private"},
                 )
             )
             router.get(f"{API}/sandboxes/sbx-1/preview-ports").mock(
@@ -99,7 +100,9 @@ class TestPreviewAuthentication:
                     200,
                     json={
                         "preview_access": "private",
-                        "ports": [{"port": 3000, "token_version": 1}],
+                        "ports": [
+                            {"port": 3000, "token_version": 1, "access": "private"}
+                        ],
                     },
                 )
             )
@@ -109,6 +112,7 @@ class TestPreviewAuthentication:
                 "header": "X-Superserve-Preview-Token",
                 "query_param": "superserve_preview_token",
                 "token_version": 1,
+                "access": "private",
                 "preview_access": "private",
             }
             mint = router.post(f"{API}/sandboxes/sbx-1/preview-ports/3000/token").mock(
@@ -127,11 +131,17 @@ class TestPreviewAuthentication:
 
             try:
                 assert sandbox.preview_access.value == "private"
-                assert sandbox.publish_preview_port(3000).token_version == 1
-                assert json.loads(publish.calls.last.request.content) == {"port": 3000}
-                assert sandbox.list_preview_ports().ports[0].port == 3000
+                published = sandbox.publish_preview_port(3000, access="private")
+                assert published.token_version == 1
+                assert published.access == "private"
+                assert json.loads(publish.calls.last.request.content) == {
+                    "port": 3000,
+                    "access": "private",
+                }
+                assert sandbox.list_preview_ports().ports[0].access == "private"
                 credential = sandbox.get_preview_token(3000)
                 assert credential.header == "X-Superserve-Preview-Token"
+                assert credential.access == "private"
                 assert "spv1.secret" not in repr(credential)
                 assert "spv1.secret" not in str(credential)
                 signed = sandbox.get_signed_preview_url(3000, expires_in_seconds=3600)

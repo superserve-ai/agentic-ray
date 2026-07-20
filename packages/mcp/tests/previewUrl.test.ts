@@ -51,20 +51,23 @@ describe("buildPreviewUrl", () => {
 describe("SDK client preview publication", () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it("publishes a strict public port and returns its clean URL", async () => {
+  it("uses a public port response even when the sandbox default is private", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ port: 8080, token_version: 1 }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
+        new Response(
+          JSON.stringify({ port: 8080, token_version: 1, access: "public" }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
       )
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            preview_access: "public",
-            ports: [{ port: 8080, token_version: 1 }],
+            preview_access: "private",
+            ports: [{ port: 8080, token_version: 1, access: "public" }],
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
@@ -77,7 +80,8 @@ describe("SDK client preview publication", () => {
 
     await expect(client.previewUrl("sbx-1", 8080, 60)).resolves.toEqual({
       url: "https://8080-sbx-1.sandbox.superserve.ai",
-      previewAccess: "public",
+      access: "public",
+      previewAccess: "private",
       authenticated: false,
     })
     expect(fetchMock).toHaveBeenCalledTimes(2)
@@ -86,20 +90,23 @@ describe("SDK client preview publication", () => {
     expect(JSON.parse(publishInit.body as string)).toEqual({ port: 8080 })
   })
 
-  it("mints an expiring signed link for a private port", async () => {
+  it("uses a private port response even when the sandbox default is public", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ port: 8080, token_version: 1 }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
+        new Response(
+          JSON.stringify({ port: 8080, token_version: 1, access: "private" }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
       )
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            preview_access: "private",
-            ports: [{ port: 8080, token_version: 1 }],
+            preview_access: "public",
+            ports: [{ port: 8080, token_version: 1, access: "private" }],
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
@@ -109,7 +116,8 @@ describe("SDK client preview publication", () => {
           JSON.stringify({
             token: "private-secret",
             query_param: "superserve_preview_token",
-            preview_access: "private",
+            access: "private",
+            preview_access: "public",
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
@@ -123,7 +131,8 @@ describe("SDK client preview publication", () => {
     const link = await client.previewUrl("sbx-1", 8080, 90)
     expect(link).toEqual({
       url: "https://8080-sbx-1.sandbox.superserve.ai/?superserve_preview_token=private-secret",
-      previewAccess: "private",
+      access: "private",
+      previewAccess: "public",
       authenticated: true,
     })
     const [, tokenInit] = fetchMock.mock.calls[2] as [URL, RequestInit]

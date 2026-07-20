@@ -660,8 +660,8 @@ export function CreateSandboxDialog({
                   >
                     <div className="space-y-5">
                       <Field
-                        label="Preview authentication"
-                        description="Only explicitly published ports are reachable. Require a per-port credential for private previews."
+                        label="New preview port access"
+                        description="Only explicitly published ports are reachable. Choose the default access for each new port."
                       >
                         <Switch
                           id="preview-authentication"
@@ -669,7 +669,7 @@ export function CreateSandboxDialog({
                           onCheckedChange={(checked) =>
                             setPreviewAccess(checked ? "private" : "public")
                           }
-                          label="Require authentication"
+                          label="Default to private"
                         />
                       </Field>
 

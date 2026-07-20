@@ -437,9 +437,10 @@ Sandbox.create(name="restricted", network=NetworkConfig(
 
 ## Preview URLs — publish a port safely
 
-Choose an explicit `public` or `private` preview policy when creating the
-sandbox, then publish only the intended ports. Both strict policies deny
-unpublished ports; `private` additionally requires a per-port credential.
+Choose an explicit `public` or `private` default when creating the sandbox,
+then publish only the intended ports. Both strict policies deny unpublished
+ports. Each published port stores its own access mode, so public and private
+ports can coexist.
 
 ```ts
 const sandbox = await Sandbox.create({
@@ -447,7 +448,7 @@ const sandbox = await Sandbox.create({
   previewAccess: "private",
 })
 await sandbox.commands.spawn("python3 -m http.server 8000")
-await sandbox.publishPreviewPort(8000)
+await sandbox.publishPreviewPort(8000, { access: "private" })
 const url = await sandbox.getSignedPreviewUrl(8000, {
   expiresInSeconds: 300,
 })
@@ -458,7 +459,7 @@ from superserve import AsyncSandbox
 
 box = await AsyncSandbox.create(name="preview", preview_access="private")
 await box.commands.spawn("python3 -m http.server 8000")
-await box.publish_preview_port(8000)
+await box.publish_preview_port(8000, access="private")
 url = await box.get_signed_preview_url(8000, expires_in_seconds=300)
 ```
 
@@ -476,13 +477,16 @@ does not publish a port or authenticate a private request.
 - **Port range 1024–65535** (integer). Privileged ports (< 1024) throw
   `ValidationError`.
 - **Credentials are per port.** A token for port 8000 cannot open another port.
+- **Sandbox access is a default.** Changing `previewAccess` / `preview_access`
+  affects newly published ports only; existing ports retain their own mode.
 - **Browser links default to 60 seconds** and exchange the query credential for
   a secure cookie that also covers assets and WebSocket upgrades.
 - **Rotation is scoped.** `rotatePreviewToken(port)` /
   `rotate_preview_token(port)` revokes that port's links and cookies; unpublish
   closes it completely.
-- Omitting the policy preserves `legacy_public` behavior for old clients. Do not
-  use that compatibility mode for new sandboxes.
+- Omitting the policy defaults a new sandbox to strict `public`. The
+  `legacy_public` compatibility mode is returned only for pre-migration
+  sandboxes and cannot be selected for new ones.
 
 The full guide is at `https://docs.superserve.ai/sandbox/preview-urls`.
 

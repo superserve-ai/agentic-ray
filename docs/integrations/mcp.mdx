@@ -251,14 +251,15 @@ The sandbox sees a proxy token; the platform swaps in the real credential only f
 
 **Templates.** A sandbox inherits its vCPU/memory/disk from its template and can't override them at `sandbox_create` time. To get a specific shape (say, a 4 vCPU sandbox) or preinstalled software, build a template with `sandbox_template_create`, then poll `sandbox_template_list` until its `status` is `ready` before passing it as `from_template`.
 
-**Ports.** New MCP sandboxes default to the strict `public` preview policy:
-only explicitly published ports are reachable. Pass
-`preview_access: "private"` to `sandbox_create` (or `sandbox_update`) when a
-credential should be required. Start the server with `sandbox_exec`, then call
-`sandbox_preview_url`; the tool idempotently publishes that one port and
-returns either a clean public URL or an expiring signed URL for a private
-sandbox. Private links default to one hour; set `expires_in_seconds` to a value
-from 1 through 604800 seconds. See [Preview URLs](/sandbox/preview-urls).
+**Ports.** New MCP sandboxes use `public` as the default access for newly
+published ports; only explicitly published ports are reachable. Pass
+`preview_access: "private"` to `sandbox_create` (or `sandbox_update`) to change
+the default for future ports. Existing ports retain their own mode. Start the
+server with `sandbox_exec`, then call `sandbox_preview_url`; the tool
+idempotently publishes that one port and uses the returned port mode to return
+either a clean public URL or an expiring private signed URL. Private links
+default to one hour; set `expires_in_seconds` to a value from 1 through 604800
+seconds. See [Preview URLs](/sandbox/preview-urls).
 
 ## Not yet in the MCP surface
 

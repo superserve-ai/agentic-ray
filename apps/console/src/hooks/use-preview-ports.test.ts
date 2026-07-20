@@ -53,7 +53,7 @@ describe("usePreviewPorts", () => {
     })
     publishPreviewPort.mockReset()
     publishPreviewPort.mockImplementation((_id: string, port: number) =>
-      Promise.resolve({ port, token_version: 1 }),
+      Promise.resolve({ port, token_version: 1, access: "public" }),
     )
     unpublishPreviewPort.mockReset()
     unpublishPreviewPort.mockResolvedValue(undefined)
@@ -63,8 +63,8 @@ describe("usePreviewPorts", () => {
     listPreviewPorts.mockResolvedValue({
       preview_access: "private",
       ports: [
-        { port: 3000, token_version: 2 },
-        { port: 8080, token_version: 1 },
+        { port: 3000, token_version: 2, access: "private" },
+        { port: 8080, token_version: 1, access: "public" },
       ],
     })
     const { result } = renderHook(() =>
@@ -73,7 +73,10 @@ describe("usePreviewPorts", () => {
 
     expect(result.current.isLoading).toBe(true)
     await waitFor(() => expect(result.current.isLoading).toBe(false))
-    expect(result.current.ports).toEqual([3000, 8080])
+    expect(result.current.ports).toEqual([
+      { port: 3000, token_version: 2, access: "private" },
+      { port: 8080, token_version: 1, access: "public" },
+    ])
     expect(result.current.previewAccess).toBe("private")
     expect(listPreviewPorts).toHaveBeenCalledWith(SANDBOX_ID)
   })
@@ -88,14 +91,16 @@ describe("usePreviewPorts", () => {
     })
 
     expect(response!.ok).toBe(true)
-    expect(publishPreviewPort).toHaveBeenCalledWith(SANDBOX_ID, 3000)
-    expect(result.current.ports).toEqual([3000])
+    expect(publishPreviewPort).toHaveBeenCalledWith(SANDBOX_ID, 3000, undefined)
+    expect(result.current.ports).toEqual([
+      { port: 3000, token_version: 1, access: "public" },
+    ])
   })
 
   it("rejects invalid and duplicate ports without a request", async () => {
     listPreviewPorts.mockResolvedValue({
       preview_access: "public",
-      ports: [{ port: 3000, token_version: 1 }],
+      ports: [{ port: 3000, token_version: 1, access: "public" }],
     })
     const { result } = renderHook(() => usePreviewPorts(SANDBOX_ID, "public"))
     await waitFor(() => expect(result.current.isLoading).toBe(false))
@@ -116,6 +121,7 @@ describe("usePreviewPorts", () => {
       ports: Array.from({ length: MAX_PREVIEW_PORTS }, (_, index) => ({
         port: MIN_PREVIEW_PORT + index,
         token_version: 1,
+        access: "public" as const,
       })),
     })
     const { result } = renderHook(() => usePreviewPorts(SANDBOX_ID, "public"))
@@ -131,7 +137,7 @@ describe("usePreviewPorts", () => {
   it("unpublishes a port before removing it locally", async () => {
     listPreviewPorts.mockResolvedValue({
       preview_access: "public",
-      ports: [{ port: 3000, token_version: 1 }],
+      ports: [{ port: 3000, token_version: 1, access: "public" }],
     })
     const { result } = renderHook(() => usePreviewPorts(SANDBOX_ID, "public"))
     await waitFor(() => expect(result.current.isLoading).toBe(false))
@@ -159,7 +165,7 @@ describe("usePreviewPorts", () => {
   it("does not apply a stale response after the sandbox id changes", async () => {
     let resolveFirst!: (value: {
       preview_access: "public"
-      ports: { port: number; token_version: number }[]
+      ports: { port: number; token_version: number; access: "public" }[]
     }) => void
     listPreviewPorts
       .mockReturnValueOnce(
@@ -169,7 +175,7 @@ describe("usePreviewPorts", () => {
       )
       .mockResolvedValueOnce({
         preview_access: "public",
-        ports: [{ port: 8080, token_version: 1 }],
+        ports: [{ port: 8080, token_version: 1, access: "public" }],
       })
 
     const { result, rerender } = renderHook(
@@ -177,13 +183,19 @@ describe("usePreviewPorts", () => {
       { initialProps: { id: "sbx-a" } },
     )
     rerender({ id: "sbx-b" })
-    await waitFor(() => expect(result.current.ports).toEqual([8080]))
+    await waitFor(() =>
+      expect(result.current.ports).toEqual([
+        { port: 8080, token_version: 1, access: "public" },
+      ]),
+    )
 
     resolveFirst({
       preview_access: "public",
-      ports: [{ port: 3000, token_version: 1 }],
+      ports: [{ port: 3000, token_version: 1, access: "public" }],
     })
     await act(async () => Promise.resolve())
-    expect(result.current.ports).toEqual([8080])
+    expect(result.current.ports).toEqual([
+      { port: 8080, token_version: 1, access: "public" },
+    ])
   })
 })

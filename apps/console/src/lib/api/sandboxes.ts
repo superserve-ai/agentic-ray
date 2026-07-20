@@ -3,6 +3,7 @@ import { registerPreviewTokenQueryParam } from "@/lib/preview-token-redaction"
 import { apiClient, apiClientList, type PagedResult } from "./client"
 import type {
   CreateSandboxRequest,
+  PreviewAccessPolicy,
   PreviewPortList,
   PreviewTokenResponse,
   PublishedPreviewPort,
@@ -103,10 +104,11 @@ export async function listSandboxPreviewPorts(
 export async function publishSandboxPreviewPort(
   id: string,
   port: number,
+  access?: PreviewAccessPolicy,
 ): Promise<PublishedPreviewPort> {
   return apiClient<PublishedPreviewPort>(`/sandboxes/${id}/preview-ports`, {
     method: "POST",
-    body: JSON.stringify({ port }),
+    body: JSON.stringify(access === undefined ? { port } : { port, access }),
   })
 }
 

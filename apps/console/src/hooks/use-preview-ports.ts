@@ -8,7 +8,11 @@ import {
   publishSandboxPreviewPort,
   unpublishSandboxPreviewPort,
 } from "@/lib/api/sandboxes"
-import type { PreviewAccess } from "@/lib/api/types"
+import type {
+  PreviewAccess,
+  PreviewAccessPolicy,
+  PublishedPreviewPort,
+} from "@/lib/api/types"
 
 export const MIN_PREVIEW_PORT = 1024
 export const MAX_PREVIEW_PORT = 65535
@@ -20,11 +24,14 @@ export interface AddPortResult {
 }
 
 export interface UsePreviewPortsApi {
-  ports: number[]
+  ports: PublishedPreviewPort[]
   previewAccess: PreviewAccess
   canAddPort: boolean
   isLoading: boolean
-  addPort: (port: number) => Promise<AddPortResult>
+  addPort: (
+    port: number,
+    access?: PreviewAccessPolicy,
+  ) => Promise<AddPortResult>
   removePort: (port: number) => Promise<AddPortResult>
   setPreviewAccess: (access: PreviewAccess) => void
 }
@@ -51,7 +58,7 @@ export function usePreviewPorts(
   sandboxId: string,
   initialAccess: PreviewAccess,
 ): UsePreviewPortsApi {
-  const [ports, setPorts] = useState<number[]>([])
+  const [ports, setPorts] = useState<PublishedPreviewPort[]>([])
   const [previewAccess, setPreviewAccess] =
     useState<PreviewAccess>(initialAccess)
   const [isLoading, setIsLoading] = useState(true)
@@ -63,7 +70,7 @@ export function usePreviewPorts(
       .then((result) => {
         if (cancelled) return
         setPreviewAccess(result.preview_access)
-        setPorts(result.ports.map((item) => item.port))
+        setPorts(result.ports)
       })
       .catch(() => {
         // The backend endpoint may not be deployed yet. Keep the section
@@ -79,14 +86,14 @@ export function usePreviewPorts(
   }, [sandboxId])
 
   const addPort = useCallback<UsePreviewPortsApi["addPort"]>(
-    async (port) => {
+    async (port, access) => {
       if (!isValidPreviewPort(port)) {
         return {
           ok: false,
           error: `Enter a port between ${MIN_PREVIEW_PORT} and ${MAX_PREVIEW_PORT}.`,
         }
       }
-      if (ports.includes(port)) {
+      if (ports.some((item) => item.port === port)) {
         return { ok: false, error: `Port ${port} is already published.` }
       }
       if (ports.length >= MAX_PREVIEW_PORTS) {
@@ -96,9 +103,15 @@ export function usePreviewPorts(
         }
       }
       try {
-        await publishSandboxPreviewPort(sandboxId, port)
+        const published = await publishSandboxPreviewPort(
+          sandboxId,
+          port,
+          access,
+        )
         setPorts((current) =>
-          current.includes(port) ? current : [...current, port],
+          current.some((item) => item.port === published.port)
+            ? current
+            : [...current, published],
         )
         return { ok: true }
       } catch (error) {
@@ -115,7 +128,7 @@ export function usePreviewPorts(
     async (port) => {
       try {
         await unpublishSandboxPreviewPort(sandboxId, port)
-        setPorts((current) => current.filter((item) => item !== port))
+        setPorts((current) => current.filter((item) => item.port !== port))
         return { ok: true }
       } catch (error) {
         return {

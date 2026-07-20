@@ -433,29 +433,39 @@ describe("Sandbox instance methods", () => {
     const sandbox = await makeSandbox()
     const mock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonResponse({ port: 3000, token_version: 2 }))
+      .mockResolvedValueOnce(
+        jsonResponse({ port: 3000, token_version: 2, access: "private" }),
+      )
       .mockResolvedValueOnce(
         jsonResponse({
           preview_access: "private",
-          ports: [{ port: 3000, token_version: 2 }],
+          ports: [{ port: 3000, token_version: 2, access: "private" }],
         }),
       )
       .mockResolvedValueOnce(noContentResponse())
     vi.stubGlobal("fetch", mock)
 
-    await expect(sandbox.publishPreviewPort(3000)).resolves.toEqual({
+    await expect(
+      sandbox.publishPreviewPort(3000, { access: "private" }),
+    ).resolves.toEqual({
       port: 3000,
       tokenVersion: 2,
+      access: "private",
     })
     await expect(sandbox.listPreviewPorts()).resolves.toEqual({
       previewAccess: "private",
-      ports: [{ port: 3000, tokenVersion: 2 }],
+      ports: [{ port: 3000, tokenVersion: 2, access: "private" }],
     })
     await expect(sandbox.unpublishPreviewPort(3000)).resolves.toBeUndefined()
 
     expect((mock.mock.calls[0] as [string])[0]).toMatch(
       /\/sandboxes\/sbx-1\/preview-ports$/,
     )
+    expect(
+      JSON.parse(
+        (mock.mock.calls[0] as [string, RequestInit])[1].body as string,
+      ),
+    ).toEqual({ port: 3000, access: "private" })
     expect((mock.mock.calls[2] as [string, RequestInit])[1].method).toBe(
       "DELETE",
     )
@@ -486,6 +496,7 @@ describe("Sandbox instance methods", () => {
       header: "X-Superserve-Preview-Token",
       query_param: "superserve_preview_token",
       token_version: 3,
+      access: "private",
       preview_access: "private",
       expires_at: "2026-01-01T01:00:00Z",
     }
@@ -500,6 +511,7 @@ describe("Sandbox instance methods", () => {
     })
     expect(token.header).toBe("X-Superserve-Preview-Token")
     expect(token.tokenVersion).toBe(3)
+    expect(token.access).toBe("private")
     const [, tokenInit] = mock.mock.calls[0] as [string, RequestInit]
     expect(JSON.parse(tokenInit.body as string)).toEqual({
       expires_in_seconds: 3600,
@@ -524,6 +536,7 @@ describe("Sandbox instance methods", () => {
         header: "X-Superserve-Preview-Token",
         query_param: "superserve_preview_token",
         token_version: 4,
+        access: "private",
         preview_access: "private",
       }),
     )

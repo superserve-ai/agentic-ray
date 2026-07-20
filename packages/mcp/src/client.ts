@@ -136,7 +136,7 @@ export interface CreateInput {
   secrets?: Record<string, string>
   /** Egress allow/deny rules (host patterns). */
   network?: NetworkConfig
-  /** Strict preview policy. New MCP-created sandboxes default to public. */
+  /** Default access for newly published ports. New MCP sandboxes use public. */
   previewAccess?: PreviewAccessPolicy
 }
 
@@ -188,6 +188,9 @@ export interface SecretSummary {
 
 export interface PreviewLink {
   url: string
+  /** The published port's current routing mode. */
+  access: PreviewAccessPolicy
+  /** Sandbox default for newly published ports. */
   previewAccess: PreviewAccess
   authenticated: boolean
 }
@@ -313,7 +316,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
     async update(id, input) {
       // updateById (not connect().update()) so patching a paused sandbox —
       // e.g. arming auto-delete — does not resume it. Requires @superserve/sdk
-      // >= 0.7.9; MIN_SDK_VERSION in mcp-publish.yml tracks this floor.
+      // >= 0.8.0; MIN_SDK_VERSION in mcp-publish.yml tracks this floor.
       await Sandbox.updateById(
         id,
         {
@@ -375,7 +378,8 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
     },
 
     // Preview publication is control-plane-only, so this does not activate a
-    // paused sandbox. Private policies get an expiring browser bootstrap token.
+    // paused sandbox. The returned port mode—not the sandbox default—decides
+    // whether the link needs an expiring browser bootstrap token.
     async previewUrl(id, port, expiresInSeconds) {
       const previewUrl = buildPreviewUrl(id, port, resolved.sandboxHost)
       const base = resolved.baseUrl
@@ -405,33 +409,51 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         return (await res.json()) as T
       }
 
-      await requestJson<{ port: number; token_version: number }>(
-        `/sandboxes/${encodedId}/preview-ports`,
-        { method: "POST", body: JSON.stringify({ port }) },
-      )
+      const published = await requestJson<{
+        port: number
+        token_version: number
+        access: PreviewAccessPolicy
+      }>(`/sandboxes/${encodedId}/preview-ports`, {
+        method: "POST",
+        body: JSON.stringify({ port }),
+      })
+      if (published.access !== "public" && published.access !== "private") {
+        throw new SandboxError("Invalid publish-preview-port response")
+      }
       const policy = await requestJson<{ preview_access?: PreviewAccess }>(
         `/sandboxes/${encodedId}/preview-ports`,
       )
       const previewAccess = policy.preview_access ?? "legacy_public"
-      if (previewAccess !== "private") {
-        return { url: previewUrl, previewAccess, authenticated: false }
+      if (published.access === "public") {
+        return {
+          url: previewUrl,
+          access: published.access,
+          previewAccess,
+          authenticated: false,
+        }
       }
 
       const credential = await requestJson<{
         token?: string
         query_param?: string
+        access: PreviewAccessPolicy
         preview_access?: PreviewAccess
       }>(`/sandboxes/${encodedId}/preview-ports/${port}/token`, {
         method: "POST",
         body: JSON.stringify({ expires_in_seconds: expiresInSeconds }),
       })
-      if (!credential.token || !credential.query_param) {
+      if (
+        !credential.token ||
+        !credential.query_param ||
+        credential.access !== "private"
+      ) {
         throw new SandboxError("Invalid preview-token response")
       }
       const signed = new URL(previewUrl)
       signed.searchParams.set(credential.query_param, credential.token)
       return {
         url: signed.toString(),
+        access: credential.access,
         previewAccess: credential.preview_access ?? previewAccess,
         authenticated: true,
       }
