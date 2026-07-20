@@ -26,6 +26,10 @@ class FakeConnection:
         self.subprotocols = subprotocols
         self.sent: list[object] = []
         self.closed = False
+        # Mirror the websockets client's close attributes so the SDK's
+        # close-reason enrichment can be exercised.
+        self.close_code: int | None = None
+        self.close_reason: str | None = None
         self._queue: asyncio.Queue = asyncio.Queue()
 
     async def send(self, data: object) -> None:
@@ -49,6 +53,11 @@ class FakeConnection:
         self._queue.put_nowait(message)
 
     def feed_eof(self) -> None:
+        self._queue.put_nowait(_EOF)
+
+    def close_with(self, code: int, reason: str = "") -> None:
+        self.close_code = code
+        self.close_reason = reason
         self._queue.put_nowait(_EOF)
 
 
@@ -310,6 +319,40 @@ async def test_wait_raises_if_closed_before_finished(monkeypatch):
     c.feed_eof()
 
     with pytest.raises(SandboxError):
+        await session.wait()
+
+
+async def test_close_1009_surfaces_size_limit_hint(monkeypatch):
+    conns: list[FakeConnection] = []
+
+    async def connect(uri, subprotocols=None):
+        c = FakeConnection(uri, subprotocols)
+        conns.append(c)
+        return c
+
+    patch_connect(monkeypatch, connect)
+
+    session = await spawn_command(make_deps(), "run")
+    conns[-1].close_with(1009, "message too big")
+
+    with pytest.raises(SandboxError, match="size limit"):
+        await session.wait()
+
+
+async def test_close_reason_included_in_error(monkeypatch):
+    conns: list[FakeConnection] = []
+
+    async def connect(uri, subprotocols=None):
+        c = FakeConnection(uri, subprotocols)
+        conns.append(c)
+        return c
+
+    patch_connect(monkeypatch, connect)
+
+    session = await spawn_command(make_deps(), "run")
+    conns[-1].close_with(4001, "boxd went away")
+
+    with pytest.raises(SandboxError, match="boxd went away"):
         await session.wait()
 
 

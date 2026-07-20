@@ -53,9 +53,9 @@ class FakeWebSocket extends EventTarget {
   _emit(data: string | ArrayBuffer): void {
     this.dispatchEvent(Object.assign(new Event("message"), { data }))
   }
-  _closeWith(code: number): void {
+  _closeWith(code: number, reason = ""): void {
     this.readyState = FakeWebSocket.CLOSED
-    this.dispatchEvent(Object.assign(new Event("close"), { code }))
+    this.dispatchEvent(Object.assign(new Event("close"), { code, reason }))
   }
 }
 
@@ -217,6 +217,26 @@ describe("Commands.spawn", () => {
     ws._closeWith(1006)
 
     await expect(session.wait()).rejects.toBeInstanceOf(SandboxError)
+  })
+
+  it("surfaces the size-limit hint when the server closes with 1009", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    const commands = new Commands(makeDeps())
+
+    const session = await commands.spawn("run")
+    last()._closeWith(1009, "message too big")
+
+    await expect(session.wait()).rejects.toThrow(/size limit/)
+  })
+
+  it("includes the server's close reason in the error", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    const commands = new Commands(makeDeps())
+
+    const session = await commands.spawn("run")
+    last()._closeWith(4001, "boxd went away")
+
+    await expect(session.wait()).rejects.toThrow(/boxd went away/)
   })
 
   it("throws a clear error when WebSocket is unavailable", async () => {
