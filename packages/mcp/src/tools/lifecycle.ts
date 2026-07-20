@@ -15,6 +15,7 @@ import {
   MAX_TIMEOUT_SECONDS,
 } from "../constants.js"
 import { formatSdkError } from "../lib/errors.js"
+import { RESERVED_PREVIEW_PORT } from "../lib/previewUrl.js"
 import { toolError, toolOk } from "../lib/result.js"
 import type { McpServer } from "../lib/sdk.js"
 import { defineTool } from "../lib/tool.js"
@@ -675,6 +676,9 @@ export function registerLifecycleTools(
           .int()
           .min(1024)
           .max(65535)
+          .refine((port) => port !== RESERVED_PREVIEW_PORT, {
+            message: `Port ${RESERVED_PREVIEW_PORT} is reserved for sandbox control traffic.`,
+          })
           .describe("The port a process is (or will be) listening on."),
         expires_in_seconds: z
           .number()

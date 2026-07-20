@@ -5,6 +5,7 @@
 export {
   MAX_PREVIEW_PORT,
   MIN_PREVIEW_PORT,
+  RESERVED_PREVIEW_PORT,
   previewUrl,
   resolveConfig,
 } from "./config.js"

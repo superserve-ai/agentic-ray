@@ -16,6 +16,7 @@ import type {
 
 export const MIN_PREVIEW_PORT = 1024
 export const MAX_PREVIEW_PORT = 65535
+export const RESERVED_PREVIEW_PORT = 49983
 export const MAX_PREVIEW_PORTS = 12
 
 export interface AddPortResult {
@@ -40,7 +41,8 @@ export function isValidPreviewPort(port: number): boolean {
   return (
     Number.isInteger(port) &&
     port >= MIN_PREVIEW_PORT &&
-    port <= MAX_PREVIEW_PORT
+    port <= MAX_PREVIEW_PORT &&
+    port !== RESERVED_PREVIEW_PORT
   )
 }
 
@@ -87,6 +89,12 @@ export function usePreviewPorts(
 
   const addPort = useCallback<UsePreviewPortsApi["addPort"]>(
     async (port, access) => {
+      if (port === RESERVED_PREVIEW_PORT) {
+        return {
+          ok: false,
+          error: `Port ${RESERVED_PREVIEW_PORT} is reserved for sandbox control traffic.`,
+        }
+      }
       if (!isValidPreviewPort(port)) {
         return {
           ok: false,

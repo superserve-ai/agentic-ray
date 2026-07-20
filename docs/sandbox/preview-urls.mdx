@@ -95,7 +95,8 @@ url = sandbox.get_preview_url(3000)
 
 `getPreviewUrl` / `get_preview_url` only constructs the hostname. It does not
 publish the port or add credentials. Ports must be integers from `1024` through
-`65535`.
+`65535`; port `49983` is reserved for sandbox control traffic and cannot be
+published.
 
 List the current server-side publication state with `listPreviewPorts()` /
 `list_preview_ports()`. The result includes the sandbox default and every

@@ -20,6 +20,7 @@ const SANDBOX_ID_RE = /^[A-Za-z0-9-]+$/
 // MIN_PREVIEW_PORT so both builders agree on what can be reached.
 const MIN_PORT = 1024
 const MAX_PORT = 65535
+export const RESERVED_PREVIEW_PORT = 49983
 
 /** Raised for an out-of-range port or a malformed sandbox id. */
 export class PreviewUrlError extends Error {
@@ -35,15 +36,26 @@ export class PreviewUrlError extends Error {
  * `sandboxHost` is the sandbox's data-plane host (region-resolved by the SDK's
  * `resolveConfig`); it defaults to the prod apex for callers without one.
  *
- * @throws {PreviewUrlError} when the port is not an integer in [1024, 65535] or
- * the sandbox id contains characters that are not URL-host-safe.
+ * @throws {PreviewUrlError} when the port is not an integer in [1024, 65535],
+ * is boxd's reserved control-plane port, or the sandbox id contains characters
+ * that are not URL-host-safe.
  */
 export function buildPreviewUrl(
   sandboxId: string,
   port: number,
   sandboxHost: string = DEFAULT_SANDBOX_HOST,
 ): string {
-  if (!Number.isInteger(port) || port < MIN_PORT || port > MAX_PORT) {
+  if (
+    !Number.isInteger(port) ||
+    port < MIN_PORT ||
+    port > MAX_PORT ||
+    port === RESERVED_PREVIEW_PORT
+  ) {
+    if (port === RESERVED_PREVIEW_PORT) {
+      throw new PreviewUrlError(
+        `Port ${port} is reserved for sandbox control traffic.`,
+      )
+    }
     throw new PreviewUrlError(
       `Port must be an integer between ${MIN_PORT} and ${MAX_PORT} (got ${port}).`,
     )

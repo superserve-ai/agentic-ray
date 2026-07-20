@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { createSdkClient } from "../src/client.js"
-import { buildPreviewUrl, PreviewUrlError } from "../src/lib/previewUrl.js"
+import {
+  buildPreviewUrl,
+  PreviewUrlError,
+  RESERVED_PREVIEW_PORT,
+} from "../src/lib/previewUrl.js"
 
 describe("buildPreviewUrl", () => {
   it("builds {port}-{id}.{host} on the default (prod) host", () => {
@@ -34,6 +38,12 @@ describe("buildPreviewUrl", () => {
     expect(() => buildPreviewUrl("id", 1023)).toThrow(PreviewUrlError)
     expect(buildPreviewUrl("id", 1024)).toBe(
       "https://1024-id.sandbox.superserve.ai",
+    )
+  })
+
+  it("rejects boxd's reserved control-plane port", () => {
+    expect(() => buildPreviewUrl("id", RESERVED_PREVIEW_PORT)).toThrow(
+      /reserved for sandbox control traffic/,
     )
   })
 

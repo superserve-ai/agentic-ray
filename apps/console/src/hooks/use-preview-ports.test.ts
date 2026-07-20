@@ -19,6 +19,7 @@ import {
   MAX_PREVIEW_PORT,
   MAX_PREVIEW_PORTS,
   MIN_PREVIEW_PORT,
+  RESERVED_PREVIEW_PORT,
   usePreviewPorts,
 } from "./use-preview-ports"
 
@@ -28,6 +29,7 @@ describe("isValidPreviewPort", () => {
   it("pins the port range to the SDK / edge-proxy contract", () => {
     expect(MIN_PREVIEW_PORT).toBe(1024)
     expect(MAX_PREVIEW_PORT).toBe(65535)
+    expect(RESERVED_PREVIEW_PORT).toBe(49983)
   })
 
   it("accepts integers within [MIN, MAX]", () => {
@@ -41,6 +43,7 @@ describe("isValidPreviewPort", () => {
     expect(isValidPreviewPort(MIN_PREVIEW_PORT - 1)).toBe(false)
     expect(isValidPreviewPort(MAX_PREVIEW_PORT + 1)).toBe(false)
     expect(isValidPreviewPort(3000.5)).toBe(false)
+    expect(isValidPreviewPort(RESERVED_PREVIEW_PORT)).toBe(false)
   })
 })
 
@@ -107,6 +110,12 @@ describe("usePreviewPorts", () => {
 
     await expect(result.current.addPort(80)).resolves.toMatchObject({
       ok: false,
+    })
+    await expect(
+      result.current.addPort(RESERVED_PREVIEW_PORT),
+    ).resolves.toEqual({
+      ok: false,
+      error: `Port ${RESERVED_PREVIEW_PORT} is reserved for sandbox control traffic.`,
     })
     await expect(result.current.addPort(3000)).resolves.toEqual({
       ok: false,

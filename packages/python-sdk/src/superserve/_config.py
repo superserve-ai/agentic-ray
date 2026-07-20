@@ -129,13 +129,15 @@ def data_plane_target(sandbox_id: str, sandbox_host: str) -> DataPlaneTarget:
 
 
 # Lowest / highest TCP port a preview URL can target. Privileged ports
-# (< 1024) are refused by the edge proxy, so we reject them up front.
+# (< 1024) and boxd's control-plane port are refused by the edge proxy, so we
+# reject them up front.
 #
 # Mirrored by the TypeScript SDK (packages/sdk/src/config.ts) and the console
 # (apps/console/src/hooks/use-preview-ports.ts); keep all three in sync. Tests
 # pin the literals on each side so one-sided drift fails CI.
 MIN_PREVIEW_PORT = 1024
 MAX_PREVIEW_PORT = 65535
+RESERVED_PREVIEW_PORT = 49983
 
 
 def preview_url(sandbox_id: str, host: str, port: int) -> str:
@@ -149,14 +151,20 @@ def preview_url(sandbox_id: str, host: str, port: int) -> str:
     header.
 
     Raises:
-        ValidationError: if ``port`` is not an integer in [1024, 65535].
+        ValidationError: if ``port`` is not an integer in [1024, 65535] or is
+            the reserved boxd control-plane port (49983).
     """
     if (
         not isinstance(port, int)
         or isinstance(port, bool)
         or port < MIN_PREVIEW_PORT
         or port > MAX_PREVIEW_PORT
+        or port == RESERVED_PREVIEW_PORT
     ):
+        if port == RESERVED_PREVIEW_PORT:
+            raise ValidationError(
+                f"Invalid preview port {port!r}: reserved for sandbox control traffic."
+            )
         raise ValidationError(
             f"Invalid preview port {port!r}: must be an integer between "
             f"{MIN_PREVIEW_PORT} and {MAX_PREVIEW_PORT}. Privileged ports "

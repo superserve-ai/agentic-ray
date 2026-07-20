@@ -8,6 +8,7 @@ from superserve._config import (
     DEFAULT_SANDBOX_HOST,
     MAX_PREVIEW_PORT,
     MIN_PREVIEW_PORT,
+    RESERVED_PREVIEW_PORT,
     _derive_sandbox_host,
     _region_from_api_key,
     data_plane_target,
@@ -113,9 +114,7 @@ class TestRegionDerivation:
         cfg = resolve_config(api_key=f"ss_live_use_{_TAIL}")
         assert cfg.base_url == "https://env.example.com"
 
-    def test_empty_env_base_url_is_unset(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_empty_env_base_url_is_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # A whitespace-only override must not shadow region derivation.
         monkeypatch.setenv("SUPERSERVE_BASE_URL", "   ")
         cfg = resolve_config(api_key=f"ss_live_usw_{_TAIL}")
@@ -235,6 +234,7 @@ class TestPreviewUrl:
         # all three in sync — this pin makes one-sided drift fail CI.
         assert MIN_PREVIEW_PORT == 1024
         assert MAX_PREVIEW_PORT == 65535
+        assert RESERVED_PREVIEW_PORT == 49983
 
     def test_builds_subdomain_url_for_port(self) -> None:
         assert (
@@ -262,6 +262,12 @@ class TestPreviewUrl:
     def test_rejects_out_of_range_ports(self) -> None:
         with pytest.raises(ValidationError):
             preview_url("a", "h", 70000)
+
+    def test_rejects_reserved_boxd_port(self) -> None:
+        with pytest.raises(
+            ValidationError, match="reserved for sandbox control traffic"
+        ):
+            preview_url("a", "h", RESERVED_PREVIEW_PORT)
 
     @pytest.mark.parametrize("port", [3000.5, True, "3000"])
     def test_rejects_non_integer_ports(self, port: object) -> None:
