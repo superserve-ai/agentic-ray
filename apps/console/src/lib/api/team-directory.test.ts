@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 let regions: string[] = ["use"]
 let cellClients: Record<string, ReturnType<typeof cellClient>> = {}
 
-// Minimal per-cell client: team_member memberships and team name lookups.
+// Minimal per-cell client: team_member memberships, team name lookups, and
+// the sharded sandbox-count view.
 function cellClient(
   memberships: Array<{ team_id: string }>,
   teams: Array<{ id: string; name: string; home_region?: string | null }> = [],
   rbac: Array<{ team_id: string; status: string }> = [],
+  counts: Array<{ team_id: string; active_sandbox_count: number }> = [],
 ) {
   const from = vi.fn((table: string) => {
     if (table === "team_memberships") {
@@ -32,6 +34,18 @@ function cellClient(
           eq: (_col: string, id: string) => ({
             limit: async () => ({
               data: teams.filter((t) => t.id === id),
+              error: null,
+            }),
+          }),
+        }),
+      }
+    }
+    if (table === "team_active_sandbox_counts") {
+      return {
+        select: () => ({
+          eq: (_col: string, id: string) => ({
+            maybeSingle: async () => ({
+              data: counts.find((c) => c.team_id === id) ?? null,
               error: null,
             }),
           }),
@@ -352,10 +366,26 @@ describe("findTeamById home-region preference", () => {
   const team = (home_region: string | null) => ({
     id: "t-1",
     name: "acme",
-    active_sandbox_count: 0,
     max_sandboxes: 10,
     created_at: "2026-01-01",
     home_region,
+  })
+
+  it("reads the sandbox count from the sharded-counter view, defaulting to zero", async () => {
+    regions = ["use"]
+    cellClients = {
+      use: cellClient(
+        [],
+        [team(null)],
+        [],
+        [{ team_id: "t-1", active_sandbox_count: 7 }],
+      ),
+    }
+    expect((await findTeamById("t-1"))?.active_sandbox_count).toBe(7)
+
+    cellClients = { use: cellClient([], [team(null)]) }
+    clearMembershipDirectoryCache()
+    expect((await findTeamById("t-1"))?.active_sandbox_count).toBe(0)
   })
 
   it("prefers the cell the team names as home over an earlier pointer row", async () => {

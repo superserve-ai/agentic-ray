@@ -228,16 +228,17 @@ export async function listTeamsForUser(
 export async function listAllTeams(): Promise<TeamRecord[]> {
   const { items } = await acrossCells(async (region) => {
     const admin = cellFor(region).createAdminClient()
-    const { data: teams, error } = await admin
-      .from("team")
-      .select("id, name, active_sandbox_count, max_sandboxes, created_at")
+    const [{ data: teams, error }, counts] = await Promise.all([
+      admin.from("team").select("id, name, max_sandboxes, created_at"),
+      sandboxCounts(admin),
+    ])
 
     if (error) throw new Error(error.message)
 
     return (teams ?? []).map((team) => ({
       id: team.id as string,
       name: team.name as string,
-      active_sandbox_count: team.active_sandbox_count as number,
+      active_sandbox_count: counts.get(team.id as string) ?? 0,
       max_sandboxes: team.max_sandboxes as number,
       created_at: team.created_at as string,
       region,
@@ -256,9 +257,7 @@ async function findTeamInRegion(
   const admin = cellFor(region).createAdminClient()
   const { data: teams, error } = await admin
     .from("team")
-    .select(
-      "id, name, active_sandbox_count, max_sandboxes, created_at, home_region",
-    )
+    .select("id, name, max_sandboxes, created_at, home_region")
     .eq("id", teamId)
     .limit(1)
 
@@ -270,12 +269,46 @@ async function findTeamInRegion(
   return {
     id: team.id as string,
     name: team.name as string,
-    active_sandbox_count: team.active_sandbox_count as number,
+    active_sandbox_count: await sandboxCountFor(admin, teamId),
     max_sandboxes: team.max_sandboxes as number,
     created_at: team.created_at as string,
     region,
     home_region: (team.home_region as string | null) ?? null,
   }
+}
+
+// Live sandbox counts come from the team_active_sandbox_counts view —
+// team.active_sandbox_count is frozen since the control plane moved to a
+// sharded counter. The view is security_invoker over an RLS-deny table, so
+// these reads must stay on the admin (service-role) client; a user-scoped
+// client reads empty rows, not an error.
+async function sandboxCounts(
+  admin: SupabaseClient,
+): Promise<Map<string, number>> {
+  const { data, error } = await admin
+    .from("team_active_sandbox_counts")
+    .select("team_id, active_sandbox_count")
+  if (error) throw new Error(error.message)
+  return new Map(
+    (data ?? []).map((row) => [
+      row.team_id as string,
+      row.active_sandbox_count as number,
+    ]),
+  )
+}
+
+// A team with no counter rows yet is absent from the view: zero sandboxes.
+async function sandboxCountFor(
+  admin: SupabaseClient,
+  teamId: string,
+): Promise<number> {
+  const { data, error } = await admin
+    .from("team_active_sandbox_counts")
+    .select("active_sandbox_count")
+    .eq("team_id", teamId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return (data?.active_sandbox_count as number | undefined) ?? 0
 }
 
 /**
