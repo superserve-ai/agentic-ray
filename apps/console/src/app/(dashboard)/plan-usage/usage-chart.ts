@@ -13,6 +13,8 @@ export interface UsageChartBucket {
 
 export interface UsageChartPoint {
   bucket_start: string
+  bucket_end: string
+  usage_hours: number
   value: number
 }
 
@@ -31,7 +33,7 @@ export function getUsageChartBucket(
   return { ms: WEEK_MS, label: "week" }
 }
 
-function getMetricSeconds(
+function getMetricUsageSeconds(
   row: BillingUsageHourly,
   metric: UsageMetric,
 ): number {
@@ -71,18 +73,20 @@ export function buildUsageChartPoints({
     const bucketStartMs = periodStartMs + bucketIndex * bucketMs
     buckets.set(
       bucketStartMs,
-      (buckets.get(bucketStartMs) ?? 0) + getMetricSeconds(row, metric),
+      (buckets.get(bucketStartMs) ?? 0) + getMetricUsageSeconds(row, metric),
     )
   }
 
   return [...buckets.entries()]
     .toSorted(([left], [right]) => left - right)
-    .map(([bucketStartMs, seconds]) => {
+    .map(([bucketStartMs, usageSeconds]) => {
       const bucketEndMs = Math.min(bucketStartMs + bucketMs, periodEndMs)
       const durationSeconds = Math.max((bucketEndMs - bucketStartMs) / 1000, 1)
       return {
         bucket_start: new Date(bucketStartMs).toISOString(),
-        value: seconds / durationSeconds,
+        bucket_end: new Date(bucketEndMs).toISOString(),
+        usage_hours: usageSeconds / 3600,
+        value: usageSeconds / durationSeconds,
       }
     })
 }

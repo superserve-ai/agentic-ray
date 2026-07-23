@@ -1,5 +1,5 @@
 {
-  "extends": "@superserve/typescript-config/library.json",
+  "extends": "../typescript-config/library.json",
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",

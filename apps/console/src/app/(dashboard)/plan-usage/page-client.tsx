@@ -249,6 +249,8 @@ export function PlanUsagePageClient() {
               periodEnd={chartPeriod.end}
               bucket={chartBucket}
               valueLabel="vCPU"
+              usageLabel="vCPU hours"
+              hourlyRateUsd={pricing.cpu_vcpu_hour_usd}
               strokeClassName="text-success"
               metric="vcpu"
             />
@@ -260,6 +262,8 @@ export function PlanUsagePageClient() {
               periodEnd={chartPeriod.end}
               bucket={chartBucket}
               valueLabel="GiB"
+              usageLabel="GiB memory hours"
+              hourlyRateUsd={pricing.memory_gib_hour_usd}
               strokeClassName="text-success"
               metric="memory"
             />
@@ -271,6 +275,8 @@ export function PlanUsagePageClient() {
               periodEnd={chartPeriod.end}
               bucket={chartBucket}
               valueLabel="GiB"
+              usageLabel="GiB storage hours"
+              hourlyRateUsd={pricing.storage_gib_hour_usd}
               strokeClassName="text-success"
               metric="storage"
             />
@@ -288,6 +294,52 @@ function formatChartTick(value: string): string {
   })
 }
 
+function formatChartDateRange(start: string, end: string): string {
+  const startDate = new Date(start)
+  const endDate = new Date(end)
+  return `${startDate.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })} - ${endDate.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })}`
+}
+
+function formatPointTooltip({
+  title,
+  bucketStart,
+  bucketEnd,
+  usageHours,
+  usageLabel,
+  averageValue,
+  valueLabel,
+  priceUsd,
+}: {
+  title: string
+  bucketStart: string
+  bucketEnd: string
+  usageHours: number
+  usageLabel: string
+  averageValue: number
+  valueLabel: string
+  priceUsd: number
+}): string {
+  return [
+    title,
+    `Range: ${formatChartDateRange(bucketStart, bucketEnd)}`,
+    `Usage: ${formatNumber(usageHours)} ${usageLabel}`,
+    `Average: ${formatNumber(averageValue)} ${valueLabel}`,
+    `Price: ${formatCurrency(priceUsd)}`,
+  ].join("\n")
+}
+
 function UsageChartCard({
   title,
   description,
@@ -296,6 +348,8 @@ function UsageChartCard({
   periodEnd,
   bucket,
   valueLabel,
+  usageLabel,
+  hourlyRateUsd,
   strokeClassName,
   metric,
 }: {
@@ -306,6 +360,8 @@ function UsageChartCard({
   periodEnd: string
   bucket: UsageChartBucket
   valueLabel: string
+  usageLabel: string
+  hourlyRateUsd: number
   strokeClassName: string
   metric: UsageMetric
 }) {
@@ -337,12 +393,19 @@ function UsageChartCard({
       Math.min(Math.max((bucketStartMs - periodStartMs) / periodMs, 0), 1) *
         plotWidth
     const y = padding.top + (1 - value / yMax) * plotHeight
-    return { x, y, value, bucketStart: point.bucket_start }
+    return {
+      x,
+      y,
+      value,
+      bucketStart: point.bucket_start,
+      bucketEnd: point.bucket_end,
+      usageHours: point.usage_hours,
+      priceUsd: point.usage_hours * hourlyRateUsd,
+    }
   })
   const path = points
     .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
     .join(" ")
-  const latestPoint = points[points.length - 1]
 
   return (
     <Card>
@@ -351,10 +414,7 @@ function UsageChartCard({
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="pt-4">
-        <div className="mb-3 flex items-baseline justify-between gap-3">
-          <p className="font-mono text-2xl text-foreground">
-            {formatNumber(latestPoint?.value ?? 0)}
-          </p>
+        <div className="mb-3 flex justify-end">
           <p className="font-mono text-xs text-muted uppercase">
             Latest {valueLabel}
           </p>
@@ -364,7 +424,9 @@ function UsageChartCard({
           viewBox={`0 0 ${width} ${height}`}
           aria-label={`${title} ${bucket.label} line graph`}
         >
-          <title>{`${title} ${bucket.label} line graph`}</title>
+          <title
+            suppressHydrationWarning
+          >{`${title} ${bucket.label} line graph`}</title>
           {yTicks.map((tick) => {
             const y = padding.top + (1 - tick / yMax) * plotHeight
             return (
@@ -412,16 +474,40 @@ function UsageChartCard({
               strokeLinejoin="round"
             />
           )}
-          {latestPoint && (
-            <circle
-              cx={latestPoint.x}
-              cy={latestPoint.y}
-              r="4"
-              fill="currentColor"
-              stroke="var(--color-surface)"
-              strokeWidth="2"
-            />
-          )}
+          {points.map((point) => {
+            const tooltip = formatPointTooltip({
+              title,
+              bucketStart: point.bucketStart,
+              bucketEnd: point.bucketEnd,
+              usageHours: point.usageHours,
+              usageLabel,
+              averageValue: point.value,
+              valueLabel,
+              priceUsd: point.priceUsd,
+            })
+            return (
+              <g key={point.bucketStart}>
+                <circle
+                  cx={point.x}
+                  cy={point.y}
+                  r="9"
+                  fill="transparent"
+                  pointerEvents="all"
+                >
+                  <title>{tooltip}</title>
+                </circle>
+                <circle
+                  cx={point.x}
+                  cy={point.y}
+                  r="3.75"
+                  fill="currentColor"
+                  stroke="var(--color-surface)"
+                  strokeWidth="2"
+                  pointerEvents="none"
+                />
+              </g>
+            )
+          })}
           <text
             x={padding.left}
             y={height - 8}
