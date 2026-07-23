@@ -228,12 +228,16 @@ export async function listTeamsForUser(
 export async function listAllTeams(): Promise<TeamRecord[]> {
   const { items } = await acrossCells(async (region) => {
     const admin = cellFor(region).createAdminClient()
-    const [{ data: teams, error }, counts] = await Promise.all([
-      admin.from("team").select("id, name, max_sandboxes, created_at"),
-      sandboxCounts(admin),
-    ])
+    const { data: teams, error } = await admin
+      .from("team")
+      .select("id, name, max_sandboxes, created_at")
 
     if (error) throw new Error(error.message)
+
+    const counts = await sandboxCounts(
+      admin,
+      (teams ?? []).map((team) => team.id as string),
+    )
 
     return (teams ?? []).map((team) => ({
       id: team.id as string,
@@ -282,19 +286,30 @@ async function findTeamInRegion(
 // sharded counter. The view is security_invoker over an RLS-deny table, so
 // these reads must stay on the admin (service-role) client; a user-scoped
 // client reads empty rows, not an error.
+//
+// Queried per id-chunk, never unbounded: the API's max-rows cap silently
+// truncates an unbounded select, and a truncated map here would render the
+// dropped teams as 0 active sandboxes. Chunked .in() keeps every response
+// under both the row cap and URL-length limits at any team count.
+const sandboxCountsChunk = 200
+
 async function sandboxCounts(
   admin: SupabaseClient,
+  teamIds: string[],
 ): Promise<Map<string, number>> {
-  const { data, error } = await admin
-    .from("team_active_sandbox_counts")
-    .select("team_id, active_sandbox_count")
-  if (error) throw new Error(error.message)
-  return new Map(
-    (data ?? []).map((row) => [
-      row.team_id as string,
-      row.active_sandbox_count as number,
-    ]),
-  )
+  const counts = new Map<string, number>()
+  for (let i = 0; i < teamIds.length; i += sandboxCountsChunk) {
+    const chunk = teamIds.slice(i, i + sandboxCountsChunk)
+    const { data, error } = await admin
+      .from("team_active_sandbox_counts")
+      .select("team_id, active_sandbox_count")
+      .in("team_id", chunk)
+    if (error) throw new Error(error.message)
+    for (const row of data ?? []) {
+      counts.set(row.team_id as string, row.active_sandbox_count as number)
+    }
+  }
+  return counts
 }
 
 // A team with no counter rows yet is absent from the view: zero sandboxes.

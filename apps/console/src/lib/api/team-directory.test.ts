@@ -49,6 +49,10 @@ function cellClient(
               error: null,
             }),
           }),
+          in: async (_col: string, ids: string[]) => ({
+            data: counts.filter((c) => ids.includes(c.team_id)),
+            error: null,
+          }),
         }),
       }
     }
