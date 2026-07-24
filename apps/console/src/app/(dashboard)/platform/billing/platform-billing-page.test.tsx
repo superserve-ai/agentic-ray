@@ -58,8 +58,7 @@ describe("PlatformBillingPage", () => {
         return (
           element?.tagName === "DIV" &&
           element.classList.contains("mt-1") &&
-          normalizedText ===
-            "Compute $60.00 · Memory $30.00 · Storage $10.00"
+          normalizedText === "Compute $60.00 · Memory $30.00 · Storage $10.00"
         )
       }),
     ).toBeInTheDocument()
