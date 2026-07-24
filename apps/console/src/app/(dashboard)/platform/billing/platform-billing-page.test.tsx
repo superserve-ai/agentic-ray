@@ -53,7 +53,13 @@ describe("PlatformBillingPage", () => {
     expect(screen.getByText("$140.00")).toBeInTheDocument()
     expect(screen.getByText("$105.00")).toBeInTheDocument()
     expect(
-      screen.getByText(/Compute \$60.00 · Memory \$30.00 · Storage \$10.00/),
+      screen.getByText((_, element) =>
+        Boolean(
+          element?.textContent?.includes(
+            "Compute $60.00 · Memory $30.00 · Storage $10.00",
+          ),
+        ),
+      ),
     ).toBeInTheDocument()
   })
 
