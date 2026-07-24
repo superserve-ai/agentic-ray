@@ -62,6 +62,7 @@ function responseFor(teamId: string) {
 
 describe("getPlatformBillingAction", () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: URL | RequestInfo) => {
