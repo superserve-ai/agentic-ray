@@ -27,6 +27,12 @@ export const userManagementNavItem: NavItem = {
   icon: UsersIcon,
 }
 
+export const platformBillingNavItem: NavItem = {
+  label: "Platform Billing",
+  href: "/platform/billing",
+  icon: ChartBarIcon,
+}
+
 export const adminNavItem: NavItem = {
   label: "Admin",
   href: "/admin",
