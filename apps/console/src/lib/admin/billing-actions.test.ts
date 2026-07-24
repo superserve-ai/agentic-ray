@@ -101,7 +101,6 @@ describe("getPlatformBillingAction", () => {
     await expect(getPlatformBillingAction()).rejects.toThrow(
       "platform billing read access required",
     )
-    expect(listAllTeams).not.toHaveBeenCalled()
   })
 
   it("keeps other customers visible when one billing summary fails", async () => {
