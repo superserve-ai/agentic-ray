@@ -50,7 +50,7 @@ uv sync                   # install all Python dependencies
 ```bash
 bun run dev               # start all dev servers
 bun run build             # build all packages
-bun run lint              # lint all packages
+bun run lint              # lint all files
 bun run format            # format all files
 bun run typecheck         # type check all packages
 bun run test              # unit/integration tests
@@ -63,7 +63,7 @@ For more (per-package targets, dependency management, etc.), see [CONTRIBUTING.m
 - TypeScript: [`@superserve/sdk`](https://www.npmjs.com/package/@superserve/sdk) — `bun add @superserve/sdk`
 - Python: [`superserve`](https://pypi.org/project/superserve/) — `uv add superserve`
 
-Full reference at [docs.superserve.ai](https://docs.superserve.ai/?utm_source=github&utm_medium=readme).
+Full reference at [docs.superserve.ai](https://docs.superserve.ai/?utm_source=github&utm_medium=referral&utm_campaign=readme).
 
 ## Testing
 

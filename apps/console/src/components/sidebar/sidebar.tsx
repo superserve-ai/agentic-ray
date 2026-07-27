@@ -13,14 +13,17 @@ import Image from "next/image"
 
 import { useUser } from "@/hooks/use-user"
 import {
+  canReadPlatformBilling,
   canReadPlatformTeams,
   canViewOtherUsersAccount,
 } from "@/lib/admin/permissions"
+import { isStaff } from "@/lib/admin/staff"
 
 import {
   adminNavItem,
   bottomNavItems,
   mainNavItems,
+  platformBillingNavItem,
   userManagementNavItem,
 } from "./nav-config"
 import { useSidebar } from "./sidebar-context"
@@ -39,6 +42,9 @@ export function Sidebar() {
   const { user } = useUser()
   const navItems = [
     ...mainNavItems,
+    ...(isStaff(user) && canReadPlatformBilling(user)
+      ? [platformBillingNavItem]
+      : []),
     ...(canReadPlatformTeams(user) ? [adminNavItem] : []),
     ...(canViewOtherUsersAccount(user) ? [userManagementNavItem] : []),
   ]
