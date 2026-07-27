@@ -27,6 +27,12 @@ _CH_STDIN = 0
 _CH_STDOUT = 1
 _CH_STDERR = 2
 
+# Cap on a single stdin frame; larger writes are split transparently. Must
+# stay under the smallest per-message limit enforced by any deployed server
+# (64 KiB historically; newer servers allow more) — raising it can break
+# sessions against servers that still enforce the older limit.
+_STDIN_CHUNK_BYTES = 32 * 1024
+
 
 def _retrieve_exception(fut: "asyncio.Future[Any]") -> None:
     # Touch the result so asyncio doesn't warn when it's never awaited.
@@ -103,19 +109,33 @@ class AsyncStdin:
     def __init__(self, ws: Any, is_open: Callable[[], bool]) -> None:
         self._ws = ws
         self._is_open = is_open
+        # Chunked sends await per chunk; the lock keeps concurrent write()
+        # calls from interleaving their chunks on the wire (the server
+        # forwards each frame to stdin with no reassembly).
+        self._lock = asyncio.Lock()
 
     async def write(self, data: Union[str, bytes]) -> None:
         """Write to stdin. ``str`` is UTF-8 encoded; ``bytes`` is sent as-is."""
         if not self._is_open():
             return
         raw = data.encode() if isinstance(data, str) else bytes(data)
-        await self._ws.send(bytes([_CH_STDIN]) + raw)
+        # memoryview slices avoid copying the payload a second time; each
+        # frame is assembled once, directly from the source bytes.
+        view = memoryview(raw)
+        async with self._lock:
+            for off in range(0, len(raw), _STDIN_CHUNK_BYTES):
+                chunk = view[off : off + _STDIN_CHUNK_BYTES]
+                frame = bytearray(1 + len(chunk))
+                frame[0] = _CH_STDIN
+                frame[1:] = chunk
+                await self._ws.send(frame)
 
     async def close(self) -> None:
         """Close stdin, signalling EOF."""
         if not self._is_open():
             return
-        await self._ws.send(json.dumps({"type": "stdin_close"}))
+        async with self._lock:
+            await self._ws.send(json.dumps({"type": "stdin_close"}))
 
 
 class AsyncCommandSession:
@@ -200,9 +220,27 @@ class AsyncCommandSession:
             # settled and the socket is always closed — never a hang or a leak.
             if not self._result.done():
                 self._flush()
+                # Surface the server's close code/reason — an unexplained drop
+                # is the hardest failure to debug. 1009 means a single frame
+                # exceeded the server's message size limit.
+                code = getattr(self._ws, "close_code", None)
+                reason = getattr(self._ws, "close_reason", None)
+                if code == 1009:
+                    detail = (
+                        "a message exceeded the server's size limit — usually "
+                        "an oversized command string; keep the command small "
+                        "and send bulk data via stdin or the files API"
+                    )
+                elif reason:
+                    detail = reason
+                elif code is not None:
+                    detail = f"close code {code}"
+                else:
+                    detail = "connection dropped"
                 self._result.set_exception(
                     SandboxError(
-                        "exec/connect: connection closed before the command finished"
+                        "exec/connect: connection closed before the command "
+                        f"finished ({detail})"
                     )
                 )
             with contextlib.suppress(Exception):

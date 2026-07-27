@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import { teamKeys } from "@/lib/api/query-keys"
+import { billingKeys, teamKeys } from "@/lib/api/query-keys"
 import {
   createTeamAction,
   listTeamsAction,
@@ -33,6 +33,19 @@ function resetTeamScopedQueries(
   })
 }
 
+function invalidateBillingSummary(
+  queryClient: ReturnType<typeof useQueryClient>,
+) {
+  void queryClient.invalidateQueries({ queryKey: billingKeys.all })
+}
+
+export function refreshTeamScopedQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+) {
+  invalidateBillingSummary(queryClient)
+  resetTeamScopedQueries(queryClient)
+}
+
 export function useCreateTeam() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -42,7 +55,7 @@ export function useCreateTeam() {
       // Creating a team also switches to it, and the directory itself gained
       // a row — refetch it rather than patching it.
       void queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
-      resetTeamScopedQueries(queryClient)
+      refreshTeamScopedQueries(queryClient)
     },
   })
 }
@@ -76,7 +89,7 @@ export function useSwitchTeam() {
       // a refresh would only re-render RSC payloads that carry no team data —
       // and it invalidates the router cache, re-fetching every prefetched
       // route alongside the query refetches.
-      resetTeamScopedQueries(queryClient)
+      refreshTeamScopedQueries(queryClient)
     },
   })
 }

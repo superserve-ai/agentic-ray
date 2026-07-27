@@ -8,7 +8,7 @@ import {
   PopoverPopup,
   PopoverTrigger,
 } from "@superserve/ui"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 export interface DateRange {
   start: Date
@@ -17,10 +17,11 @@ export interface DateRange {
 
 interface DateRangeFilterProps {
   value: DateRange | null
+  billingPeriod?: DateRange | null
   onChange: (range: DateRange | null) => void
 }
 
-type PresetKey = "today" | "yesterday" | "7d" | "30d"
+type PresetKey = "billing-period" | "today" | "yesterday" | "7d" | "30d"
 
 interface Preset {
   key: PresetKey
@@ -40,7 +41,15 @@ function endOfDay(date: Date): Date {
   return d
 }
 
-const PRESETS: Preset[] = [
+const BILLING_PERIOD_PRESET: Preset = {
+  key: "billing-period",
+  label: "Billing Period",
+  getRange: () => {
+    throw new Error("Billing period preset requires a range")
+  },
+}
+
+const QUICK_PRESETS: Preset[] = [
   {
     key: "today",
     label: "Today",
@@ -63,7 +72,7 @@ const PRESETS: Preset[] = [
   },
   {
     key: "7d",
-    label: "7d",
+    label: "7D",
     getRange: () => {
       const start = new Date()
       start.setDate(start.getDate() - 7)
@@ -72,7 +81,7 @@ const PRESETS: Preset[] = [
   },
   {
     key: "30d",
-    label: "30d",
+    label: "30D",
     getRange: () => {
       const start = new Date()
       start.setDate(start.getDate() - 30)
@@ -149,9 +158,23 @@ function buildMonthDays(month: Date): Array<Date | null> {
   return cells
 }
 
-function getActivePreset(value: DateRange | null): PresetKey | null {
+function isSameRange(left: DateRange | null, right: DateRange | null): boolean {
+  if (!left || !right) return false
+  return (
+    left.start.getTime() === right.start.getTime() &&
+    left.end.getTime() === right.end.getTime()
+  )
+}
+
+function getActivePreset(
+  value: DateRange | null,
+  billingPeriod: DateRange | null | undefined,
+): PresetKey | null {
   if (!value) return null
-  for (const preset of PRESETS) {
+  if (billingPeriod && isSameRange(value, billingPeriod)) {
+    return "billing-period"
+  }
+  for (const preset of QUICK_PRESETS) {
     const range = preset.getRange()
     if (
       startOfDay(value.start).getTime() === startOfDay(range.start).getTime() &&
@@ -163,22 +186,37 @@ function getActivePreset(value: DateRange | null): PresetKey | null {
   return null
 }
 
-export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
+export function DateRangeFilter({
+  value,
+  billingPeriod,
+  onChange,
+}: DateRangeFilterProps) {
   const [customStart, setCustomStart] = useState<Date | null>(null)
   const [customEnd, setCustomEnd] = useState<Date | null>(null)
   const [customError, setCustomError] = useState<string | null>(null)
   const [popoverOpen, setPopoverOpen] = useState(false)
   const [visibleMonth, setVisibleMonth] = useState(() =>
-    startOfMonth(value?.start ?? new Date()),
+    startOfMonth(value?.start ?? billingPeriod?.start ?? new Date()),
   )
 
-  const activePreset = getActivePreset(value)
+  useEffect(() => {
+    if (popoverOpen) return
+    setVisibleMonth(
+      startOfMonth(value?.start ?? billingPeriod?.start ?? new Date()),
+    )
+  }, [billingPeriod?.start, popoverOpen, value?.start])
+
+  const activePreset = getActivePreset(value, billingPeriod)
   const isCustom = value && !activePreset
   const monthDays = useMemo(() => buildMonthDays(visibleMonth), [visibleMonth])
 
   const handlePresetClick = (preset: Preset) => {
+    if (preset.key === BILLING_PERIOD_PRESET.key) {
+      onChange(billingPeriod ?? preset.getRange())
+      return
+    }
     if (activePreset === preset.key) {
-      onChange(null)
+      onChange(billingPeriod ?? null)
     } else {
       onChange(preset.getRange())
     }
@@ -198,7 +236,7 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
   }
 
   const handleCustomClear = () => {
-    onChange(null)
+    onChange(billingPeriod ?? null)
     setCustomStart(null)
     setCustomEnd(null)
     setCustomError(null)
@@ -207,7 +245,21 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
 
   return (
     <div className="flex items-center gap-1">
-      {PRESETS.map((preset) => (
+      {billingPeriod && (
+        <button
+          type="button"
+          onClick={() => handlePresetClick(BILLING_PERIOD_PRESET)}
+          className={cn(
+            "cursor-pointer px-2 py-1 font-mono text-xs uppercase transition-colors",
+            activePreset === BILLING_PERIOD_PRESET.key
+              ? "bg-brand/10 text-foreground"
+              : "text-muted hover:text-foreground",
+          )}
+        >
+          {BILLING_PERIOD_PRESET.label}
+        </button>
+      )}
+      {QUICK_PRESETS.map((preset) => (
         <button
           key={preset.key}
           type="button"

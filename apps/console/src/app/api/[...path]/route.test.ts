@@ -86,7 +86,7 @@ describe("api proxy /api/[...path]", () => {
     expect(res.status).toBe(404)
   })
 
-  it("forwards the secrets, providers, and activity prefixes", async () => {
+  it("forwards the secrets, providers, activity, and billing summary prefixes", async () => {
     fetchSpy.mockImplementation(() =>
       Promise.resolve(
         new Response("[]", {
@@ -105,7 +105,16 @@ describe("api proxy /api/[...path]", () => {
       const res = await GET(req("GET", path), params(path))
       expect(res.status).toBe(200)
     }
-    expect(fetchSpy).toHaveBeenCalledTimes(4)
+    const billingRes = await GET(
+      req("GET", ["billing", "summary"]),
+      params(["billing", "summary"]),
+    )
+    expect(billingRes.status).toBe(200)
+    expect(billingRes.headers.get("cache-control")).toBe("private, no-store")
+    expect(fetchSpy).toHaveBeenCalledTimes(5)
+    expect(fetchSpy.mock.calls[4][0]).toBe(
+      "https://api.test.superserve.ai/billing/summary",
+    )
   })
 
   it("returns 401 when the user is not authenticated", async () => {

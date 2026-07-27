@@ -203,9 +203,9 @@
           {
             "group": "Billing",
             "pages": [
-              "GET /billing/summary",
               "GET /billing/pricing",
-              "GET /billing/pricing/public"
+              "GET /billing/pricing/public",
+              "GET /billing/summary"
             ]
           },
           {

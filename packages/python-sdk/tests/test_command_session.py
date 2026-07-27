@@ -8,7 +8,11 @@ import json
 import pytest
 import websockets
 
-from superserve.command_session import AsyncSpawnDeps, spawn_command
+from superserve.command_session import (
+    _STDIN_CHUNK_BYTES,
+    AsyncSpawnDeps,
+    spawn_command,
+)
 from superserve.errors import SandboxError
 
 _EOF = object()
@@ -22,6 +26,10 @@ class FakeConnection:
         self.subprotocols = subprotocols
         self.sent: list[object] = []
         self.closed = False
+        # Mirror the websockets client's close attributes so the SDK's
+        # close-reason enrichment can be exercised.
+        self.close_code: int | None = None
+        self.close_reason: str | None = None
         self._queue: asyncio.Queue = asyncio.Queue()
 
     async def send(self, data: object) -> None:
@@ -45,6 +53,11 @@ class FakeConnection:
         self._queue.put_nowait(message)
 
     def feed_eof(self) -> None:
+        self._queue.put_nowait(_EOF)
+
+    def close_with(self, code: int, reason: str = "") -> None:
+        self.close_code = code
+        self.close_reason = reason
         self._queue.put_nowait(_EOF)
 
 
@@ -138,6 +151,65 @@ async def test_stdin_and_control_frames(monkeypatch):
     assert c.sent[0] == bytes([0x00]) + b"ab"
     assert json.loads(c.sent[1]) == {"type": "stdin_close"}
     assert json.loads(c.sent[2]) == {"type": "signal", "name": "SIGINT"}
+
+    await session.close()
+
+
+async def test_stdin_write_chunks_large_payloads(monkeypatch):
+    conns: list[FakeConnection] = []
+
+    async def connect(uri, subprotocols=None):
+        c = FakeConnection(uri, subprotocols)
+        conns.append(c)
+        return c
+
+    patch_connect(monkeypatch, connect)
+
+    session = await spawn_command(make_deps(), "cat")
+    c = conns[-1]
+    c.sent.clear()  # drop the start frame
+
+    payload = b"x" * (3 * _STDIN_CHUNK_BYTES + 100)
+    await session.stdin.write(payload)
+
+    assert len(c.sent) == -(-len(payload) // _STDIN_CHUNK_BYTES)
+    assert all(f[0] == 0x00 for f in c.sent)
+    assert all(len(f) <= _STDIN_CHUNK_BYTES + 1 for f in c.sent)
+    assert b"".join(bytes(f[1:]) for f in c.sent) == payload
+
+    await session.close()
+
+
+async def test_concurrent_writes_do_not_interleave(monkeypatch):
+    conns: list[FakeConnection] = []
+
+    async def connect(uri, subprotocols=None):
+        c = FakeConnection(uri, subprotocols)
+        conns.append(c)
+        return c
+
+    patch_connect(monkeypatch, connect)
+
+    session = await spawn_command(make_deps(), "cat")
+    c = conns[-1]
+
+    # Yield control on every send so unserialized chunk loops would interleave.
+    real_send = c.send
+
+    async def yielding_send(data):
+        await asyncio.sleep(0)
+        await real_send(data)
+
+    c.send = yielding_send
+    c.sent.clear()  # drop the start frame
+
+    a = b"a" * (2 * _STDIN_CHUNK_BYTES + 1)
+    b = b"b" * (2 * _STDIN_CHUNK_BYTES + 1)
+    await asyncio.gather(session.stdin.write(a), session.stdin.write(b))
+
+    stream = b"".join(bytes(f[1:]) for f in c.sent)
+    # Each payload must land contiguously, in either order.
+    assert stream in (a + b, b + a)
 
     await session.close()
 
@@ -247,6 +319,40 @@ async def test_wait_raises_if_closed_before_finished(monkeypatch):
     c.feed_eof()
 
     with pytest.raises(SandboxError):
+        await session.wait()
+
+
+async def test_close_1009_surfaces_size_limit_hint(monkeypatch):
+    conns: list[FakeConnection] = []
+
+    async def connect(uri, subprotocols=None):
+        c = FakeConnection(uri, subprotocols)
+        conns.append(c)
+        return c
+
+    patch_connect(monkeypatch, connect)
+
+    session = await spawn_command(make_deps(), "run")
+    conns[-1].close_with(1009, "message too big")
+
+    with pytest.raises(SandboxError, match="size limit"):
+        await session.wait()
+
+
+async def test_close_reason_included_in_error(monkeypatch):
+    conns: list[FakeConnection] = []
+
+    async def connect(uri, subprotocols=None):
+        c = FakeConnection(uri, subprotocols)
+        conns.append(c)
+        return c
+
+    patch_connect(monkeypatch, connect)
+
+    session = await spawn_command(make_deps(), "run")
+    conns[-1].close_with(4001, "boxd went away")
+
+    with pytest.raises(SandboxError, match="boxd went away"):
         await session.wait()
 
 

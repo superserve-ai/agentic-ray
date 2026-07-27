@@ -40,15 +40,23 @@ export async function getQuotaUsageAction(): Promise<QuotaUsageResponse | null> 
   if (!team) return null
 
   const admin = cellFor(team.region).createAdminClient()
-  const { data, error } = await admin
-    .from("team")
-    .select("active_sandbox_count, max_sandboxes")
-    .eq("id", team.teamId)
-    .single()
-  if (error) throw new Error(error.message)
+  // Live counts come from the sharded-counter view (team.active_sandbox_count
+  // is frozen); a team with no counter rows is absent from the view — zero.
+  // Admin client required: the view is security_invoker over an RLS-deny
+  // table, and a user-scoped client reads empty rows, not an error.
+  const [teamRes, countRes] = await Promise.all([
+    admin.from("team").select("max_sandboxes").eq("id", team.teamId).single(),
+    admin
+      .from("team_active_sandbox_counts")
+      .select("active_sandbox_count")
+      .eq("team_id", team.teamId)
+      .maybeSingle(),
+  ])
+  if (teamRes.error) throw new Error(teamRes.error.message)
+  if (countRes.error) throw new Error(countRes.error.message)
 
-  const activeSandboxes = data.active_sandbox_count ?? 0
-  const maxSandboxes = data.max_sandboxes ?? 0
+  const activeSandboxes = countRes.data?.active_sandbox_count ?? 0
+  const maxSandboxes = teamRes.data.max_sandboxes ?? 0
   // Floor via integer division, matching the watcher's `used*100 >= limit*pct`,
   // so the banner never shows "80%" or fires below the email threshold.
   const pct =

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   canReadPlatformActivity,
+  canReadPlatformBilling,
   canReadPlatformSandboxes,
   canReadPlatformTemplates,
   canReadPlatformTeams,
@@ -147,6 +148,13 @@ describe("platform resource read permissions", () => {
         ),
       ),
     ).toBe(true)
+    expect(
+      canReadPlatformBilling(
+        userWithMetadata({
+          appAuthorizationPermissions: ["platform:billing:read"],
+        }),
+      ),
+    ).toBe(true)
   })
 
   it("does not treat plural aliases as valid", () => {
@@ -261,6 +269,7 @@ describe("platform impersonation access", () => {
             "platform:sandbox:read",
             "platform:template:read",
             "platform:activity:read",
+            "platform:billing:read",
           ],
         ),
       ),
@@ -268,6 +277,7 @@ describe("platform impersonation access", () => {
       "platform:sandbox:read",
       "platform:template:read",
       "platform:activity:read",
+      "platform:billing:read",
     ])
   })
 
@@ -302,6 +312,16 @@ describe("platform impersonation access", () => {
         ),
       ),
     ).toEqual(["platform:activity:read"])
+    expect(
+      platformImpersonationReadScopes(
+        user(
+          "person@example.com",
+          "google",
+          ["google"],
+          ["platform:billing:read"],
+        ),
+      ),
+    ).toEqual(["platform:billing:read"])
   })
 
   it("does not include teams read", () => {

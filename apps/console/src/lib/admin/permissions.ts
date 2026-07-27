@@ -1,30 +1,17 @@
 import type { User } from "@supabase/supabase-js"
 
+import { isStaff } from "./staff"
+
 export const PLATFORM_SANDBOX_READ_PERMISSION = "platform:sandbox:read"
 export const PLATFORM_TEMPLATE_READ_PERMISSION = "platform:template:read"
 export const PLATFORM_ACTIVITY_READ_PERMISSION = "platform:activity:read"
+export const PLATFORM_BILLING_READ_PERMISSION = "platform:billing:read"
 export const PLATFORM_TEAMS_READ_PERMISSION = "platform:teams:read"
 export type PlatformImpersonationReadScope =
   | typeof PLATFORM_SANDBOX_READ_PERMISSION
   | typeof PLATFORM_TEMPLATE_READ_PERMISSION
   | typeof PLATFORM_ACTIVITY_READ_PERMISSION
-
-const DEFAULT_STAFF_DOMAIN = "superserve.ai"
-
-function staffDomain(): string {
-  return (process.env.STAFF_EMAIL_DOMAIN ?? DEFAULT_STAFF_DOMAIN).toLowerCase()
-}
-
-function isGoogleStaffUser(user: User | null | undefined): boolean {
-  if (!user?.email) return false
-  const provider = user.app_metadata?.provider as string | undefined
-  const providers = user.app_metadata?.providers as string[] | undefined
-  const viaGoogle =
-    provider === "google" ||
-    (Array.isArray(providers) && providers.includes("google"))
-  if (!viaGoogle) return false
-  return user.email.toLowerCase().endsWith(`@${staffDomain()}`)
-}
+  | typeof PLATFORM_BILLING_READ_PERMISSION
 
 function asPermissions(value: unknown): string[] {
   return Array.isArray(value)
@@ -73,11 +60,12 @@ export function canReadPlatformActivity(
   return hasPermission(user, PLATFORM_ACTIVITY_READ_PERMISSION)
 }
 
+export function canReadPlatformBilling(user: User | null | undefined): boolean {
+  return hasPermission(user, PLATFORM_BILLING_READ_PERMISSION)
+}
+
 export function canReadPlatformTeams(user: User | null | undefined): boolean {
-  return (
-    isGoogleStaffUser(user) &&
-    hasPermission(user, PLATFORM_TEAMS_READ_PERMISSION)
-  )
+  return isStaff(user) && hasPermission(user, PLATFORM_TEAMS_READ_PERMISSION)
 }
 
 export function platformImpersonationReadScopes(
@@ -94,6 +82,9 @@ export function platformImpersonationReadScopes(
   if (canReadPlatformActivity(user)) {
     scopes.push(PLATFORM_ACTIVITY_READ_PERMISSION)
   }
+  if (canReadPlatformBilling(user)) {
+    scopes.push(PLATFORM_BILLING_READ_PERMISSION)
+  }
 
   return scopes
 }
@@ -101,9 +92,7 @@ export function platformImpersonationReadScopes(
 export function canStartPlatformImpersonation(
   user: User | null | undefined,
 ): boolean {
-  return (
-    isGoogleStaffUser(user) && platformImpersonationReadScopes(user).length > 0
-  )
+  return isStaff(user) && platformImpersonationReadScopes(user).length > 0
 }
 
 export function canViewOtherUsersAccount(
