@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
 
 class Sandbox:
-    """A live sandbox - call methods directly (`sandbox.commands.run(...)`, etc.)."""
+    """A sandbox handle - call methods directly (`sandbox.commands.run(...)`, etc.)."""
 
     def __init__(
         self,
@@ -283,7 +283,8 @@ class Sandbox:
             except Exception:
                 pass
 
-    def _require_live(self) -> None:
+    def _require_not_deleted(self) -> None:
+        """Reject calls on a deleted handle without requiring an active VM."""
         if self._closed:
             raise SandboxError(
                 f"Sandbox {self.id!r} has been deleted; create or connect to a new one."
@@ -291,7 +292,7 @@ class Sandbox:
 
     def get_info(self) -> SandboxInfo:
         """Refresh this sandbox's info from the API."""
-        self._require_live()
+        self._require_not_deleted()
         raw = api_request(
             "GET",
             f"{self._config.base_url}/sandboxes/{self.id}",
@@ -314,7 +315,7 @@ class Sandbox:
 
     def list_preview_ports(self) -> PreviewPortList:
         """Return the sandbox default and each published port's access mode."""
-        self._require_live()
+        self._require_not_deleted()
         raw = api_request(
             "GET",
             f"{self._config.base_url}/sandboxes/{self.id}/preview-ports",
@@ -334,7 +335,7 @@ class Sandbox:
         Omitting ``access`` uses the sandbox default for a new port and preserves
         the current mode when the port is already published.
         """
-        self._require_live()
+        self._require_not_deleted()
         self.get_preview_url(port)
         body: dict[str, object] = {"port": port}
         if access is not None:
@@ -350,7 +351,7 @@ class Sandbox:
 
     def unpublish_preview_port(self, port: int) -> None:
         """Unpublish a port and revoke its outstanding tokens."""
-        self._require_live()
+        self._require_not_deleted()
         self.get_preview_url(port)
         api_request(
             "DELETE",
@@ -363,7 +364,7 @@ class Sandbox:
         self, port: int, *, expires_in_seconds: int | None = None
     ) -> PreviewToken:
         """Mint a header/query credential for an already-published port."""
-        self._require_live()
+        self._require_not_deleted()
         self.get_preview_url(port)
         body = (
             {}
@@ -386,7 +387,7 @@ class Sandbox:
 
     def rotate_preview_token(self, port: int) -> PreviewToken:
         """Rotate this port's token generation and return a fresh token."""
-        self._require_live()
+        self._require_not_deleted()
         self.get_preview_url(port)
         raw = api_request(
             "POST",
@@ -398,7 +399,7 @@ class Sandbox:
 
     def pause(self) -> None:
         """Pause this sandbox. The sandbox transitions to ``paused``."""
-        self._require_live()
+        self._require_not_deleted()
         api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/pause",
@@ -412,7 +413,7 @@ class Sandbox:
         The access token is rotated; ``sandbox.commands`` and ``sandbox.files``
         pick up the fresh token transparently.
         """
-        self._require_live()
+        self._require_not_deleted()
         self._post_and_rotate_token("resume")
 
     def kill(self) -> None:
@@ -447,7 +448,7 @@ class Sandbox:
         auto-delete. ``timeout_seconds`` sets the auto-pause timeout; pass
         ``None`` to disable auto-pause. Omit either to leave it unchanged.
         """
-        self._require_live()
+        self._require_not_deleted()
         body = build_update_body(
             metadata=metadata,
             network=network,
@@ -509,7 +510,7 @@ class Sandbox:
         outbound requests to the secret's allowed hosts. Takes effect for
         processes started after this call; a paused sandbox applies it on resume.
         """
-        self._require_live()
+        self._require_not_deleted()
         api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/secrets",
@@ -525,7 +526,7 @@ class Sandbox:
         about a minute for a process already running. A paused sandbox applies
         the change on resume.
         """
-        self._require_live()
+        self._require_not_deleted()
         api_request(
             "DELETE",
             f"{self._config.base_url}/sandboxes/{self.id}/secrets/{quote(env_key, safe='')}",

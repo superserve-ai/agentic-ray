@@ -277,7 +277,8 @@ class AsyncSandbox:
             except Exception:
                 pass
 
-    def _require_live(self) -> None:
+    def _require_not_deleted(self) -> None:
+        """Reject calls on a deleted handle without requiring an active VM."""
         if self._closed:
             raise SandboxError(
                 f"Sandbox {self.id!r} has been deleted; create or connect to a new one."
@@ -285,7 +286,7 @@ class AsyncSandbox:
 
     async def get_info(self) -> SandboxInfo:
         """Refresh this sandbox's info from the API."""
-        self._require_live()
+        self._require_not_deleted()
         raw = await async_api_request(
             "GET",
             f"{self._config.base_url}/sandboxes/{self.id}",
@@ -308,7 +309,7 @@ class AsyncSandbox:
 
     async def list_preview_ports(self) -> PreviewPortList:
         """Return the sandbox default and each published port's access mode."""
-        self._require_live()
+        self._require_not_deleted()
         raw = await async_api_request(
             "GET",
             f"{self._config.base_url}/sandboxes/{self.id}/preview-ports",
@@ -328,7 +329,7 @@ class AsyncSandbox:
         Omitting ``access`` uses the sandbox default for a new port and preserves
         the current mode when the port is already published.
         """
-        self._require_live()
+        self._require_not_deleted()
         self.get_preview_url(port)
         body: dict[str, object] = {"port": port}
         if access is not None:
@@ -344,7 +345,7 @@ class AsyncSandbox:
 
     async def unpublish_preview_port(self, port: int) -> None:
         """Unpublish a port and revoke its outstanding tokens."""
-        self._require_live()
+        self._require_not_deleted()
         self.get_preview_url(port)
         await async_api_request(
             "DELETE",
@@ -357,7 +358,7 @@ class AsyncSandbox:
         self, port: int, *, expires_in_seconds: int | None = None
     ) -> PreviewToken:
         """Mint a header/query credential for an already-published port."""
-        self._require_live()
+        self._require_not_deleted()
         self.get_preview_url(port)
         body = (
             {}
@@ -384,7 +385,7 @@ class AsyncSandbox:
 
     async def rotate_preview_token(self, port: int) -> PreviewToken:
         """Rotate this port's token generation and return a fresh token."""
-        self._require_live()
+        self._require_not_deleted()
         self.get_preview_url(port)
         raw = await async_api_request(
             "POST",
@@ -396,7 +397,7 @@ class AsyncSandbox:
 
     async def pause(self) -> None:
         """Pause this sandbox. The sandbox transitions to ``paused``."""
-        self._require_live()
+        self._require_not_deleted()
         await async_api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/pause",
@@ -410,7 +411,7 @@ class AsyncSandbox:
         The access token is rotated; ``sandbox.commands`` and ``sandbox.files``
         pick up the fresh token transparently.
         """
-        self._require_live()
+        self._require_not_deleted()
         await self._post_and_rotate_token("resume")
 
     async def kill(self) -> None:
@@ -445,7 +446,7 @@ class AsyncSandbox:
         auto-delete. ``timeout_seconds`` sets the auto-pause timeout; pass
         ``None`` to disable auto-pause. Omit either to leave it unchanged.
         """
-        self._require_live()
+        self._require_not_deleted()
         body = build_update_body(
             metadata=metadata,
             network=network,
@@ -507,7 +508,7 @@ class AsyncSandbox:
         outbound requests to the secret's allowed hosts. Takes effect for
         processes started after this call; a paused sandbox applies it on resume.
         """
-        self._require_live()
+        self._require_not_deleted()
         await async_api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/secrets",
@@ -523,7 +524,7 @@ class AsyncSandbox:
         about a minute for a process already running. A paused sandbox applies
         the change on resume.
         """
-        self._require_live()
+        self._require_not_deleted()
         await async_api_request(
             "DELETE",
             f"{self._config.base_url}/sandboxes/{self.id}/secrets/{quote(env_key, safe='')}",

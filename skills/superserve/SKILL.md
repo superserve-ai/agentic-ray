@@ -475,7 +475,8 @@ headers = {credential.header: credential.token}
 does not publish a port or authenticate a private request.
 
 - **Port range 1024–65535** (integer). Privileged ports (< 1024) throw
-  `ValidationError`.
+  `ValidationError`. Port `49983` is reserved for sandbox control traffic and
+  cannot be published.
 - **Credentials are per port.** A token for port 8000 cannot open another port.
 - **Sandbox access is a default.** Changing `previewAccess` / `preview_access`
   affects newly published ports only; existing ports retain their own mode.

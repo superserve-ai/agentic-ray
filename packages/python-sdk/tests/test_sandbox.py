@@ -78,10 +78,10 @@ class TestGetPreviewUrl:
 
 
 class TestPreviewAuthentication:
-    def _make(self, router: respx.MockRouter) -> Sandbox:
+    def _make(self, router: respx.MockRouter, *, status: str = "active") -> Sandbox:
         router.post(f"{API}/sandboxes").mock(
             return_value=httpx.Response(
-                200, json={**_raw(), "preview_access": "private"}
+                200, json={**_raw(status=status), "preview_access": "private"}
             )
         )
         return Sandbox.create(name="private", preview_access="private")
@@ -153,6 +153,77 @@ class TestPreviewAuthentication:
                 assert rotate.call_count == 1
                 assert sandbox.unpublish_preview_port(3000) is None
                 assert unpublish.call_count == 1
+            finally:
+                sandbox._close_http_client()
+
+    def test_control_plane_operations_do_not_resume_paused_sandbox(self) -> None:
+        with respx.mock(assert_all_called=False) as router:
+            sandbox = self._make(router, status="paused")
+            activate = router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            resume = router.post(f"{API}/sandboxes/sbx-1/resume").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            listing = router.get(f"{API}/sandboxes/sbx-1/preview-ports").mock(
+                return_value=httpx.Response(
+                    200,
+                    json={
+                        "preview_access": "private",
+                        "ports": [
+                            {
+                                "port": 3000,
+                                "token_version": 1,
+                                "access": "private",
+                            }
+                        ],
+                    },
+                )
+            )
+            publish = router.post(f"{API}/sandboxes/sbx-1/preview-ports").mock(
+                return_value=httpx.Response(
+                    200,
+                    json={"port": 3000, "token_version": 1, "access": "private"},
+                )
+            )
+            token_payload = {
+                "token": "spv1.paused",
+                "port": 3000,
+                "header": "X-Superserve-Preview-Token",
+                "query_param": "superserve_preview_token",
+                "token_version": 1,
+                "access": "private",
+                "preview_access": "private",
+            }
+            mint = router.post(f"{API}/sandboxes/sbx-1/preview-ports/3000/token").mock(
+                return_value=httpx.Response(200, json=token_payload)
+            )
+            rotate = router.post(
+                f"{API}/sandboxes/sbx-1/preview-ports/3000/token/rotate"
+            ).mock(
+                return_value=httpx.Response(
+                    200, json={**token_payload, "token_version": 2}
+                )
+            )
+            unpublish = router.delete(f"{API}/sandboxes/sbx-1/preview-ports/3000").mock(
+                return_value=httpx.Response(204)
+            )
+
+            try:
+                assert sandbox.status == SandboxStatus.PAUSED
+                assert sandbox.list_preview_ports().ports[0].port == 3000
+                assert sandbox.publish_preview_port(3000).access == "private"
+                assert sandbox.get_preview_token(3000).token_version == 1
+                assert sandbox.rotate_preview_token(3000).token_version == 2
+                assert sandbox.unpublish_preview_port(3000) is None
+
+                assert listing.call_count == 1
+                assert publish.call_count == 1
+                assert mint.call_count == 1
+                assert rotate.call_count == 1
+                assert unpublish.call_count == 1
+                assert not activate.called
+                assert not resume.called
             finally:
                 sandbox._close_http_client()
 
