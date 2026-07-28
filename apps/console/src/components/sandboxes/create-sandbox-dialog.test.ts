@@ -20,6 +20,7 @@ const emptyState = {
   secretEntries: [] as { key: string; secret: string }[],
   envEntries: [] as { key: string; value: string }[],
   metadataEntries: [] as { key: string; value: string }[],
+  previewAccess: "public" as const,
 }
 
 describe("buildCreateSandboxRequest", () => {
@@ -30,11 +31,20 @@ describe("buildCreateSandboxRequest", () => {
 
   it("omits optional fields when form is minimal", () => {
     const req = buildCreateSandboxRequest({ ...emptyState, name: "x" })
-    expect(req).toEqual({ name: "x" })
+    expect(req).toEqual({ name: "x", preview_access: "public" })
     expect(req.timeout_seconds).toBeUndefined()
     expect(req.network).toBeUndefined()
     expect(req.env_vars).toBeUndefined()
     expect(req.metadata).toBeUndefined()
+  })
+
+  it("includes the selected private preview policy", () => {
+    const req = buildCreateSandboxRequest({
+      ...emptyState,
+      name: "x",
+      previewAccess: "private",
+    })
+    expect(req.preview_access).toBe("private")
   })
 
   it("includes timeout_seconds as a number when present", () => {
@@ -207,9 +217,11 @@ describe("buildCreateSandboxRequest", () => {
       secretEntries: [{ key: "GITHUB_TOKEN", secret: "github_pat" }],
       envEntries: [{ key: "API_KEY", value: "abc" }],
       metadataEntries: [{ key: "env", value: "prod" }],
+      previewAccess: "private",
     })
     expect(req).toEqual({
       name: "full",
+      preview_access: "private",
       timeout_seconds: 600,
       auto_delete_seconds: 3600,
       network: {

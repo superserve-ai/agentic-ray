@@ -6,16 +6,30 @@
  * URLs use the test host from src/test/setup.ts (sandbox.test.superserve.ai).
  */
 
-import { render, screen } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { SandboxResponse } from "@/lib/api/types"
 
-const { addToast, capture, clipboardWrite } = vi.hoisted(() => ({
+const {
+  addToast,
+  capture,
+  clipboardWrite,
+  listPreviewPorts,
+  mintPreviewToken,
+  patchSandbox,
+  publishPreviewPort,
+  unpublishPreviewPort,
+} = vi.hoisted(() => ({
   addToast: vi.fn(),
   capture: vi.fn(),
   clipboardWrite: vi.fn(() => Promise.resolve()),
+  listPreviewPorts: vi.fn(),
+  mintPreviewToken: vi.fn(),
+  patchSandbox: vi.fn(),
+  publishPreviewPort: vi.fn(),
+  unpublishPreviewPort: vi.fn(),
 }))
 
 vi.mock("@superserve/ui", () => ({
@@ -46,8 +60,17 @@ vi.mock("@phosphor-icons/react", () => ({
   BrowserIcon: () => null,
   CaretRightIcon: () => null,
   CopyIcon: () => null,
+  LockKeyIcon: () => null,
   PlusIcon: () => null,
   TrashIcon: () => null,
+}))
+
+vi.mock("@/lib/api/sandboxes", () => ({
+  listSandboxPreviewPorts: listPreviewPorts,
+  mintSandboxPreviewToken: mintPreviewToken,
+  patchSandbox,
+  publishSandboxPreviewPort: publishPreviewPort,
+  unpublishSandboxPreviewPort: unpublishPreviewPort,
 }))
 
 import { PreviewSection } from "./preview-section"
@@ -76,6 +99,7 @@ function makeSandbox(
     vcpu_count: 2,
     memory_mib: 512,
     metadata: {},
+    preview_access: "public",
     created_at: "2026-01-01T00:00:00.000Z",
     access_token: "tok",
   }
@@ -86,10 +110,32 @@ function url(port: number, id = "sbx-1"): string {
 }
 
 beforeEach(() => {
-  window.localStorage.clear()
   addToast.mockClear()
   capture.mockClear()
   clipboardWrite.mockClear()
+  listPreviewPorts.mockReset()
+  listPreviewPorts.mockResolvedValue({
+    preview_access: "public",
+    ports: [],
+  })
+  mintPreviewToken.mockReset()
+  mintPreviewToken.mockResolvedValue({
+    token: "signed-token",
+    port: 3000,
+    header: "X-Superserve-Preview-Token",
+    query_param: "superserve_preview_token",
+    token_version: 1,
+    access: "private",
+    preview_access: "private",
+  })
+  patchSandbox.mockReset()
+  patchSandbox.mockResolvedValue(undefined)
+  publishPreviewPort.mockReset()
+  publishPreviewPort.mockImplementation((_id: string, port: number) =>
+    Promise.resolve({ port, token_version: 1, access: "public" }),
+  )
+  unpublishPreviewPort.mockReset()
+  unpublishPreviewPort.mockResolvedValue(undefined)
   Object.defineProperty(navigator, "clipboard", {
     value: { writeText: clipboardWrite },
     configurable: true,
@@ -101,7 +147,11 @@ async function addPort(
   user: ReturnType<typeof userEvent.setup>,
   port: string,
 ): Promise<void> {
+  await waitFor(() =>
+    expect(screen.getByLabelText("Port to preview")).toBeEnabled(),
+  )
   await user.type(screen.getByLabelText("Port to preview"), port)
+  expect(screen.getByRole("button", { name: /add port/i })).toBeEnabled()
   await user.click(screen.getByRole("button", { name: /add port/i }))
 }
 
@@ -131,11 +181,11 @@ describe("PreviewSection — inactive sandbox", () => {
 describe("PreviewSection — active sandbox", () => {
   const user = userEvent.setup()
 
-  it("shows the add-port form and an empty-list prompt", () => {
+  it("shows the add-port form and an empty-list prompt", async () => {
     render(<PreviewSection sandbox={makeSandbox()} />)
     expect(screen.getByLabelText("Port to preview")).toBeInTheDocument()
     expect(
-      screen.getByText(/add the port your dev server runs on/i),
+      await screen.findByText(/add the port your dev server runs on/i),
     ).toBeInTheDocument()
   })
 
@@ -161,7 +211,7 @@ describe("PreviewSection — active sandbox", () => {
     await addPort(user, "3000")
     await addPort(user, "3000")
     expect(addToast).toHaveBeenCalledWith(
-      expect.stringContaining("already added"),
+      expect.stringContaining("already published"),
       "error",
     )
     expect(screen.getAllByText(url(3000))).toHaveLength(1)
@@ -183,6 +233,7 @@ describe("PreviewSection — active sandbox", () => {
     expect(link).toHaveAttribute("href", url(3000))
     expect(link).toHaveAttribute("target", "_blank")
     expect(link).toHaveAttribute("rel", "noopener noreferrer")
+    expect(link).toHaveClass("ph-no-capture")
 
     await user.click(link)
     expect(capture).toHaveBeenCalledWith("sandbox_preview_opened", {
@@ -212,8 +263,10 @@ describe("PreviewSection — active sandbox", () => {
     // drops the sandbox attribute or grants top-navigation.
     const sandboxAttr = frame.getAttribute("sandbox") ?? ""
     expect(sandboxAttr).toContain("allow-scripts")
+    expect(sandboxAttr).not.toContain("allow-downloads")
     expect(sandboxAttr).not.toContain("allow-top-navigation")
     expect(frame).toHaveAttribute("referrerpolicy", "no-referrer")
+    expect(frame).toHaveClass("ph-no-capture")
   })
 
   it("supports previewing several ports at once", async () => {
@@ -222,5 +275,119 @@ describe("PreviewSection — active sandbox", () => {
     await addPort(user, "8080")
     expect(screen.getByText(url(3000))).toBeInTheDocument()
     expect(screen.getByText(url(8080))).toBeInTheDocument()
+  })
+
+  it("uses the port mode to mint a signed URL even when the sandbox default is public", async () => {
+    listPreviewPorts.mockResolvedValue({
+      preview_access: "public",
+      ports: [{ port: 3000, token_version: 1, access: "private" }],
+    })
+    render(<PreviewSection sandbox={makeSandbox()} />)
+
+    expect(await screen.findByText(url(3000))).toBeInTheDocument()
+    expect(screen.getByLabelText("Authentication required")).toBeInTheDocument()
+    const link = await screen.findByRole("link", {
+      name: "Open preview in new tab",
+    })
+    expect(link).toHaveAttribute(
+      "href",
+      `${url(3000)}/?superserve_preview_token=signed-token`,
+    )
+    expect(link).toHaveClass("ph-no-capture")
+    expect(screen.queryByText(/signed-token/)).not.toBeInTheDocument()
+    expect(mintPreviewToken).toHaveBeenCalledWith("sbx-1", 3000, 3600)
+  })
+
+  it("uses a clean URL for a public port even when the sandbox default is private", async () => {
+    listPreviewPorts.mockResolvedValue({
+      preview_access: "private",
+      ports: [{ port: 3000, token_version: 1, access: "public" }],
+    })
+    render(
+      <PreviewSection
+        sandbox={{ ...makeSandbox(), preview_access: "private" }}
+      />,
+    )
+
+    const link = await screen.findByRole("link", {
+      name: "Open preview in new tab",
+    })
+    expect(link).toHaveAttribute("href", url(3000))
+    expect(
+      screen.queryByLabelText("Authentication required"),
+    ).not.toBeInTheDocument()
+    expect(mintPreviewToken).not.toHaveBeenCalled()
+  })
+
+  it("refreshes private signed URLs before they expire", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"))
+    listPreviewPorts.mockResolvedValue({
+      preview_access: "private",
+      ports: [{ port: 3000, token_version: 1, access: "private" }],
+    })
+    mintPreviewToken
+      .mockResolvedValueOnce({
+        token: "first-token",
+        port: 3000,
+        header: "X-Superserve-Preview-Token",
+        query_param: "superserve_preview_token",
+        token_version: 1,
+        access: "private",
+        preview_access: "private",
+        expires_at: "2026-01-01T01:00:00Z",
+      })
+      .mockResolvedValueOnce({
+        token: "refreshed-token",
+        port: 3000,
+        header: "X-Superserve-Preview-Token",
+        query_param: "superserve_preview_token",
+        token_version: 1,
+        access: "private",
+        preview_access: "private",
+        expires_at: "2026-01-01T01:59:00Z",
+      })
+
+    try {
+      render(
+        <PreviewSection
+          sandbox={{ ...makeSandbox(), preview_access: "private" }}
+        />,
+      )
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      expect(mintPreviewToken).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(59 * 60 * 1000)
+      })
+
+      expect(mintPreviewToken).toHaveBeenCalledTimes(2)
+      expect(
+        screen.getByRole("link", { name: "Open preview in new tab" }),
+      ).toHaveAttribute(
+        "href",
+        `${url(3000)}/?superserve_preview_token=refreshed-token`,
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("updates the preview policy from the settings toggle", async () => {
+    render(<PreviewSection sandbox={makeSandbox()} />)
+    await screen.findByText(/new preview ports default to public/i)
+    await user.click(
+      screen.getByRole("button", { name: "Default new ports to private" }),
+    )
+
+    expect(patchSandbox).toHaveBeenCalledWith("sbx-1", {
+      preview_access: "private",
+    })
+    expect(addToast).toHaveBeenCalledWith(
+      "New preview ports will default to private",
+      "success",
+    )
   })
 })

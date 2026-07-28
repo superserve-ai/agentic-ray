@@ -1,6 +1,6 @@
 ---
 name: superserve
-description: Run AI agents and code in persistent, isolated Firecracker microVM sandboxes with the Superserve TypeScript SDK (@superserve/sdk) or Python SDK (superserve). Use when a task needs a runtime for an agent (run Claude Code or an agent loop inside a sandbox, or give a hosted agent a sandboxed shell or file tool), a persistent execution or dev environment that survives across sessions (pause/resume, reconnect by id), secrets or network-egress control for agent code, public preview URLs for a port or server running in the box, custom environment templates, or running untrusted or ephemeral LLM-generated code in isolation.
+description: Run AI agents and code in persistent, isolated Firecracker microVM sandboxes with the Superserve TypeScript SDK (@superserve/sdk) or Python SDK (superserve). Use when a task needs a runtime for an agent (run Claude Code or an agent loop inside a sandbox, or give a hosted agent a sandboxed shell or file tool), a persistent execution or dev environment that survives across sessions (pause/resume, reconnect by id), secrets or network-egress control for agent code, public or authenticated preview URLs for a port or server running in the box, custom environment templates, or running untrusted or ephemeral LLM-generated code in isolation.
 ---
 
 # Superserve
@@ -435,32 +435,61 @@ Sandbox.create(name="restricted", network=NetworkConfig(
     allow_out=["api.openai.com", "*.github.com", "140.82.112.0/20"], deny_out=["0.0.0.0/0"]))
 ```
 
-## Preview URLs — expose a port publicly
+## Preview URLs — publish a port safely
 
-Run a server in the box (a dev server, the agent's web UI, an API) and hand out a **public
-URL** (also called a _tunnel URL_) that routes to it. `getPreviewUrl(port)` / `get_preview_url(port)` is pure string
-construction — no network call — returning `https://{port}-{id}.{host}`; the edge proxy
-forwards that subdomain straight to the port on the VM.
+Choose an explicit `public` or `private` default when creating the sandbox,
+then publish only the intended ports. Both strict policies deny unpublished
+ports. Each published port stores its own access mode, so public and private
+ports can coexist.
 
 ```ts
-// start a server in the box, then hand out its public URL
+const sandbox = await Sandbox.create({
+  name: "preview",
+  previewAccess: "private",
+})
 await sandbox.commands.spawn("python3 -m http.server 8000")
-const url = sandbox.getPreviewUrl(8000) // https://8000-<id>.sandbox.superserve.ai
+await sandbox.publishPreviewPort(8000, { access: "private" })
+const url = await sandbox.getSignedPreviewUrl(8000, {
+  expiresInSeconds: 300,
+})
 ```
 
 ```python
-await sandbox.commands.spawn("python3 -m http.server 8000")  # spawn is async-only (AsyncSandbox)
-url = sandbox.get_preview_url(8000)  # https://8000-<id>.sandbox.superserve.ai
+from superserve import AsyncSandbox
+
+box = await AsyncSandbox.create(name="preview", preview_access="private")
+await box.commands.spawn("python3 -m http.server 8000")
+await box.publish_preview_port(8000, access="private")
+url = await box.get_signed_preview_url(8000, expires_in_seconds=300)
 ```
 
-- **Port range 1024–65535** (integer). Privileged ports (< 1024) aren't proxied and throw
-  `ValidationError`. Exported `MIN_PREVIEW_PORT` / `MAX_PREVIEW_PORT` constants and a
-  standalone `previewUrl(id, host, port)` / `preview_url(...)` helper are available too.
-- **Resolves only while it's live** — the sandbox must be running with a server listening on
-  the port. Call it once per port to expose several services at once.
-- **Public, no auth** — anyone with the URL can reach the port (unlike the data plane, it
-  carries no access token). Don't expose anything you wouldn't put on the open internet; pair
-  it with network egress rules when running untrusted code.
+For a machine client or reverse proxy, mint a token and send the returned
+header instead:
+
+```python
+credential = await box.get_preview_token(8000)
+headers = {credential.header: credential.token}
+```
+
+`getPreviewUrl(port)` / `get_preview_url(port)` remains a pure URL builder; it
+does not publish a port or authenticate a private request.
+
+- **Port range 1024–65535** (integer). Privileged ports (< 1024) throw
+  `ValidationError`. Port `49983` is reserved for sandbox control traffic and
+  cannot be published.
+- **Credentials are per port.** A token for port 8000 cannot open another port.
+- **Sandbox access is a default.** Changing `previewAccess` / `preview_access`
+  affects newly published ports only; existing ports retain their own mode.
+- **Browser links default to 60 seconds** and exchange the query credential for
+  a secure cookie that also covers assets and WebSocket upgrades.
+- **Rotation is scoped.** `rotatePreviewToken(port)` /
+  `rotate_preview_token(port)` revokes that port's links and cookies; unpublish
+  closes it completely.
+- Omitting the policy defaults a new sandbox to strict `public`. The
+  `legacy_public` compatibility mode is returned only for pre-migration
+  sandboxes and cannot be selected for new ones.
+
+The full guide is at `https://docs.superserve.ai/sandbox/preview-urls`.
 
 ## Error handling
 

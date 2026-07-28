@@ -20,6 +20,11 @@ from .types import (
     NetworkConfig,
     NetworkLogPage,
     NetworkVerdict,
+    PreviewAccess,
+    PreviewAccessPolicy,
+    PreviewPortList,
+    PreviewToken,
+    PublishedPreviewPort,
     SandboxInfo,
     SandboxSecretBinding,
     SandboxStatus,
@@ -33,7 +38,7 @@ if TYPE_CHECKING:
 
 
 class Sandbox:
-    """A live sandbox - call methods directly (`sandbox.commands.run(...)`, etc.)."""
+    """A sandbox handle - call methods directly (`sandbox.commands.run(...)`, etc.)."""
 
     def __init__(
         self,
@@ -45,6 +50,7 @@ class Sandbox:
         self.name: str = info.name
         self.status: SandboxStatus = info.status
         self.metadata: dict[str, str] = info.metadata
+        self.preview_access: PreviewAccess = info.preview_access
         # Secrets bound at construction time; call get_info() to refresh.
         self.secrets: list[SandboxSecretBinding] | None = info.secrets
         self._access_token: str = access_token
@@ -113,6 +119,7 @@ class Sandbox:
         env_vars: dict[str, str] | None = None,
         secrets: dict[str, str] | None = None,
         network: NetworkConfig | None = None,
+        preview_access: PreviewAccessPolicy | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> Sandbox:
@@ -150,6 +157,8 @@ class Sandbox:
                 "allow_out": network.allow_out,
                 "deny_out": network.deny_out,
             }
+        if preview_access is not None:
+            body["preview_access"] = preview_access
 
         raw = api_request(
             "POST",
@@ -240,6 +249,7 @@ class Sandbox:
         network: NetworkConfig | None = None,
         auto_delete_seconds: int | None = UNSET,
         timeout_seconds: int | None = UNSET,
+        preview_access: PreviewAccessPolicy | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> None:
@@ -259,6 +269,7 @@ class Sandbox:
                 network=network,
                 auto_delete_seconds=auto_delete_seconds,
                 timeout_seconds=timeout_seconds,
+                preview_access=preview_access,
             ),
         )
 
@@ -272,7 +283,8 @@ class Sandbox:
             except Exception:
                 pass
 
-    def _require_live(self) -> None:
+    def _require_not_deleted(self) -> None:
+        """Reject calls on a deleted handle without requiring an active VM."""
         if self._closed:
             raise SandboxError(
                 f"Sandbox {self.id!r} has been deleted; create or connect to a new one."
@@ -280,7 +292,7 @@ class Sandbox:
 
     def get_info(self) -> SandboxInfo:
         """Refresh this sandbox's info from the API."""
-        self._require_live()
+        self._require_not_deleted()
         raw = api_request(
             "GET",
             f"{self._config.base_url}/sandboxes/{self.id}",
@@ -290,22 +302,104 @@ class Sandbox:
         return to_sandbox_info(raw)
 
     def get_preview_url(self, port: int) -> str:
-        """Build the public preview URL for a port running inside this sandbox.
+        """Build the preview URL for a port running inside this sandbox.
 
-        The edge proxy exposes any user-app port at
-        ``https://{port}-{id}.{host}``, so this is pure string construction —
-        no network call. The sandbox must be running and a server must be
-        listening on ``port`` for the URL to resolve. Call once per port to
-        preview several services at once.
+        This is pure string construction. Under strict public/private policies,
+        publish the port first; private URLs also need a header token or a
+        signed URL from :meth:`get_signed_preview_url`.
 
         Raises:
             ValidationError: if ``port`` is not an integer in [1024, 65535].
         """
         return preview_url(self.id, self._config.sandbox_host, port)
 
+    def list_preview_ports(self) -> PreviewPortList:
+        """Return the sandbox default and each published port's access mode."""
+        self._require_not_deleted()
+        raw = api_request(
+            "GET",
+            f"{self._config.base_url}/sandboxes/{self.id}/preview-ports",
+            headers={"X-API-Key": self._config.api_key},
+            client=self._http_client,
+        )
+        return PreviewPortList(
+            preview_access=PreviewAccess(raw.get("preview_access", "legacy_public")),
+            ports=[PublishedPreviewPort(**p) for p in raw.get("ports", [])],
+        )
+
+    def publish_preview_port(
+        self, port: int, *, access: PreviewAccessPolicy | None = None
+    ) -> PublishedPreviewPort:
+        """Publish a port, optionally overriding its public/private access mode.
+
+        Omitting ``access`` uses the sandbox default for a new port and preserves
+        the current mode when the port is already published.
+        """
+        self._require_not_deleted()
+        self.get_preview_url(port)
+        body: dict[str, object] = {"port": port}
+        if access is not None:
+            body["access"] = access
+        raw = api_request(
+            "POST",
+            f"{self._config.base_url}/sandboxes/{self.id}/preview-ports",
+            headers={"X-API-Key": self._config.api_key},
+            json_body=body,
+            client=self._http_client,
+        )
+        return PublishedPreviewPort(**raw)
+
+    def unpublish_preview_port(self, port: int) -> None:
+        """Unpublish a port and revoke its outstanding tokens."""
+        self._require_not_deleted()
+        self.get_preview_url(port)
+        api_request(
+            "DELETE",
+            f"{self._config.base_url}/sandboxes/{self.id}/preview-ports/{port}",
+            headers={"X-API-Key": self._config.api_key},
+            client=self._http_client,
+        )
+
+    def get_preview_token(
+        self, port: int, *, expires_in_seconds: int | None = None
+    ) -> PreviewToken:
+        """Mint a header/query credential for an already-published port."""
+        self._require_not_deleted()
+        self.get_preview_url(port)
+        body = (
+            {}
+            if expires_in_seconds is None
+            else {"expires_in_seconds": expires_in_seconds}
+        )
+        raw = api_request(
+            "POST",
+            f"{self._config.base_url}/sandboxes/{self.id}/preview-ports/{port}/token",
+            headers={"X-API-Key": self._config.api_key},
+            json_body=body,
+            client=self._http_client,
+        )
+        return PreviewToken(**raw)
+
+    def get_signed_preview_url(self, port: int, *, expires_in_seconds: int = 60) -> str:
+        """Return a browser URL that bootstraps a secure preview cookie."""
+        credential = self.get_preview_token(port, expires_in_seconds=expires_in_seconds)
+        return f"{self.get_preview_url(port)}?{urlencode({credential.query_param: credential.token})}"
+
+    def rotate_preview_token(self, port: int) -> PreviewToken:
+        """Rotate this port's token generation and return a fresh token."""
+        self._require_not_deleted()
+        self.get_preview_url(port)
+        raw = api_request(
+            "POST",
+            f"{self._config.base_url}/sandboxes/{self.id}/preview-ports/{port}/token/rotate",
+            headers={"X-API-Key": self._config.api_key},
+            client=self._http_client,
+        )
+        return PreviewToken(**raw)
+
     def pause(self) -> None:
         """Pause this sandbox. The sandbox transitions to ``paused``."""
-        self._require_live()
+        self._require_not_deleted()
         api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/pause",
@@ -319,7 +413,7 @@ class Sandbox:
         The access token is rotated; ``sandbox.commands`` and ``sandbox.files``
         pick up the fresh token transparently.
         """
-        self._require_live()
+        self._require_not_deleted()
         self._post_and_rotate_token("resume")
 
     def kill(self) -> None:
@@ -345,6 +439,7 @@ class Sandbox:
         network: NetworkConfig | None = None,
         auto_delete_seconds: int | None = UNSET,
         timeout_seconds: int | None = UNSET,
+        preview_access: PreviewAccessPolicy | None = None,
     ) -> None:
         """Partially update this sandbox.
 
@@ -353,12 +448,13 @@ class Sandbox:
         auto-delete. ``timeout_seconds`` sets the auto-pause timeout; pass
         ``None`` to disable auto-pause. Omit either to leave it unchanged.
         """
-        self._require_live()
+        self._require_not_deleted()
         body = build_update_body(
             metadata=metadata,
             network=network,
             auto_delete_seconds=auto_delete_seconds,
             timeout_seconds=timeout_seconds,
+            preview_access=preview_access,
         )
 
         api_request(
@@ -414,7 +510,7 @@ class Sandbox:
         outbound requests to the secret's allowed hosts. Takes effect for
         processes started after this call; a paused sandbox applies it on resume.
         """
-        self._require_live()
+        self._require_not_deleted()
         api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/secrets",
@@ -430,7 +526,7 @@ class Sandbox:
         about a minute for a process already running. A paused sandbox applies
         the change on resume.
         """
-        self._require_live()
+        self._require_not_deleted()
         api_request(
             "DELETE",
             f"{self._config.base_url}/sandboxes/{self.id}/secrets/{quote(env_key, safe='')}",

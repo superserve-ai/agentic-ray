@@ -1,6 +1,12 @@
+import { registerPreviewTokenQueryParam } from "@/lib/preview-token-redaction"
+
 import { apiClient, apiClientList, type PagedResult } from "./client"
 import type {
   CreateSandboxRequest,
+  PreviewAccessPolicy,
+  PreviewPortList,
+  PreviewTokenResponse,
+  PublishedPreviewPort,
   ResumeResponse,
   SandboxListItem,
   SandboxListParams,
@@ -87,4 +93,62 @@ export async function detachSandboxSecret(
     `/sandboxes/${id}/secrets/${encodeURIComponent(envKey)}`,
     { method: "DELETE" },
   )
+}
+
+export async function listSandboxPreviewPorts(
+  id: string,
+): Promise<PreviewPortList> {
+  return apiClient<PreviewPortList>(`/sandboxes/${id}/preview-ports`)
+}
+
+export async function publishSandboxPreviewPort(
+  id: string,
+  port: number,
+  access?: PreviewAccessPolicy,
+): Promise<PublishedPreviewPort> {
+  return apiClient<PublishedPreviewPort>(`/sandboxes/${id}/preview-ports`, {
+    method: "POST",
+    body: JSON.stringify(access === undefined ? { port } : { port, access }),
+  })
+}
+
+export async function unpublishSandboxPreviewPort(
+  id: string,
+  port: number,
+): Promise<void> {
+  return apiClient<void>(`/sandboxes/${id}/preview-ports/${port}`, {
+    method: "DELETE",
+  })
+}
+
+export async function mintSandboxPreviewToken(
+  id: string,
+  port: number,
+  expiresInSeconds?: number,
+): Promise<PreviewTokenResponse> {
+  const credential = await apiClient<PreviewTokenResponse>(
+    `/sandboxes/${id}/preview-ports/${port}/token`,
+    {
+      method: "POST",
+      body: JSON.stringify(
+        expiresInSeconds === undefined
+          ? {}
+          : { expires_in_seconds: expiresInSeconds },
+      ),
+    },
+  )
+  registerPreviewTokenQueryParam(credential.query_param)
+  return credential
+}
+
+export async function rotateSandboxPreviewToken(
+  id: string,
+  port: number,
+): Promise<PreviewTokenResponse> {
+  const credential = await apiClient<PreviewTokenResponse>(
+    `/sandboxes/${id}/preview-ports/${port}/token/rotate`,
+    { method: "POST" },
+  )
+  registerPreviewTokenQueryParam(credential.query_param)
+  return credential
 }

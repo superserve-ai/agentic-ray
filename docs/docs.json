@@ -80,6 +80,7 @@
               "sandbox/lifecycle",
               "sandbox/metadata",
               "sandbox/networking",
+              "sandbox/preview-urls",
               "sandbox/network-log"
             ]
           },

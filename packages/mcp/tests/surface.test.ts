@@ -164,7 +164,7 @@ describe("sandbox_preview_url (in-memory, fake client)", () => {
     await conn.close()
   })
 
-  it("returns the public {port}-{id} preview URL", async () => {
+  it("publishes and returns the public {port}-{id} preview URL", async () => {
     const created = await callTool(conn.client, "sandbox_create", { name: "p" })
     const id = created.structured.id as string
 
@@ -174,12 +174,34 @@ describe("sandbox_preview_url (in-memory, fake client)", () => {
     })
     expect(r.isError).toBe(false)
     expect(r.structured.url).toBe(`https://8000-${id}.sandbox.superserve.ai`)
+    expect(r.structured.access).toBe("public")
+    expect(r.structured.previewAccess).toBe("public")
+    expect(r.structured.authenticated).toBe(false)
+  })
+
+  it("returns a signed URL for a private port", async () => {
+    const created = await callTool(conn.client, "sandbox_create", {
+      name: "private",
+      preview_access: "private",
+    })
+    const id = created.structured.id as string
+
+    const r = await callTool(conn.client, "sandbox_preview_url", {
+      sandbox_id: id,
+      port: 8000,
+      expires_in_seconds: 60,
+    })
+    expect(r.isError).toBe(false)
+    expect(r.structured.access).toBe("private")
+    expect(r.structured.previewAccess).toBe("private")
+    expect(r.structured.authenticated).toBe(true)
+    expect(r.structured.url).toContain("superserve_preview_token=")
   })
 
   it("rejects a sandbox id that is not host-safe (no URL injection)", async () => {
     const r = await callTool(conn.client, "sandbox_preview_url", {
       sandbox_id: "evil.example.com",
-      port: 80,
+      port: 8080,
     })
     expect(r.isError).toBe(true)
   })

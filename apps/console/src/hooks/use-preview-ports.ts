@@ -2,122 +2,107 @@
 
 import { useCallback, useEffect, useState } from "react"
 
-// Shared contract with the SDK (packages/sdk/src/config.ts) and the edge proxy,
-// which only reverse-proxies user-app ports in this range; privileged ports
-// (< 1024) are refused, so we reject them up front rather than build a dead URL.
-// Keep MIN/MAX identical to the SDK constants — a test in this file pins the
-// literals so one-sided drift fails CI.
+import { ApiError } from "@/lib/api/client"
+import {
+  listSandboxPreviewPorts,
+  publishSandboxPreviewPort,
+  unpublishSandboxPreviewPort,
+} from "@/lib/api/sandboxes"
+import type {
+  PreviewAccess,
+  PreviewAccessPolicy,
+  PublishedPreviewPort,
+} from "@/lib/api/types"
+
 export const MIN_PREVIEW_PORT = 1024
 export const MAX_PREVIEW_PORT = 65535
-// UI-only cap on how many ports to preview at once (not an SDK/proxy limit).
+export const RESERVED_PREVIEW_PORT = 49983
 export const MAX_PREVIEW_PORTS = 12
-
-const STORAGE_PREFIX = "superserve.preview-ports."
 
 export interface AddPortResult {
   ok: boolean
-  /** Present when ok is false — a human-readable reason for a toast. */
   error?: string
 }
 
 export interface UsePreviewPortsApi {
-  ports: number[]
+  ports: PublishedPreviewPort[]
+  previewAccess: PreviewAccess
   canAddPort: boolean
-  addPort: (port: number) => AddPortResult
-  removePort: (port: number) => void
+  isLoading: boolean
+  addPort: (
+    port: number,
+    access?: PreviewAccessPolicy,
+  ) => Promise<AddPortResult>
+  removePort: (port: number) => Promise<AddPortResult>
+  setPreviewAccess: (access: PreviewAccess) => void
 }
 
 export function isValidPreviewPort(port: number): boolean {
   return (
     Number.isInteger(port) &&
     port >= MIN_PREVIEW_PORT &&
-    port <= MAX_PREVIEW_PORT
+    port <= MAX_PREVIEW_PORT &&
+    port !== RESERVED_PREVIEW_PORT
   )
 }
 
-function safeStorage(): Storage | null {
-  if (typeof window === "undefined") return null
-  try {
-    return window.localStorage
-  } catch {
-    return null
-  }
-}
-
-function loadPorts(sandboxId: string): number[] {
-  const storage = safeStorage()
-  if (!storage) return []
-  try {
-    const raw = storage.getItem(STORAGE_PREFIX + sandboxId)
-    if (!raw) return []
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    const seen = new Set<number>()
-    const ports: number[] = []
-    for (const value of parsed) {
-      if (typeof value === "number" && isValidPreviewPort(value)) {
-        if (!seen.has(value)) {
-          seen.add(value)
-          ports.push(value)
-        }
-      }
-    }
-    return ports.slice(0, MAX_PREVIEW_PORTS)
-  } catch {
-    return []
-  }
-}
-
-function savePorts(sandboxId: string, ports: number[]): void {
-  const storage = safeStorage()
-  if (!storage) return
-  try {
-    storage.setItem(STORAGE_PREFIX + sandboxId, JSON.stringify(ports))
-  } catch {
-    // Quota exceeded or storage disabled — best-effort; the worst case is the
-    // port list doesn't survive a reload.
-  }
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof ApiError ? error.message : fallback
 }
 
 /**
- * Per-sandbox list of preview ports the user has added, persisted in
- * localStorage. Purely client-side — there is no backend tracking of "exposed"
- * ports; every user-app port is already reachable through the proxy.
+ * Server-backed preview publication state. The backend is the authorization
+ * source of truth; localStorage must never imply that an unpublished port is
+ * reachable. The owning component is keyed by sandbox id, so request and UI
+ * state cannot leak across detail-page navigation.
  */
-export function usePreviewPorts(sandboxId: string): UsePreviewPortsApi {
-  const [ports, setPorts] = useState<number[]>(() => loadPorts(sandboxId))
+export function usePreviewPorts(
+  sandboxId: string,
+  initialAccess: PreviewAccess,
+): UsePreviewPortsApi {
+  const [ports, setPorts] = useState<PublishedPreviewPort[]>([])
+  const [previewAccess, setPreviewAccess] =
+    useState<PreviewAccess>(initialAccess)
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Reset to the new sandbox's stored ports as the id changes (the detail page
-  // can swap sandboxes without remounting this hook). Done during render —
-  // React's "adjust state on a prop change" pattern — rather than in an effect:
-  // an effect-based reset leaves a window where the persist effect below runs
-  // with the previous sandbox's `ports` but the new `sandboxId`, briefly
-  // writing one sandbox's ports under another sandbox's storage key.
-  const [loadedFor, setLoadedFor] = useState(sandboxId)
-  if (loadedFor !== sandboxId) {
-    setLoadedFor(sandboxId)
-    setPorts(loadPorts(sandboxId))
-  }
-
-  // Persist on change. After the render-phase reset above, `sandboxId` and
-  // `ports` always belong to the same sandbox, so this never crosses keys.
   useEffect(() => {
-    savePorts(sandboxId, ports)
-  }, [sandboxId, ports])
+    let cancelled = false
+    setIsLoading(true)
+    void listSandboxPreviewPorts(sandboxId)
+      .then((result) => {
+        if (cancelled) return
+        setPreviewAccess(result.preview_access)
+        setPorts(result.ports)
+      })
+      .catch(() => {
+        // The backend endpoint may not be deployed yet. Keep the section
+        // usable for legacy sandboxes, but do not invent published ports.
+        if (!cancelled) setPorts([])
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [sandboxId])
 
-  // Validate synchronously against current `ports` (not inside the setPorts
-  // updater): React does not guarantee the updater runs before addPort
-  // returns, so the duplicate / max-ports result must be computed here.
   const addPort = useCallback<UsePreviewPortsApi["addPort"]>(
-    (port) => {
+    async (port, access) => {
+      if (port === RESERVED_PREVIEW_PORT) {
+        return {
+          ok: false,
+          error: `Port ${RESERVED_PREVIEW_PORT} is reserved for sandbox control traffic.`,
+        }
+      }
       if (!isValidPreviewPort(port)) {
         return {
           ok: false,
           error: `Enter a port between ${MIN_PREVIEW_PORT} and ${MAX_PREVIEW_PORT}.`,
         }
       }
-      if (ports.includes(port)) {
-        return { ok: false, error: `Port ${port} is already added.` }
+      if (ports.some((item) => item.port === port)) {
+        return { ok: false, error: `Port ${port} is already published.` }
       }
       if (ports.length >= MAX_PREVIEW_PORTS) {
         return {
@@ -125,24 +110,51 @@ export function usePreviewPorts(sandboxId: string): UsePreviewPortsApi {
           error: `You can preview at most ${MAX_PREVIEW_PORTS} ports.`,
         }
       }
-      setPorts((prev) =>
-        prev.includes(port) || prev.length >= MAX_PREVIEW_PORTS
-          ? prev
-          : [...prev, port],
-      )
-      return { ok: true }
+      try {
+        const published = await publishSandboxPreviewPort(
+          sandboxId,
+          port,
+          access,
+        )
+        setPorts((current) =>
+          current.some((item) => item.port === published.port)
+            ? current
+            : [...current, published],
+        )
+        return { ok: true }
+      } catch (error) {
+        return {
+          ok: false,
+          error: errorMessage(error, `Could not publish port ${port}.`),
+        }
+      }
     },
-    [ports],
+    [ports, sandboxId],
   )
 
-  const removePort = useCallback<UsePreviewPortsApi["removePort"]>((port) => {
-    setPorts((prev) => prev.filter((p) => p !== port))
-  }, [])
+  const removePort = useCallback<UsePreviewPortsApi["removePort"]>(
+    async (port) => {
+      try {
+        await unpublishSandboxPreviewPort(sandboxId, port)
+        setPorts((current) => current.filter((item) => item.port !== port))
+        return { ok: true }
+      } catch (error) {
+        return {
+          ok: false,
+          error: errorMessage(error, `Could not unpublish port ${port}.`),
+        }
+      }
+    },
+    [sandboxId],
+  )
 
   return {
     ports,
-    canAddPort: ports.length < MAX_PREVIEW_PORTS,
+    previewAccess,
+    canAddPort: !isLoading && ports.length < MAX_PREVIEW_PORTS,
+    isLoading,
     addPort,
     removePort,
+    setPreviewAccess,
   }
 }

@@ -6,6 +6,8 @@ import type {
   NetworkConfig,
   NetworkEvent,
   NetworkLogPage,
+  PreviewAccess,
+  PreviewAccessPolicy,
   SandboxInfo,
   SandboxSecretBinding,
   SandboxStatus,
@@ -31,6 +33,8 @@ interface FakeSandbox {
   secrets: SandboxSecretBinding[]
   autoDeleteSeconds?: number
   timeoutSeconds?: number
+  previewAccess: PreviewAccess
+  publishedPorts: Map<number, PreviewAccessPolicy>
 }
 
 export interface FakeClient {
@@ -65,6 +69,7 @@ export function createFakeClient(): FakeClient {
     name: sb.name,
     status: sb.status,
     metadata: sb.metadata,
+    previewAccess: sb.previewAccess,
   })
 
   const client: SandboxClient = {
@@ -79,6 +84,8 @@ export function createFakeClient(): FakeClient {
         network: input.network,
         autoDeleteSeconds: input.autoDeleteSeconds,
         timeoutSeconds: input.timeoutSeconds ?? 3600,
+        previewAccess: input.previewAccess ?? "public",
+        publishedPorts: new Map(),
         secrets: Object.entries(input.secrets ?? {}).map(
           ([envKey, secretName]) => ({ envKey, secretName, revoked: false }),
         ),
@@ -95,6 +102,8 @@ export function createFakeClient(): FakeClient {
         sb.autoDeleteSeconds = input.autoDeleteSeconds ?? undefined
       if (input.timeoutSeconds !== undefined)
         sb.timeoutSeconds = input.timeoutSeconds ?? undefined
+      if (input.previewAccess !== undefined)
+        sb.previewAccess = input.previewAccess
     },
 
     async list(metadata) {
@@ -138,13 +147,34 @@ export function createFakeClient(): FakeClient {
         autoDeleteSeconds: sb.autoDeleteSeconds,
         network: sb.network,
         metadata: sb.metadata,
+        previewAccess: sb.previewAccess,
         secrets: sb.secrets.length ? sb.secrets : undefined,
       }
       return info
     },
 
-    previewUrl(id, port) {
-      return buildPreviewUrl(id, port)
+    async previewUrl(id, port, _expiresInSeconds) {
+      const sb = must(id)
+      const url = buildPreviewUrl(id, port)
+      const existingAccess = sb.publishedPorts.get(port)
+      const access =
+        existingAccess ??
+        (sb.previewAccess === "private" ? "private" : "public")
+      sb.publishedPorts.set(port, access)
+      if (access === "public") {
+        return {
+          url,
+          access,
+          previewAccess: sb.previewAccess,
+          authenticated: false,
+        }
+      }
+      return {
+        url: `${url}/?superserve_preview_token=fake-token-${port}`,
+        access,
+        previewAccess: sb.previewAccess,
+        authenticated: true,
+      }
     },
 
     async networkLog(id, opts) {
