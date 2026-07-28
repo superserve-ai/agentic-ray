@@ -155,7 +155,10 @@
               "POST /sandboxes/{sandbox_id}/pause",
               "POST /sandboxes/{sandbox_id}/resume",
               "POST /sandboxes/{sandbox_id}/activate",
-              "GET /sandboxes/{sandbox_id}/network"
+              "GET /sandboxes/{sandbox_id}/network",
+              "GET /sandboxes/{sandbox_id}/preview-ports",
+              "POST /sandboxes/{sandbox_id}/preview-ports",
+              "DELETE /sandboxes/{sandbox_id}/preview-ports/{port}"
             ]
           },
           {
