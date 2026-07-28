@@ -369,10 +369,14 @@ ${tokenStep}      - uses: oven-sh/setup-bun@v2
       # Superserve-gated channel, so blessed updates roll out here without editing this file.
       - name: Review changed pull request
         if: github.event_name == 'pull_request'
+        # Reviews are advisory: Claude/API failures must not block repository CI.
+        continue-on-error: true
         run: bunx ${PACKAGE_SPEC} run pr-loop --repo "\${{ github.repository }}" --pr "\${{ github.event.pull_request.number }}" --once
 ${loopEnv}      # Manual dispatch sweeps all open PRs by omitting --pr entirely.
       - name: Review all open pull requests
         if: github.event_name == 'workflow_dispatch'
+        # Keep manual review failures visible in logs without failing the workflow.
+        continue-on-error: true
         run: bunx ${PACKAGE_SPEC} run pr-loop --repo "\${{ github.repository }}" --once
 ${loopEnv}
 `

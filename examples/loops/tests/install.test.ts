@@ -29,6 +29,7 @@ interface ParsedWorkflow {
         name?: string
         uses?: string
         run?: string
+        "continue-on-error"?: boolean
         with?: Record<string, string>
         env?: Record<string, string>
       }>
@@ -139,6 +140,7 @@ describe("buildWorkflow — structural (parsed YAML)", () => {
     expect(steps[0].uses).toBe("oven-sh/setup-bun@v2")
     expect(steps[1].name).toBe("Review changed pull request")
     expect(steps[1].if).toBe("github.event_name == 'pull_request'")
+    expect(steps[1]["continue-on-error"]).toBe(true)
     expect(steps[1].run).toContain("run pr-loop")
     expect(steps[1].run).toContain("--pr")
     expect(steps[1].env?.GITHUB_TOKEN).toBe("${{ github.token }}")
@@ -147,6 +149,7 @@ describe("buildWorkflow — structural (parsed YAML)", () => {
     )
     expect(steps[2].name).toBe("Review all open pull requests")
     expect(steps[2].if).toBe("github.event_name == 'workflow_dispatch'")
+    expect(steps[2]["continue-on-error"]).toBe(true)
     expect(steps[2].run).toContain("run pr-loop")
     expect(steps[2].run).not.toContain("--pr")
     expect(steps[2].env).toEqual(steps[1].env)
