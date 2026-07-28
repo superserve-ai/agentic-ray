@@ -19,6 +19,7 @@ import {
   Field,
   HighlightedCode,
   Input,
+  Switch,
   useToast,
 } from "@superserve/ui"
 import { AnimatePresence, LayoutGroup, motion } from "motion/react"
@@ -31,7 +32,7 @@ import type { SecretBindingEntry } from "@/components/secrets/secret-binding-edi
 import { SecretBindingEditor } from "@/components/secrets/secret-binding-editor"
 import { useCreateSandbox } from "@/hooks/use-sandboxes"
 import { useTemplates } from "@/hooks/use-templates"
-import type { CreateSandboxRequest } from "@/lib/api/types"
+import type { CreateSandboxRequest, PreviewAccessPolicy } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 import { isSystemTemplate } from "@/lib/templates/is-system-template"
 
@@ -201,6 +202,7 @@ function getCreateSnippet(language: Language): string {
 const sandbox = await Sandbox.create({
   name: "my-sandbox",
   apiKey: "YOUR_API_KEY",
+  previewAccess: "public",
 })
 console.log(sandbox.id)`
   }
@@ -210,6 +212,7 @@ console.log(sandbox.id)`
 sandbox = Sandbox.create(
     name="my-sandbox",
     api_key="YOUR_API_KEY",
+    preview_access="public",
 )
 print(sandbox.id)`
 }
@@ -248,6 +251,7 @@ interface FormState {
   secretEntries: SecretBindingEntry[]
   envEntries: { key: string; value: string }[]
   metadataEntries: { key: string; value: string }[]
+  previewAccess: PreviewAccessPolicy
   templateRef?: string
 }
 
@@ -302,6 +306,8 @@ export function parseWindowSeconds(
  *  - `secrets` is only included when at least one entry has both an env
  *    key and a secret name.
  *  - `template_id` is only included when `templateRef` is non-empty.
+ *  - `preview_access` is always explicit so new console sandboxes use the
+ *    published-port model instead of the compatibility-only legacy mode.
  */
 export function buildCreateSandboxRequest(
   state: FormState,
@@ -343,6 +349,7 @@ export function buildCreateSandboxRequest(
 
   return {
     name: state.name.trim(),
+    preview_access: state.previewAccess,
     ...(state.templateRef ? { from_template: state.templateRef } : {}),
     ...(timeoutSeconds !== undefined
       ? { timeout_seconds: timeoutSeconds }
@@ -400,6 +407,8 @@ export function CreateSandboxDialog({
   const [metadataEntries, setMetadataEntries] = useState<
     { key: string; value: string }[]
   >([])
+  const [previewAccess, setPreviewAccess] =
+    useState<PreviewAccessPolicy>("public")
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [mode, setMode] = useState<Mode>("form")
   const [language, setLanguage] = useState<Language>("typescript")
@@ -462,6 +471,7 @@ export function CreateSandboxDialog({
     setSecretEntries([])
     setEnvEntries([])
     setMetadataEntries([])
+    setPreviewAccess("public")
     setShowAdvanced(false)
     setMode("form")
     setTemplateRef(initialTemplateRef ?? DEFAULT_TEMPLATE)
@@ -479,6 +489,7 @@ export function CreateSandboxDialog({
         secretEntries,
         envEntries,
         metadataEntries,
+        previewAccess,
         templateRef: templateRef || undefined,
       })
     } catch (e) {
@@ -501,6 +512,7 @@ export function CreateSandboxDialog({
         : 0,
       advanced_expanded: showAdvanced,
       from_template: !!payload.from_template,
+      preview_access: payload.preview_access,
     })
 
     createMutation.mutate(payload, {
@@ -647,6 +659,20 @@ export function CreateSandboxDialog({
                     className="overflow-hidden"
                   >
                     <div className="space-y-5">
+                      <Field
+                        label="New preview port access"
+                        description="Only explicitly published ports are reachable. Choose the default access for each new port."
+                      >
+                        <Switch
+                          id="preview-authentication"
+                          checked={previewAccess === "private"}
+                          onCheckedChange={(checked) =>
+                            setPreviewAccess(checked ? "private" : "public")
+                          }
+                          label="Default to private"
+                        />
+                      </Field>
+
                       <Field
                         label="Timeout"
                         description="Auto-pause after this many seconds (max 604800 = 7 days)"

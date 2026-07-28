@@ -124,7 +124,7 @@ It serves the MCP endpoint at `/` (POST) and a `GET /health` liveness probe. Con
 | `sandbox_pause`              | Pause a sandbox (state preserved).                                                     |
 | `sandbox_resume`             | Resume a paused sandbox (usually unnecessary — exec auto-resumes).                     |
 | `sandbox_kill`               | Delete a sandbox.                                                                      |
-| `sandbox_preview_url`        | Build the public URL for a listening port (unauthenticated).                           |
+| `sandbox_preview_url`        | Publish a port and return a public or private signed preview URL.                      |
 | `sandbox_network_log`        | Audit a sandbox's outbound connections.                                                |
 | `sandbox_template_list`      | List the templates (prebuilt base images) your team can create sandboxes from.         |
 | `sandbox_template_create`    | Build a custom template (vCPU/memory/disk shape, preinstalled software). Async.        |

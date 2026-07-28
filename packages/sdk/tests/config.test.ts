@@ -5,6 +5,7 @@ import {
   MAX_PREVIEW_PORT,
   MIN_PREVIEW_PORT,
   previewUrl,
+  RESERVED_PREVIEW_PORT,
   resolveConfig,
 } from "../src/config.js"
 import { AuthenticationError, ValidationError } from "../src/errors.js"
@@ -241,6 +242,7 @@ describe("previewUrl", () => {
   it("pins the port range to the edge-proxy contract", () => {
     expect(MIN_PREVIEW_PORT).toBe(1024)
     expect(MAX_PREVIEW_PORT).toBe(65535)
+    expect(RESERVED_PREVIEW_PORT).toBe(49983)
   })
 
   it("builds the per-sandbox subdomain URL for a port", () => {
@@ -269,6 +271,12 @@ describe("previewUrl", () => {
 
   it("throws ValidationError for out-of-range ports (> 65535)", () => {
     expect(() => previewUrl("a", "h", 70000)).toThrow(ValidationError)
+  })
+
+  it("throws ValidationError for boxd's reserved control-plane port", () => {
+    expect(() => previewUrl("a", "h", RESERVED_PREVIEW_PORT)).toThrow(
+      /reserved for sandbox control traffic/,
+    )
   })
 
   it("throws ValidationError for non-integer ports", () => {

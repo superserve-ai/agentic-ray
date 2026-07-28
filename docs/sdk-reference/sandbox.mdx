@@ -18,6 +18,7 @@ from superserve import Sandbox
 # Async variant with awaitable methods:
 from superserve import AsyncSandbox
 ```
+
 </CodeGroup>
 
 ## Authentication
@@ -43,6 +44,7 @@ const sandbox = await Sandbox.create({
   metadata: { env: "prod" },
   envVars: { OPENAI_API_KEY: "sk-..." },
   network: { allowOut: ["api.openai.com"], denyOut: ["0.0.0.0/0"] },
+  previewAccess: "private",
 })
 ```
 
@@ -58,26 +60,29 @@ sandbox = Sandbox.create(
         allow_out=["api.openai.com"],
         deny_out=["0.0.0.0/0"],
     ),
+    preview_access="private",
 )
 ```
+
 </CodeGroup>
 
 **Options:**
 
-| Option | Type | Description |
-|---|---|---|
-| `name` | `string` | **Required.** Human-readable sandbox name. |
-| `fromTemplate` / `from_template` | `string \| Template` | Template name, UUID, or `Template` instance to boot from. Defaults to `superserve/base`. |
-| `fromSnapshot` / `from_snapshot` | `string` | Snapshot UUID to boot from. |
-| `timeoutSeconds` / `timeout_seconds` | `number` | Auto-pause after this many seconds of active time (per session; re-armed on resume). See [Lifecycle](/sandbox/lifecycle#auto-pause). |
-| `autoDeleteSeconds` / `auto_delete_seconds` | `number` | Delete the sandbox once continuously paused for this many seconds (max 30 days, `0` = delete on pause). See [Lifecycle](/sandbox/lifecycle#auto-delete). |
-| `metadata` | `Record<string, string>` | String tags. |
-| `envVars` / `env_vars` | `Record<string, string>` | Env vars injected into every process. |
-| `secrets` | `Record<string, string>` | Bind secrets to env vars (`ENV_VAR → secret name`). The agent sees a stand-in token; the real credential is attached to outbound requests. See [Secrets](/secrets/overview). |
-| `network` | `NetworkConfig` | Egress allow/deny rules. |
-| `apiKey` / `api_key` | `string` | Overrides `SUPERSERVE_API_KEY`. |
-| `baseUrl` / `base_url` | `string` | Overrides `SUPERSERVE_BASE_URL`. |
-| `signal` | `AbortSignal` | TypeScript only - abort the creation request. |
+| Option                                      | Type                     | Description                                                                                                                                                                                                                                        |
+| ------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                                      | `string`                 | **Required.** Human-readable sandbox name.                                                                                                                                                                                                         |
+| `fromTemplate` / `from_template`            | `string \| Template`     | Template name, UUID, or `Template` instance to boot from. Defaults to `superserve/base`.                                                                                                                                                           |
+| `fromSnapshot` / `from_snapshot`            | `string`                 | Snapshot UUID to boot from.                                                                                                                                                                                                                        |
+| `timeoutSeconds` / `timeout_seconds`        | `number`                 | Auto-pause after this many seconds of active time (per session; re-armed on resume). See [Lifecycle](/sandbox/lifecycle#auto-pause).                                                                                                               |
+| `autoDeleteSeconds` / `auto_delete_seconds` | `number`                 | Delete the sandbox once continuously paused for this many seconds (max 30 days, `0` = delete on pause). See [Lifecycle](/sandbox/lifecycle#auto-delete).                                                                                           |
+| `metadata`                                  | `Record<string, string>` | String tags.                                                                                                                                                                                                                                       |
+| `envVars` / `env_vars`                      | `Record<string, string>` | Env vars injected into every process.                                                                                                                                                                                                              |
+| `secrets`                                   | `Record<string, string>` | Bind secrets to env vars (`ENV_VAR → secret name`). The agent sees a stand-in token; the real credential is attached to outbound requests. See [Secrets](/secrets/overview).                                                                       |
+| `network`                                   | `NetworkConfig`          | Egress allow/deny rules.                                                                                                                                                                                                                           |
+| `previewAccess` / `preview_access`          | `"public" \| "private"`  | Enable explicit publication and set the default access for newly published ports. Each port can override it. Omit to use strict `public`; `legacy_public` is only returned for pre-migration sandboxes. See [Preview URLs](/sandbox/preview-urls). |
+| `apiKey` / `api_key`                        | `string`                 | Overrides `SUPERSERVE_API_KEY`.                                                                                                                                                                                                                    |
+| `baseUrl` / `base_url`                      | `string`                 | Overrides `SUPERSERVE_BASE_URL`.                                                                                                                                                                                                                   |
+| `signal`                                    | `AbortSignal`            | TypeScript only - abort the creation request.                                                                                                                                                                                                      |
 
 ### `Sandbox.connect`
 
@@ -91,6 +96,7 @@ const sandbox = await Sandbox.connect("7a3f2b8c-1234-...")
 ```python Python
 sandbox = Sandbox.connect("7a3f2b8c-1234-...")
 ```
+
 </CodeGroup>
 
 ### `Sandbox.list`
@@ -107,6 +113,7 @@ const prod = await Sandbox.list({ metadata: { env: "prod" } })
 all_boxes = Sandbox.list()
 prod = Sandbox.list(metadata={"env": "prod"})
 ```
+
 </CodeGroup>
 
 Returns an array of [`SandboxInfo`](#sandboxinfo).
@@ -123,6 +130,7 @@ await Sandbox.killById("7a3f2b8c-1234-...")
 ```python Python
 Sandbox.kill_by_id("7a3f2b8c-1234-...")
 ```
+
 </CodeGroup>
 
 ### `Sandbox.updateById` / `Sandbox.update_by_id`
@@ -141,6 +149,7 @@ await Sandbox.updateById("7a3f2b8c-1234-...", { autoDeleteSeconds: 3600 })
 ```python Python
 Sandbox.update_by_id("7a3f2b8c-1234-...", auto_delete_seconds=3600)
 ```
+
 </CodeGroup>
 
 ## Methods on `sandbox`
@@ -159,6 +168,7 @@ console.log(info.status)  // "active" | "paused" | "resuming" | "failed"
 info = sandbox.get_info()
 print(info.status.value)  # "active" | "paused" | "resuming" | "failed"
 ```
+
 </CodeGroup>
 
 ### `pause`
@@ -173,6 +183,7 @@ await sandbox.pause()
 ```python Python
 sandbox.pause()
 ```
+
 </CodeGroup>
 
 ### `resume`
@@ -187,6 +198,7 @@ await sandbox.resume()
 ```python Python
 sandbox.resume()
 ```
+
 </CodeGroup>
 
 ### `kill`
@@ -201,11 +213,13 @@ await sandbox.kill()
 ```python Python
 sandbox.kill()
 ```
+
 </CodeGroup>
 
 ### `update`
 
-Patch `metadata`, `network`, `autoDeleteSeconds`, and/or `timeoutSeconds` on a sandbox.
+Patch `metadata`, `network`, lifecycle windows, and/or the default access for
+newly published preview ports on a sandbox.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -221,7 +235,10 @@ await sandbox.update({ autoDeleteSeconds: null })
 // Auto-pause timeout: same set/clear contract.
 await sandbox.update({ timeoutSeconds: 900 })
 await sandbox.update({ timeoutSeconds: null })
-```
+
+await sandbox.update({ previewAccess: "private" })
+
+````
 
 ```python Python
 sandbox.update(
@@ -236,10 +253,36 @@ sandbox.update(auto_delete_seconds=None)
 # Auto-pause timeout: same set/clear contract.
 sandbox.update(timeout_seconds=900)
 sandbox.update(timeout_seconds=None)
-```
+
+sandbox.update(preview_access="private")
+````
+
 </CodeGroup>
 
 On an already-paused sandbox, arming `autoDeleteSeconds` starts the countdown from the moment of the call — never retroactively from when the sandbox paused. See [Lifecycle](/sandbox/lifecycle#auto-delete).
+
+Moving a compatibility sandbox onto `public` or `private` closes every
+unpublished port. See [Preview URLs](/sandbox/preview-urls) for the safe
+publication and migration flow. Changing between `public` and `private` later
+does not rewrite the access mode of ports that are already published.
+
+### Preview URL methods
+
+Preview URLs use an explicit published-port allowlist. The URL builder alone
+does not publish or authenticate a port.
+
+| TypeScript                              | Python                                                | Description                                                                           |
+| --------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `getPreviewUrl(port)`                   | `get_preview_url(port)`                               | Construct `https://{port}-{id}.{host}` without a network call.                        |
+| `listPreviewPorts()`                    | `list_preview_ports()`                                | Return the sandbox default plus every port's access; tokens are never listed.         |
+| `publishPreviewPort(port, { access? })` | `publish_preview_port(port, access=...)`              | Publish a port; omit access to preserve an existing mode or use the new-port default. |
+| `unpublishPreviewPort(port)`            | `unpublish_preview_port(port)`                        | Close a port and revoke its credentials.                                              |
+| `getPreviewToken(port, options?)`       | `get_preview_token(port, expires_in_seconds=...)`     | Mint a per-port header/query credential.                                              |
+| `getSignedPreviewUrl(port, options?)`   | `get_signed_preview_url(port, expires_in_seconds=60)` | Mint a browser bootstrap URL; defaults to 60 seconds.                                 |
+| `rotatePreviewToken(port)`              | `rotate_preview_token(port)`                          | Revoke one port's old credentials and return a fresh token.                           |
+
+See the [Preview URLs guide](/sandbox/preview-urls) for policy selection,
+machine headers, browser cookies, and revocation examples.
 
 ### `attachSecret` / `attach_secret`
 
@@ -253,6 +296,7 @@ await sandbox.attachSecret("ANTHROPIC_API_KEY", "anthropic-prod")
 ```python Python
 sandbox.attach_secret("ANTHROPIC_API_KEY", "anthropic-prod")
 ```
+
 </CodeGroup>
 
 ### `detachSecret` / `detach_secret`
@@ -267,6 +311,7 @@ await sandbox.detachSecret("ANTHROPIC_API_KEY")
 ```python Python
 sandbox.detach_secret("ANTHROPIC_API_KEY")
 ```
+
 </CodeGroup>
 
 ### `getNetworkLog` / `get_network_log`
@@ -284,31 +329,32 @@ page = sandbox.get_network_log(verdict="blocked", limit=100)
 for e in page.events:
     print(e.kind, e.host, e.verdict or e.status)
 ```
+
 </CodeGroup>
 
-| Option | Type | Description |
-|---|---|---|
-| `limit` | `number` | Max events per page. |
-| `before` | `string` | Opaque pagination cursor — pass the previous page's `nextCursor` to page through results. Also accepts an RFC3339 timestamp as a time filter (rows strictly older than it). |
-| `since` | `string` | RFC3339 — rows at or newer than this. |
-| `verdict` | `"allowed" \| "blocked" \| "failed"` | Filter to connections with this verdict (excludes request rows). |
+| Option    | Type                                 | Description                                                                                                                                                                 |
+| --------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `limit`   | `number`                             | Max events per page.                                                                                                                                                        |
+| `before`  | `string`                             | Opaque pagination cursor — pass the previous page's `nextCursor` to page through results. Also accepts an RFC3339 timestamp as a time filter (rows strictly older than it). |
+| `since`   | `string`                             | RFC3339 — rows at or newer than this.                                                                                                                                       |
+| `verdict` | `"allowed" \| "blocked" \| "failed"` | Filter to connections with this verdict (excludes request rows).                                                                                                            |
 
 `NetworkLogPage` has `events` ([`NetworkEvent[]`](/sandbox/network-log#two-kinds-of-rows)), `nextCursor` / `next_cursor`, and `hasMore` / `has_more`.
 
 ## Properties on `sandbox`
 
-`id`, `name`, `status`, `metadata`, and `secrets` are read-only snapshots taken at construction. Call `getInfo()` / `get_info()` for fresh data.
+`id`, `name`, `status`, `metadata`, `previewAccess` / `preview_access`, and `secrets` are read-only snapshots taken at construction. Call `getInfo()` / `get_info()` for fresh data.
 
-| Property | Type | Description |
-|---|---|---|
-| `id` | `string` | Unique sandbox UUID. |
-| `name` | `string` | Human-readable name. |
-| `status` | `SandboxStatus` | Status at construction time. |
-| `metadata` | `Record<string, string>` | Tags at construction time. |
-| `secrets` | `SandboxSecretBinding[] \| undefined` | Bound secrets (`envKey` → `secretName`, with a `revoked` flag) at construction time. |
-| `commands` | `Commands` | See [Commands](/sdk-reference/commands). |
-| `files` | `Files` | See [Files](/sdk-reference/files). Rebuilt after `resume()`. |
-
+| Property                           | Type                                       | Description                                                                                  |
+| ---------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `id`                               | `string`                                   | Unique sandbox UUID.                                                                         |
+| `name`                             | `string`                                   | Human-readable name.                                                                         |
+| `status`                           | `SandboxStatus`                            | Status at construction time.                                                                 |
+| `metadata`                         | `Record<string, string>`                   | Tags at construction time.                                                                   |
+| `previewAccess` / `preview_access` | `"legacy_public" \| "public" \| "private"` | Preview compatibility mode or default access for newly published ports at construction time. |
+| `secrets`                          | `SandboxSecretBinding[] \| undefined`      | Bound secrets (`envKey` → `secretName`, with a `revoked` flag) at construction time.         |
+| `commands`                         | `Commands`                                 | See [Commands](/sdk-reference/commands).                                                     |
+| `files`                            | `Files`                                    | See [Files](/sdk-reference/files). Rebuilt after `resume()`.                                 |
 
 ## Types
 
@@ -328,6 +374,7 @@ class SandboxStatus(str, Enum):
     RESUMING = "resuming"
     FAILED = "failed"
 ```
+
 </CodeGroup>
 
 - `active` - running and ready to accept commands
@@ -353,6 +400,7 @@ interface SandboxInfo {
   autoDeleteAt?: Date // present only while paused with autoDeleteSeconds set
   network?: NetworkConfig
   metadata: Record<string, string>
+  previewAccess: "legacy_public" | "public" | "private"
 }
 ```
 
@@ -373,7 +421,9 @@ class SandboxInfo(BaseModel):
     auto_delete_at: datetime | None = None
     network: NetworkConfig | None = None
     metadata: dict[str, str]
+    preview_access: PreviewAccess
 ```
+
 </CodeGroup>
 
 ### `NetworkConfig`
@@ -393,6 +443,7 @@ class NetworkConfig(BaseModel):
     allow_out: list[str] | None = None  # CIDRs or domain patterns
     deny_out: list[str] | None = None   # CIDRs only
 ```
+
 </CodeGroup>
 
 ## Retries

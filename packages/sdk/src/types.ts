@@ -13,6 +13,12 @@ import { SandboxError } from "./errors.js"
 
 export type SandboxStatus = "active" | "paused" | "resuming" | "failed"
 
+/** Current preview-routing policy returned by the API. */
+export type PreviewAccess = "legacy_public" | "public" | "private"
+
+/** Strict preview policy callers can select at create/update time. */
+export type PreviewAccessPolicy = Exclude<PreviewAccess, "legacy_public">
+
 export interface NetworkConfig {
   allowOut?: string[]
   denyOut?: string[]
@@ -32,6 +38,8 @@ export interface SandboxInfo {
   autoDeleteAt?: Date
   network?: NetworkConfig
   metadata: Record<string, string>
+  /** Preview routing policy. `legacy_public` is returned for compatibility sandboxes. */
+  previewAccess: PreviewAccess
   /** Secrets bound to this sandbox (env-var → secret), when any are attached. */
   secrets?: SandboxSecretBinding[]
 }
@@ -69,6 +77,12 @@ export interface SandboxCreateOptions extends ConnectionOptions {
    */
   secrets?: Record<string, string>
   network?: NetworkConfig
+  /**
+   * Opt into explicit preview publication and choose the default access for
+   * newly published ports. Each port can override it when published. Omit to
+   * use the backend's strict `public` default.
+   */
+  previewAccess?: PreviewAccessPolicy
 }
 
 export interface SandboxListOptions extends ConnectionOptions {
@@ -89,6 +103,52 @@ export interface SandboxUpdateOptions {
    * `undefined` leaves it unchanged.
    */
   timeoutSeconds?: number | null
+  /** Set the default access for newly published ports. Existing ports keep theirs. */
+  previewAccess?: PreviewAccessPolicy
+}
+
+export interface PublishedPreviewPort {
+  port: number
+  tokenVersion: number
+  /** This port's routing mode. Independent of sibling published ports. */
+  access: PreviewAccessPolicy
+}
+
+export interface PreviewPortList {
+  /** Default access applied when a new port is published without an override. */
+  previewAccess: PreviewAccess
+  ports: PublishedPreviewPort[]
+}
+
+export interface PublishPreviewPortOptions {
+  /** Explicit mode for this port. Omit to use the sandbox default for new ports. */
+  access?: PreviewAccessPolicy
+}
+
+export interface PreviewTokenOptions {
+  /**
+   * Token lifetime in seconds (1–604800). Omit intentionally for a
+   * long-running machine credential that lives until rotation or unpublish.
+   */
+  expiresInSeconds?: number
+}
+
+export interface SignedPreviewUrlOptions {
+  /** Signed-link lifetime in seconds. Defaults to 60. */
+  expiresInSeconds?: number
+}
+
+export interface PreviewToken {
+  token: string
+  port: number
+  header: string
+  queryParam: string
+  tokenVersion: number
+  /** The published port's current routing mode. */
+  access: PreviewAccessPolicy
+  /** Sandbox default for newly published ports. */
+  previewAccess: PreviewAccess
+  expiresAt?: Date
 }
 
 // ---------------------------------------------------------------------------
@@ -191,6 +251,7 @@ export interface ApiSandboxResponse {
   auto_delete_at?: string
   network?: { allow_out?: string[]; deny_out?: string[] }
   metadata?: Record<string, string>
+  preview_access?: string
   secrets?: Array<{
     env_key?: string
     secret_name?: string
@@ -259,6 +320,7 @@ export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
       ? { allowOut: raw.network.allow_out, denyOut: raw.network.deny_out }
       : undefined,
     metadata: raw.metadata ?? {},
+    previewAccess: (raw.preview_access ?? "legacy_public") as PreviewAccess,
     secrets: raw.secrets?.map((s) => ({
       envKey: s.env_key ?? "",
       secretName: s.secret_name ?? "",

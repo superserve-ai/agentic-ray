@@ -4,6 +4,8 @@ import posthog from "posthog-js"
 import { PostHogProvider as PHProvider } from "posthog-js/react"
 import type React from "react"
 
+import { redactPreviewToken } from "@/lib/preview-token-redaction"
+
 if (typeof window !== "undefined") {
   const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
 
@@ -19,6 +21,9 @@ if (typeof window !== "undefined") {
         session_recording: {
           maskAllInputs: true,
           maskTextSelector: "[data-mask]",
+          recordHeaders: false,
+          recordBody: false,
+          maskCapturedNetworkRequestFn: redactPreviewToken,
         },
       })
       // First-touch attribution: if the user landed directly on the console

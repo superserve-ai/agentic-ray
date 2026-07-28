@@ -185,8 +185,8 @@ Same tools and behavior as the local server — the only difference is transport
 
 | Tool                         | What it does                                                                                                      |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `sandbox_create`             | Create a new sandbox; returns its `id`. Active and ready immediately. Accepts `secrets` and egress rules.         |
-| `sandbox_update`             | Change a sandbox's metadata or egress (`allow_out`/`deny_out`) rules after creation.                              |
+| `sandbox_create`             | Create a new sandbox; returns its `id`. Accepts `secrets`, egress rules, and `preview_access`.                    |
+| `sandbox_update`             | Change metadata, egress rules, lifecycle windows, or `preview_access`.                                            |
 | `sandbox_list`               | List your sandboxes (active and paused), filterable by metadata.                                                  |
 | `sandbox_info`               | Get one sandbox's status, resources, metadata, network rules, and secret bindings. Read-only.                     |
 | `sandbox_exec`               | Run a shell command; returns stdout, stderr, exit code. Auto-resumes a paused sandbox.                            |
@@ -197,15 +197,15 @@ Same tools and behavior as the local server — the only difference is transport
 | `sandbox_pause`              | Pause a sandbox; state is preserved.                                                                              |
 | `sandbox_resume`             | Resume a paused sandbox (usually unnecessary — exec auto-resumes).                                                |
 | `sandbox_kill`               | Permanently delete a sandbox.                                                                                     |
-| `sandbox_preview_url`        | Build the public URL for a listening port (unauthenticated — anything on that port is internet-exposed).          |
-| `sandbox_network_log`        | Audit a sandbox's outbound connections (host, verdict, bytes). Auto-resumes a paused sandbox.                     |
+| `sandbox_preview_url`        | Publish a port and return a clean public URL or an expiring private signed URL.                                   |
+| `sandbox_network_log`        | Audit a sandbox's outbound connections (host, verdict, bytes) without resuming it.                                |
 | `sandbox_template_list`      | List the templates (base images) your team can launch from.                                                       |
 | `sandbox_template_create`    | Build a custom template with a specific vCPU/memory/disk shape or preinstalled software (async — poll for ready). |
 | `secret_list`                | List bindable team secrets (metadata only — never values).                                                        |
 | `sandbox_attach_secret`      | Bind a stored secret to a running sandbox under an env var.                                                       |
 | `sandbox_detach_secret`      | Remove a secret binding from a sandbox.                                                                           |
 
-Most tools take a `sandbox_id`; the exceptions are `sandbox_create`, `sandbox_list`, `sandbox_template_list`, `sandbox_template_create`, and `secret_list`. Start with one of those to get an ID, then thread it into later calls. Read-only tools (`sandbox_list`, `sandbox_info`, `sandbox_files_read`, `sandbox_files_list`, `sandbox_files_download_dir`, `sandbox_preview_url`, `sandbox_template_list`, `secret_list`) are annotated so clients can skip confirmation prompts; `sandbox_kill` is annotated destructive.
+Most tools take a `sandbox_id`; the exceptions are `sandbox_create`, `sandbox_list`, `sandbox_template_list`, `sandbox_template_create`, and `secret_list`. Start with one of those to get an ID, then thread it into later calls. Read-only tools (`sandbox_list`, `sandbox_info`, `sandbox_files_read`, `sandbox_files_list`, `sandbox_files_download_dir`, `sandbox_network_log`, `sandbox_template_list`, `secret_list`) are annotated so clients can skip confirmation prompts; `sandbox_preview_url` is an idempotent write because it publishes the requested port, and `sandbox_kill` is annotated destructive.
 
 ## Example
 
@@ -251,7 +251,15 @@ The sandbox sees a proxy token; the platform swaps in the real credential only f
 
 **Templates.** A sandbox inherits its vCPU/memory/disk from its template and can't override them at `sandbox_create` time. To get a specific shape (say, a 4 vCPU sandbox) or preinstalled software, build a template with `sandbox_template_create`, then poll `sandbox_template_list` until its `status` is `ready` before passing it as `from_template`.
 
-**Ports.** Start a server in the sandbox (`sandbox_exec`, e.g. `python3 -m http.server 8000`), then call `sandbox_preview_url` to get its public URL. Any process bound to a port is reachable at `https://{port}-{id}.sandbox.superserve.ai` with **no authentication** — only expose ports you intend to be public.
+**Ports.** New MCP sandboxes use `public` as the default access for newly
+published ports; only explicitly published ports are reachable. Pass
+`preview_access: "private"` to `sandbox_create` (or `sandbox_update`) to change
+the default for future ports. Existing ports retain their own mode. Start the
+server with `sandbox_exec`, then call `sandbox_preview_url`; the tool
+idempotently publishes that one port and uses the returned port mode to return
+either a clean public URL or an expiring private signed URL. Private links
+default to one hour; set `expires_in_seconds` to a value from 1 through 604800
+seconds. See [Preview URLs](/sandbox/preview-urls).
 
 ## Not yet in the MCP surface
 

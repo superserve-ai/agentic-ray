@@ -162,7 +162,8 @@ export function dataPlaneTarget(
 
 /**
  * Lowest / highest TCP port a preview URL can target. Privileged ports
- * (< 1024) are refused by the edge proxy, so we reject them up front.
+ * (< 1024) and boxd's control-plane port are refused by the edge proxy, so
+ * we reject them up front.
  *
  * Mirrored by the console (apps/console/src/hooks/use-preview-ports.ts) and the
  * Python SDK; keep all three in sync. Tests pin the literals on each side so
@@ -170,19 +171,19 @@ export function dataPlaneTarget(
  */
 export const MIN_PREVIEW_PORT = 1024
 export const MAX_PREVIEW_PORT = 65535
+export const RESERVED_PREVIEW_PORT = 49983
 
 /**
- * Build the public preview URL for a port running inside a sandbox.
+ * Build the preview URL for a port running inside a sandbox.
  *
- * The edge proxy routes `https://{port}-{id}.{host}` straight to that port
- * on the VM, so this is pure string construction — no network call. The
- * sandbox must be running and a server must be listening on `port` for the
- * URL to resolve.
+ * This is pure string construction — no network call. Under strict policies,
+ * the port must be published first; private previews also require a token.
  *
  * Always uses the per-sandbox subdomain form (never the shared-host mode):
  * a browser opening the URL can't send the `X-Superserve-Sandbox-Id` header.
  *
- * @throws {ValidationError} if `port` is not an integer in [1024, 65535].
+ * @throws {ValidationError} if `port` is not an integer in [1024, 65535] or
+ * is the reserved boxd control-plane port (49983).
  */
 export function previewUrl(
   sandboxId: string,
@@ -192,8 +193,14 @@ export function previewUrl(
   if (
     !Number.isInteger(port) ||
     port < MIN_PREVIEW_PORT ||
-    port > MAX_PREVIEW_PORT
+    port > MAX_PREVIEW_PORT ||
+    port === RESERVED_PREVIEW_PORT
   ) {
+    if (port === RESERVED_PREVIEW_PORT) {
+      throw new ValidationError(
+        `Invalid preview port ${port}: reserved for sandbox control traffic.`,
+      )
+    }
     throw new ValidationError(
       `Invalid preview port ${port}: must be an integer between ${MIN_PREVIEW_PORT} and ${MAX_PREVIEW_PORT}. Privileged ports (< ${MIN_PREVIEW_PORT}) are not proxied.`,
     )

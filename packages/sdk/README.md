@@ -31,6 +31,31 @@ const text = await sandbox.files.readText("/app/data.txt")
 await sandbox.kill()
 ```
 
+## Preview URLs
+
+Choose the default access for new ports, publish only the ports you intend to
+expose, and request a signed link for private browser access:
+
+```typescript
+const sandbox = await Sandbox.create({
+  name: "private-preview",
+  previewAccess: "private",
+})
+await sandbox.publishPreviewPort(3000, { access: "private" })
+
+const browserUrl = await sandbox.getSignedPreviewUrl(3000, {
+  expiresInSeconds: 300,
+})
+const credential = await sandbox.getPreviewToken(3000)
+// Machine clients: credential.header: credential.token
+```
+
+Each published port keeps its own `public` or `private` mode; `previewAccess`
+is only the default for newly published ports. Omitting it defaults a new
+sandbox to strict `public`. `legacy_public` is returned only for pre-migration
+sandboxes.
+See the [preview URL guide](https://docs.superserve.ai/sandbox/preview-urls).
+
 ## Authentication
 
 Set the `SUPERSERVE_API_KEY` environment variable:
