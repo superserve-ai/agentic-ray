@@ -179,8 +179,18 @@ export function createFakeClient(): FakeClient {
       sb.status = "active"
       fake.lastExec = { command, opts }
       const result: CommandResult = command.startsWith("echo ")
-        ? { stdout: `${command.slice(5)}\n`, stderr: "", exitCode: 0 }
-        : { stdout: `ran: ${command}\n`, stderr: "", exitCode: 0 }
+        ? {
+            stdout: `${command.slice(5)}\n`,
+            stderr: "",
+            exitCode: 0,
+            truncated: false,
+          }
+        : {
+            stdout: `ran: ${command}\n`,
+            stderr: "",
+            exitCode: 0,
+            truncated: false,
+          }
       return result
     },
 

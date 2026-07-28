@@ -85,7 +85,7 @@ export function registerExecTool(
           stdout: out.text,
           stderr: err.text,
           exit_code: res.exitCode,
-          truncated: out.truncated || err.truncated,
+          truncated: out.truncated || err.truncated || res.truncated,
         }
         return toolOk(renderExec(out.text, err.text, res.exitCode), structured)
       } catch (e) {
