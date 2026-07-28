@@ -3,7 +3,7 @@
   "name": "io.github.superserve-ai/mcp",
   "title": "Superserve",
   "description": "MCP server for Superserve sandboxes: create, exec, and manage Firecracker microVMs",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "websiteUrl": "https://superserve.ai",
   "repository": {
     "url": "https://github.com/superserve-ai/superserve",
@@ -15,7 +15,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@superserve/mcp",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "runtimeHint": "npx",
       "transport": { "type": "stdio" },
       "environmentVariables": [
