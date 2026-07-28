@@ -360,6 +360,8 @@ jobs:
     # Fork PRs can't read repo secrets or write with the built-in token — skip them.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    # Bound a stuck package/API/sandbox call; the loop's own review command times out after 20m.
+    timeout-minutes: 30
     steps:
 ${tokenStep}      - uses: oven-sh/setup-bun@v2
       # Runs the PUBLISHED loop — no loop source is vendored into this repo, and no repo

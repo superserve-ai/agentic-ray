@@ -22,6 +22,7 @@ interface ParsedWorkflow {
   permissions: Record<string, string>
   jobs: {
     tick: {
+      "timeout-minutes": number
       steps: Array<{
         id?: string
         if?: string
@@ -126,6 +127,7 @@ describe("buildWorkflow — structural (parsed YAML)", () => {
         contents: "read",
         "pull-requests": "write",
       })
+      expect(doc.jobs.tick["timeout-minutes"]).toBe(30)
       expect(Array.isArray(doc.jobs.tick.steps)).toBe(true)
     }
   })
