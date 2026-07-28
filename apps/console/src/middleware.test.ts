@@ -108,6 +108,7 @@ describe("middleware", () => {
       "/auth/forgot-password",
       "/auth/callback",
       "/device",
+      "/.well-known/security.txt",
     ]) {
       const res = await middleware(buildRequest(path))
       // Not a redirect — we should get the raw client.response back.

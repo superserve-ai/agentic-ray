@@ -9,6 +9,7 @@ const PUBLIC_ROUTES = [
   "/auth/callback",
   "/auth/auth-code-error",
   "/device",
+  "/.well-known/security.txt",
 ]
 
 export async function middleware(request: NextRequest) {
@@ -45,6 +46,6 @@ export const config = {
     // authenticates its own request (and answers JSON, not a redirect to the
     // signin page), so the middleware getUser() was a second Supabase auth
     // round-trip on every API call — including the 10s sandbox list poll.
-    "/((?!api/|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf|css|js|map)$).*)",
+    "/((?!api/|_next/static|_next/image|favicon\\.ico|\\.well-known/security\\.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf|css|js|map)$).*)",
   ],
 }
