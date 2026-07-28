@@ -31,7 +31,7 @@ export const SERVER_INSTRUCTIONS =
  * Server version. Kept in sync with `package.json` `version`
  * (enforced by `tests/version.test.ts`).
  */
-export const SERVER_VERSION = "0.1.2"
+export const SERVER_VERSION = "0.1.3"
 
 /** Default per-command timeout when a tool call omits `timeout_ms`. */
 export const DEFAULT_EXEC_TIMEOUT_MS = 60_000
