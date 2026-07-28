@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest"
+import { SandboxError, ServerError, TimeoutError } from "@superserve/sdk"
+import { describe, expect, it, vi } from "vitest"
 
 import { runLoop } from "../lib/run-loop"
 import type {
@@ -71,6 +72,8 @@ class FakeOps implements SandboxOps {
   boxesById = new Map<string, FakeBox>()
   createCount = 0
   connectCount = 0
+  /** Errors thrown by successive connect attempts before returning the box. */
+  connectErrors: unknown[] = []
   /** Hook to configure each freshly created box (e.g. make its setup fail). */
   onCreate?: (box: FakeBox) => void
   private seq = 0
@@ -93,6 +96,7 @@ class FakeOps implements SandboxOps {
 
   connect = async (id: string): Promise<SandboxHandle> => {
     this.connectCount++
+    if (this.connectErrors.length > 0) throw this.connectErrors.shift()
     const box = this.boxesById.get(id)
     if (!box) throw new Error(`no box ${id}`)
     return box
@@ -149,6 +153,84 @@ describe("runLoop", () => {
     expect(box?.writes).toEqual([])
     expect(box?.runs).toEqual(["ITERATE"])
     expect(box?.paused).toBe(true)
+  })
+
+  it("retries transient server failures with bounded exponential backoff", async () => {
+    vi.useFakeTimers()
+    try {
+      const ops = new FakeOps()
+      ops.seed(spec.metadata)
+      ops.connectErrors.push(
+        new ServerError("temporary failure", "internal_error", 500),
+        new ServerError("gateway unavailable", "unavailable", 503),
+      )
+      const logs: string[] = []
+
+      const pending = runLoop(spec, ops, (line) => logs.push(line))
+      await vi.runAllTimersAsync()
+      const result = await pending
+
+      expect(result.bootstrapped).toBe(false)
+      expect(ops.connectCount).toBe(3)
+      expect(logs.join("")).toContain("retrying in 1000ms")
+      expect(logs.join("")).toContain("retrying in 2000ms")
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each([
+    new TimeoutError("request timed out"),
+    new SandboxError("Network error: connection reset", undefined, undefined, {
+      cause: new TypeError("fetch failed"),
+    }),
+  ])("retries transient network failure %#", async (failure) => {
+    vi.useFakeTimers()
+    try {
+      const ops = new FakeOps()
+      ops.seed(spec.metadata)
+      ops.connectErrors.push(failure)
+
+      const pending = runLoop(spec, ops, noop)
+      await vi.runAllTimersAsync()
+      await pending
+
+      expect(ops.connectCount).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("preserves the final transient error after the retry budget is exhausted", async () => {
+    vi.useFakeTimers()
+    try {
+      const ops = new FakeOps()
+      ops.seed(spec.metadata)
+      const failure = new ServerError(
+        "still unavailable",
+        "internal_error",
+        500,
+      )
+      ops.connectErrors.push(failure, failure, failure)
+
+      const rejection = expect(runLoop(spec, ops, noop)).rejects.toBe(failure)
+      await vi.runAllTimersAsync()
+      await rejection
+
+      expect(ops.connectCount).toBe(3)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("does not retry permanent connect failures", async () => {
+    const ops = new FakeOps()
+    ops.seed(spec.metadata)
+    const failure = new SandboxError("forbidden", 403, "forbidden")
+    ops.connectErrors.push(failure)
+
+    await expect(runLoop(spec, ops, noop)).rejects.toBe(failure)
+    expect(ops.connectCount).toBe(1)
   })
 
   it("re-injects envVars into the iterate command on a warm tick (rotating creds)", async () => {
@@ -446,7 +528,6 @@ describe("parsePrFlag", () => {
   })
 
   it("treats empty / missing as sweep-all (undefined)", () => {
-    // Manual `workflow_dispatch` passes `--pr ""`; local runs omit it entirely.
     expect(parsePrFlag("")).toBeUndefined()
     expect(parsePrFlag(undefined)).toBeUndefined()
   })

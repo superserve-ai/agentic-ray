@@ -26,10 +26,22 @@ jobs:
       # Runs the PUBLISHED loop — no loop source is vendored into this repo, and no repo
       # checkout is needed (the sandbox clones the target repo itself). `@stable` is a
       # Superserve-gated channel, so blessed updates roll out here without editing this file.
-      # --pr focuses the tick on the changed PR; empty on manual dispatch → sweep all.
-      - run: bunx @superserve/loops@stable run pr-loop --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
+      - name: Review changed pull request
+        if: github.event_name == 'pull_request'
+        run: bunx @superserve/loops@stable run pr-loop --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
         env:
           SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}
+          # Name of the remote Superserve secret; not the Claude credential itself.
+          SUPERSERVE_CLAUDE_SECRET: claude-oauth
+          # Reviews post as github-actions[bot] via the workflow's built-in token.
+          GITHUB_TOKEN: ${{ github.token }}
+      # Manual dispatch sweeps all open PRs by omitting --pr entirely.
+      - name: Review all open pull requests
+        if: github.event_name == 'workflow_dispatch'
+        run: bunx @superserve/loops@stable run pr-loop --repo "${{ github.repository }}" --once
+        env:
+          SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}
+          # Name of the remote Superserve secret; not the Claude credential itself.
           SUPERSERVE_CLAUDE_SECRET: claude-oauth
           # Reviews post as github-actions[bot] via the workflow's built-in token.
           GITHUB_TOKEN: ${{ github.token }}

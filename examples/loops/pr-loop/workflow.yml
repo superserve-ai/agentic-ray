@@ -47,11 +47,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: oven-sh/setup-bun@v2
-      # Runs the published loop; --pr focuses the tick on the changed PR (empty on manual
-      # dispatch → sweep all). `@stable` is the Superserve-gated update channel.
-      - run: bunx @superserve/loops@stable run pr-loop --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
+      # Runs the published loop; --pr focuses the tick on the changed PR.
+      # `@stable` is the Superserve-gated update channel.
+      - name: Review changed pull request
+        if: github.event_name == 'pull_request'
+        run: bunx @superserve/loops@stable run pr-loop --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
         env:
           SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}
+          # Name of the remote Superserve secret; not the Claude credential itself.
+          SUPERSERVE_CLAUDE_SECRET: claude-oauth
+          # Default: reviews post as github-actions[bot] via the workflow's built-in token.
+          GITHUB_TOKEN: ${{ github.token }}
+          # Cross-repo / branded identity instead? Store a GitHub PAT as the Superserve
+          # secret "loop-github-token", then DELETE the GITHUB_TOKEN line above and
+          # uncomment the next line:
+          # SUPERSERVE_GITHUB_SECRET: loop-github-token
+      # Manual dispatch sweeps all open PRs by omitting --pr entirely.
+      - name: Review all open pull requests
+        if: github.event_name == 'workflow_dispatch'
+        run: bunx @superserve/loops@stable run pr-loop --repo "${{ github.repository }}" --once
+        env:
+          SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}
+          # Name of the remote Superserve secret; not the Claude credential itself.
           SUPERSERVE_CLAUDE_SECRET: claude-oauth
           # Default: reviews post as github-actions[bot] via the workflow's built-in token.
           GITHUB_TOKEN: ${{ github.token }}

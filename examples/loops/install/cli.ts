@@ -331,6 +331,12 @@ export function buildWorkflow(
           SUPERSERVE_GITHUB_SECRET: ${opts.githubSecret}`
       : `          # Reviews post as github-actions[bot] via the workflow's built-in token.
           GITHUB_TOKEN: \${{ github.token }}`
+  const loopEnv = `        env:
+          SUPERSERVE_API_KEY: \${{ secrets.SUPERSERVE_API_KEY }}
+          # Name of the remote Superserve secret; not the Claude credential itself.
+          SUPERSERVE_CLAUDE_SECRET: ${CLAUDE_SECRET}
+${githubAuth}
+`
   return `# Installed by \`superserve-loops add pr-loop\`. Runs on every PR code change
 # (a commit pushed to a PR) — no idle cron. One warm-sandbox tick per event, then it sleeps.
 # Note: \`pull_request\` from a forked repo gets a read-only token, so reviews on fork PRs need
@@ -359,12 +365,14 @@ ${tokenStep}      - uses: oven-sh/setup-bun@v2
       # Runs the PUBLISHED loop — no loop source is vendored into this repo, and no repo
       # checkout is needed (the sandbox clones the target repo itself). \`@stable\` is a
       # Superserve-gated channel, so blessed updates roll out here without editing this file.
-      # --pr focuses the tick on the changed PR; empty on manual dispatch → sweep all.
-      - run: bunx ${PACKAGE_SPEC} run pr-loop --repo "\${{ github.repository }}" --pr "\${{ github.event.pull_request.number }}" --once
-        env:
-          SUPERSERVE_API_KEY: \${{ secrets.SUPERSERVE_API_KEY }}
-          SUPERSERVE_CLAUDE_SECRET: ${CLAUDE_SECRET}
-${githubAuth}
+      - name: Review changed pull request
+        if: github.event_name == 'pull_request'
+        run: bunx ${PACKAGE_SPEC} run pr-loop --repo "\${{ github.repository }}" --pr "\${{ github.event.pull_request.number }}" --once
+${loopEnv}      # Manual dispatch sweeps all open PRs by omitting --pr entirely.
+      - name: Review all open pull requests
+        if: github.event_name == 'workflow_dispatch'
+        run: bunx ${PACKAGE_SPEC} run pr-loop --repo "\${{ github.repository }}" --once
+${loopEnv}
 `
 }
 

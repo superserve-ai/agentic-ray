@@ -15,12 +15,17 @@ import {
 
 /** The parsed shape of the generated workflow — just what the tests assert on. */
 interface ParsedWorkflow {
-  on: { pull_request: { types: string[] } }
+  on: {
+    pull_request: { types: string[] }
+    workflow_dispatch: Record<string, never>
+  }
   permissions: Record<string, string>
   jobs: {
     tick: {
       steps: Array<{
         id?: string
+        if?: string
+        name?: string
         uses?: string
         run?: string
         with?: Record<string, string>
@@ -49,13 +54,18 @@ describe("buildWorkflow", () => {
     expect(wf).not.toContain("bun install")
     expect(wf).not.toContain("bun run pr-loop/loop.ts")
 
-    // Per-PR focus: pass the triggering PR number (empty on manual dispatch → sweep).
+    // Per-PR focus: pass the triggering PR number only on pull_request events.
     expect(wf).toContain('--pr "${{ github.event.pull_request.number }}"')
+    expect(wf).toContain("if: github.event_name == 'workflow_dispatch'")
+    expect(wf).toContain('run pr-loop --repo "${{ github.repository }}" --once')
     // Skip fork PRs (no secrets / read-only token); same-repo PRs + dispatch still run.
     expect(wf).toContain("head.repo.full_name == github.repository")
 
     // Identity: the workflow's own token, so reviews post as github-actions[bot].
     expect(wf).toContain("GITHUB_TOKEN: ${{ github.token }}")
+    expect(wf).toContain(
+      "Name of the remote Superserve secret; not the Claude credential itself.",
+    )
     // No PAT / Superserve GitHub secret on the default same-repo path.
     expect(wf).not.toContain("SUPERSERVE_GITHUB_SECRET")
 
@@ -120,22 +130,30 @@ describe("buildWorkflow — structural (parsed YAML)", () => {
     }
   })
 
-  it("default mode: two steps, built-in token wired into the run env", () => {
+  it("default mode: event-specific steps share the built-in-token environment", () => {
     const doc = parse(buildWorkflow()) as ParsedWorkflow
     const steps = doc.jobs.tick.steps
-    expect(steps).toHaveLength(2)
+    expect(steps).toHaveLength(3)
     expect(steps[0].uses).toBe("oven-sh/setup-bun@v2")
+    expect(steps[1].name).toBe("Review changed pull request")
+    expect(steps[1].if).toBe("github.event_name == 'pull_request'")
     expect(steps[1].run).toContain("run pr-loop")
+    expect(steps[1].run).toContain("--pr")
     expect(steps[1].env?.GITHUB_TOKEN).toBe("${{ github.token }}")
     expect(steps[1].env?.SUPERSERVE_API_KEY).toBe(
       "${{ secrets.SUPERSERVE_API_KEY }}",
     )
+    expect(steps[2].name).toBe("Review all open pull requests")
+    expect(steps[2].if).toBe("github.event_name == 'workflow_dispatch'")
+    expect(steps[2].run).toContain("run pr-loop")
+    expect(steps[2].run).not.toContain("--pr")
+    expect(steps[2].env).toEqual(steps[1].env)
   })
 
   it("App mode: the token-mint step is a separate FIRST step feeding the run env", () => {
     const doc = parse(buildWorkflow({ githubApp: true })) as ParsedWorkflow
     const steps = doc.jobs.tick.steps
-    expect(steps).toHaveLength(3)
+    expect(steps).toHaveLength(4)
     expect(steps[0].uses).toBe("actions/create-github-app-token@v1")
     expect(steps[0].id).toBe("app-token")
     expect(steps[0].with?.["app-id"]).toBe("${{ secrets.LOOP_APP_ID }}")
@@ -144,9 +162,12 @@ describe("buildWorkflow — structural (parsed YAML)", () => {
     )
     expect(steps[1].uses).toBe("oven-sh/setup-bun@v2")
     expect(steps[2].run).toContain("run pr-loop")
+    expect(steps[3].run).toContain("run pr-loop")
+    expect(steps[3].run).not.toContain("--pr")
     expect(steps[2].env?.GITHUB_TOKEN).toBe(
       "${{ steps.app-token.outputs.token }}",
     )
+    expect(steps[3].env).toEqual(steps[2].env)
   })
 })
 
