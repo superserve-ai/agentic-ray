@@ -25,7 +25,7 @@ DEFAULT_MAX_DOWNLOAD_BYTES = (
     2 * 1024 * 1024 * 1024
 )  # 2 GiB; matches boxd's server-side zip cap
 
-SDK_VERSION = "0.8.1"
+SDK_VERSION = "0.8.2"
 USER_AGENT = (
     f"superserve-python/{SDK_VERSION} "
     f"(python/{sys.version_info.major}.{sys.version_info.minor})"
