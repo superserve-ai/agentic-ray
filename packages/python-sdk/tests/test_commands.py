@@ -70,6 +70,32 @@ class TestCommandsRun:
             assert b"/tmp" in request_body
             assert b"FOO" in request_body
 
+    def test_surfaces_truncated_flag(self) -> None:
+        with respx.mock() as router:
+            router.post(f"{DATA_PLANE}/exec").mock(
+                return_value=httpx.Response(
+                    200,
+                    json={
+                        "stdout": "partial",
+                        "stderr": "",
+                        "exit_code": 0,
+                        "truncated": True,
+                    },
+                )
+            )
+            result = _make_commands().run("yes")
+            assert result.truncated is True
+            assert result.exit_code == 0
+
+    def test_truncated_defaults_false(self) -> None:
+        with respx.mock() as router:
+            router.post(f"{DATA_PLANE}/exec").mock(
+                return_value=httpx.Response(
+                    200, json={"stdout": "hi", "stderr": "", "exit_code": 0}
+                )
+            )
+            assert _make_commands().run("echo hi").truncated is False
+
     def test_nonzero_exit_code(self) -> None:
         with respx.mock() as router:
             router.post(f"{DATA_PLANE}/exec").mock(

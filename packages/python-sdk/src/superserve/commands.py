@@ -118,6 +118,7 @@ class Commands:
             stdout=raw.get("stdout", ""),
             stderr=raw.get("stderr", ""),
             exit_code=raw.get("exit_code", 0),
+            truncated=raw.get("truncated", False),
         )
 
     def _run_streaming(
@@ -306,6 +307,7 @@ class AsyncCommands:
             stdout=raw.get("stdout", ""),
             stderr=raw.get("stderr", ""),
             exit_code=raw.get("exit_code", 0),
+            truncated=raw.get("truncated", False),
         )
 
     async def _run_streaming(

@@ -126,7 +126,12 @@ describe("Commands.spawn", () => {
     const result = await session.wait()
     expect(out).toEqual(["hi\n"])
     expect(err).toEqual(["oops"])
-    expect(result).toEqual({ stdout: "hi\n", stderr: "oops", exitCode: 7 })
+    expect(result).toEqual({
+      stdout: "hi\n",
+      stderr: "oops",
+      exitCode: 7,
+      truncated: false,
+    })
   })
 
   it("frames stdin on channel 0 and sends control frames for close/kill", async () => {

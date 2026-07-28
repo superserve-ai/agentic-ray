@@ -258,7 +258,12 @@ class Session implements CommandSession {
     if (this._settled) return
     this._settled = true
     this._flush()
-    this._resolve({ stdout: this._stdout, stderr: this._stderr, exitCode })
+    this._resolve({
+      stdout: this._stdout,
+      stderr: this._stderr,
+      exitCode,
+      truncated: false,
+    })
   }
 
   private _fail(err: unknown): void {

@@ -149,6 +149,7 @@ export class Commands {
       stdout: raw.stdout ?? "",
       stderr: raw.stderr ?? "",
       exitCode: raw.exit_code ?? 0,
+      truncated: raw.truncated ?? false,
     }
   }
 
@@ -214,6 +215,6 @@ export class Commands {
       stderr += error
     }
 
-    return { stdout, stderr, exitCode }
+    return { stdout, stderr, exitCode, truncated: false }
   }
 }

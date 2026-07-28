@@ -54,6 +54,12 @@ class CommandResult(BaseModel):
     stdout: str = ""
     stderr: str = ""
     exit_code: int = 0
+    # True when the server dropped the tail of a non-streaming run's output
+    # because combined stdout/stderr exceeded its retention cap (a notice is
+    # also appended to stderr). Stream via on_stdout/on_stderr, or redirect to
+    # a file inside the sandbox, for unbounded output. Always False for
+    # streamed runs.
+    truncated: bool = False
 
 
 # Sentinel distinguishing "argument not provided" from an explicit None in

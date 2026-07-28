@@ -113,7 +113,12 @@ describe("Commands.run (sync) output cap", () => {
 
     const commands = new Commands(makeDeps())
     const result = await commands.run("echo hi", { maxOutputBytes: 1024 })
-    expect(result).toEqual({ stdout: "hi\n", stderr: "", exitCode: 0 })
+    expect(result).toEqual({
+      stdout: "hi\n",
+      stderr: "",
+      exitCode: 0,
+      truncated: false,
+    })
   })
 })
 
@@ -135,6 +140,7 @@ describe("Commands.run (sync)", () => {
       stdout: "hello\n",
       stderr: "warn\n",
       exitCode: 0,
+      truncated: false,
     })
     const [url, init] = mock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe(`${dataPlaneUrl}/exec`)
@@ -145,6 +151,24 @@ describe("Commands.run (sync)", () => {
     expect(
       (init.headers as Record<string, string>)["X-API-Key"],
     ).toBeUndefined()
+  })
+
+  it("surfaces the server's truncated flag", async () => {
+    const mock = vi.fn(async () =>
+      jsonResponse({
+        stdout: "partial",
+        stderr: "",
+        exit_code: 0,
+        truncated: true,
+      }),
+    )
+    vi.stubGlobal("fetch", mock)
+
+    const commands = new Commands(makeDeps())
+    const result = await commands.run("yes")
+
+    expect(result.truncated).toBe(true)
+    expect(result.exitCode).toBe(0)
   })
 
   it("converts timeoutMs to timeout_s (ceiled)", async () => {
