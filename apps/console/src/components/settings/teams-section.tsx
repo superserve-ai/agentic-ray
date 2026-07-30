@@ -22,9 +22,8 @@ import { regionLabel } from "@/lib/format"
  * user has more than one team or more than one cell is configured — a
  * multi-team user needs the Active marker regardless of region count
  * (switching itself lives in the sidebar team dropdown). The create-team
- * form stays multi-cell-only: the single-cell console has no team creation
- * surface, and that must stay true until a second region exists to choose
- * from.
+ * form stays multi-cell-only: with a single configured cell there's no
+ * region to choose, so the form has nothing to show.
  */
 export function TeamsSection() {
   const { data } = useTeams()

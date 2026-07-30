@@ -10,12 +10,7 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => mockCreateAdminClient(),
 }))
 
-import {
-  cellFor,
-  configuredRegions,
-  creatableRegions,
-  DEFAULT_REGION,
-} from "./cells"
+import { cellFor, configuredRegions, DEFAULT_REGION } from "./cells"
 
 const ORIGINAL_ENV = {
   SANDBOX_API_URL: process.env.SANDBOX_API_URL,
@@ -126,34 +121,5 @@ describe("admin client reuse", () => {
     process.env.SUPABASE_USWEST_SERVICE_ROLE_KEY = "svc-key-b"
     cellFor("usw").createAdminClient()
     expect(mockCreateClient).toHaveBeenCalledTimes(2)
-  })
-})
-
-describe("multi-cell UI allowlist", () => {
-  beforeEach(() => {
-    process.env.SUPABASE_USWEST_URL = "https://usw.supabase.test"
-    process.env.SUPABASE_USWEST_SERVICE_ROLE_KEY = "svc-key"
-    delete process.env.MULTI_CELL_UI_ALLOWLIST
-  })
-
-  it("offers only the default region without an allowlist, even with usw live", () => {
-    expect(creatableRegions("dev@superserve.ai")).toEqual(["use"])
-  })
-
-  it("matches @domain entries case-insensitively", () => {
-    process.env.MULTI_CELL_UI_ALLOWLIST = "@superserve.ai"
-    expect(creatableRegions("Dev@Superserve.AI")).toEqual(["use", "usw"])
-    expect(creatableRegions("someone@customer.com")).toEqual(["use"])
-  })
-
-  it("matches exact-email entries and ignores list whitespace", () => {
-    process.env.MULTI_CELL_UI_ALLOWLIST = " pilot@acme.com , @superserve.ai "
-    expect(creatableRegions("pilot@acme.com")).toEqual(["use", "usw"])
-    expect(creatableRegions("other@acme.com")).toEqual(["use"])
-  })
-
-  it("denies undefined emails", () => {
-    process.env.MULTI_CELL_UI_ALLOWLIST = "@superserve.ai"
-    expect(creatableRegions(undefined)).toEqual(["use"])
   })
 })

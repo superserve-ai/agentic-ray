@@ -15,12 +15,7 @@ import {
   membershipExistsInCell,
 } from "@/lib/api/team-directory"
 import { provisionTeam } from "@/lib/api/team-provisioning"
-import {
-  configuredRegions,
-  creatableRegions,
-  DEFAULT_REGION,
-  multiCellUiEnabled,
-} from "@/lib/cells"
+import { configuredRegions, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 export interface TeamSummary {
@@ -31,18 +26,13 @@ export interface TeamSummary {
 
 export interface TeamDirectoryResponse {
   teams: TeamSummary[]
-  // Regions THIS USER may create teams in. Length 1 unless a second cell is
-  // configured AND the user is on the multi-cell UI allowlist — which is
-  // what gates the region select in the UI.
+  // Regions available for team creation, i.e. every configured cell.
   regions: string[]
   // The team every dashboard surface operates on. Identified by id AND
   // region: during a cross-cell migration the same team id can appear in
   // two cells at once, and only one of them is active.
   activeTeamId: string | null
   activeRegion: string | null
-  // Whether this user may switch teams. Rolls out with the multi-cell UI
-  // allowlist, person by person, like region choice.
-  switchingEnabled: boolean
 }
 
 export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
@@ -64,10 +54,9 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
   )
   return {
     teams,
-    regions: creatableRegions(user.email),
+    regions: configuredRegions(),
     activeTeamId: active?.teamId ?? null,
     activeRegion: active?.region ?? null,
-    switchingEnabled: multiCellUiEnabled(user.email),
   }
 }
 
@@ -96,12 +85,6 @@ export async function setActiveTeamAction(
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
-
-  // Server-side enforcement, not just UI hiding: switching rolls out with
-  // the multi-cell allowlist (internal-first), like region choice.
-  if (!multiCellUiEnabled(user.email)) {
-    throw new Error("Team switching is not enabled for your account")
-  }
 
   // The target names its cell, so validate the membership there alone — the
   // every-cell fan-out buys nothing here and doubles the action's latency.
@@ -133,10 +116,8 @@ export async function createTeamAction(
   const trimmed = name.trim()
   if (!trimmed) throw new Error("Team name is required")
 
-  // Server-side enforcement, not just UI hiding: non-default regions
-  // require the multi-cell allowlist (internal-first rollout).
   const targetRegion = region ?? DEFAULT_REGION
-  if (!creatableRegions(user.email).includes(targetRegion)) {
+  if (!configuredRegions().includes(targetRegion)) {
     throw new Error(`Region ${targetRegion} is not available`)
   }
 

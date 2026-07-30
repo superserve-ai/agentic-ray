@@ -12,8 +12,6 @@ vi.mock("@/lib/supabase/server", () => ({
 
 // Per-test knobs read lazily by the cells mock.
 let regions: string[] = ["use", "usw"]
-let allowedRegions: string[] | null = null
-let switchingAllowed = true
 let cellClients: Record<string, ReturnType<typeof recordingCellClient>> = {}
 
 // Records every write per table so tests can assert the full create chain
@@ -81,8 +79,6 @@ function recordingCellClient() {
 vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
   configuredRegions: () => regions,
-  creatableRegions: () => allowedRegions ?? regions,
-  multiCellUiEnabled: () => switchingAllowed,
   cellFor: (region: string) => {
     if (!regions.includes(region)) {
       throw new Error(`Region ${region} is not configured`)
@@ -129,7 +125,6 @@ import {
 describe("createTeamAction", () => {
   beforeEach(() => {
     regions = ["use", "usw"]
-    allowedRegions = null
     directoryTeams = []
     cookieValue = undefined
     cookieSets.length = 0
@@ -197,30 +192,9 @@ describe("createTeamAction", () => {
   })
 })
 
-describe("multi-cell allowlist enforcement", () => {
-  beforeEach(() => {
-    regions = ["use", "usw"]
-  })
-
-  it("rejects creating in a configured region the user is not allowed into", async () => {
-    allowedRegions = ["use"]
-    await expect(createTeamAction("Pilot", "usw")).rejects.toThrow(
-      "Region usw is not available",
-    )
-  })
-
-  it("returns only the user's creatable regions from the directory action", async () => {
-    allowedRegions = ["use"]
-    const { regions: visible } = await listTeamsAction()
-    expect(visible).toEqual(["use"])
-  })
-})
-
 describe("active team", () => {
   beforeEach(() => {
     regions = ["use", "usw"]
-    allowedRegions = null
-    switchingAllowed = true
     cookieValue = undefined
     cookieSets.length = 0
     directoryTeams = [
@@ -254,19 +228,5 @@ describe("active team", () => {
       "not a member",
     )
     expect(cookieSets).toEqual([])
-  })
-
-  it("setActiveTeamAction requires the multi-cell UI allowlist", async () => {
-    switchingAllowed = false
-    await expect(setActiveTeamAction("team-w", "usw")).rejects.toThrow(
-      "not enabled",
-    )
-    expect(cookieSets).toEqual([])
-  })
-
-  it("directory reports switching availability", async () => {
-    switchingAllowed = false
-    const { switchingEnabled } = await listTeamsAction()
-    expect(switchingEnabled).toBe(false)
   })
 })

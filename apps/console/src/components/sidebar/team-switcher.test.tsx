@@ -18,7 +18,6 @@ vi.mock("@superserve/ui", async (importOriginal) => {
 import { TeamSwitcher } from "./team-switcher"
 
 const twoRegions = {
-  switchingEnabled: true,
   activeTeamId: "team-a",
   activeRegion: "use",
   teams: [
@@ -91,7 +90,6 @@ describe("TeamSwitcher", () => {
 describe("TeamSwitcher ordering", () => {
   it("lists the active team first, the rest alphabetical", async () => {
     teamsData = {
-      switchingEnabled: true,
       activeTeamId: "team-m",
       activeRegion: "use",
       teams: [

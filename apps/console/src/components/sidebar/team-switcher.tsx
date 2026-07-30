@@ -21,15 +21,14 @@ function optionValue(team: { id: string; region: string }): string {
 /**
  * Sidebar control for the active team — the team every dashboard surface
  * (sandboxes, keys, snapshots, billing) operates on. Hidden for single-team
- * users (nothing to switch between) and off the multi-cell UI allowlist
- * (switching rolls out person-by-person; the server enforces this too).
+ * users (nothing to switch between).
  */
 export function TeamSwitcher() {
   const { data } = useTeams()
   const switchTeam = useSwitchTeam()
   const { addToast } = useToast()
 
-  if (!data || !data.switchingEnabled || data.teams.length < 2) return null
+  if (!data || data.teams.length < 2) return null
 
   const active = data.teams.find(
     (t) => t.id === data.activeTeamId && t.region === data.activeRegion,
