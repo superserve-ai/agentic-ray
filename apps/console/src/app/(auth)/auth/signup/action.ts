@@ -1,6 +1,6 @@
 "use server"
 
-import { z } from "zod"
+import * as zod from "zod"
 
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
@@ -8,6 +8,8 @@ import { sendEmail } from "@/lib/email/send"
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
 import { WelcomeEmail } from "@/lib/email/templates/welcome"
 import { createAdminClient } from "@/lib/supabase/admin"
+
+const z: any = (zod as any).z ?? (zod as any).default ?? zod
 
 const signUpSchema = z.object({
   email: z.string().email("Invalid email address."),

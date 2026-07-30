@@ -45,7 +45,7 @@
     "mintlify": "^4.0.0",
     "oxfmt": "0.49.0",
     "oxlint": "1.64.0",
-    "turbo": "^2.9.4"
+    "turbo": "^2.10.7"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [

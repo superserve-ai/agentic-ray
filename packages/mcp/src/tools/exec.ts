@@ -1,6 +1,6 @@
 /** `sandbox_exec` — run a shell command in a sandbox. */
 
-import { z } from "zod"
+import * as zod from "zod"
 
 import type { SandboxClient } from "../client.js"
 import {
@@ -13,6 +13,8 @@ import { formatSdkError } from "../lib/errors.js"
 import { toolError, toolOk, truncateText } from "../lib/result.js"
 import type { McpServer } from "../lib/sdk.js"
 import { defineTool } from "../lib/tool.js"
+
+const z: any = (zod as any).z ?? (zod as any).default ?? zod
 
 interface ExecArgs {
   sandbox_id: string

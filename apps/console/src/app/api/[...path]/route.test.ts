@@ -86,7 +86,7 @@ describe("api proxy /api/[...path]", () => {
     expect(res.status).toBe(404)
   })
 
-  it("forwards the secrets, providers, activity, and billing summary prefixes", async () => {
+  it("forwards the secrets, providers, activity, billing summary, and platform billing prefixes", async () => {
     fetchSpy.mockImplementation(() =>
       Promise.resolve(
         new Response("[]", {
@@ -111,9 +111,20 @@ describe("api proxy /api/[...path]", () => {
     )
     expect(billingRes.status).toBe(200)
     expect(billingRes.headers.get("cache-control")).toBe("private, no-store")
-    expect(fetchSpy).toHaveBeenCalledTimes(5)
+    const platformBillingRes = await GET(
+      req("GET", ["platform", "billing"]),
+      params(["platform", "billing"]),
+    )
+    expect(platformBillingRes.status).toBe(200)
+    expect(platformBillingRes.headers.get("cache-control")).toBe(
+      "private, no-store",
+    )
+    expect(fetchSpy).toHaveBeenCalledTimes(6)
     expect(fetchSpy.mock.calls[4][0]).toBe(
       "https://api.test.superserve.ai/billing/summary",
+    )
+    expect(fetchSpy.mock.calls[5][0]).toBe(
+      "https://api.test.superserve.ai/platform/billing",
     )
   })
 

@@ -1,7 +1,7 @@
 /** `sandbox_files_read`, `sandbox_files_write`, `sandbox_files_list`. */
 
 import { ValidationError } from "@superserve/sdk"
-import { z } from "zod"
+import * as zod from "zod"
 
 import type { SandboxClient } from "../client.js"
 import {
@@ -16,6 +16,10 @@ import { defineTool } from "../lib/tool.js"
 
 const mib = (bytes: number): string =>
   `${Math.round(bytes / (1024 * 1024))} MiB`
+
+// Bun/Vitest and the published bundle have differed on how `zod` is exposed.
+// Normalize once so the rest of the file can use the schema builder directly.
+const z: any = (zod as any).z ?? (zod as any).default ?? zod
 
 /** Guidance returned when a read exceeds {@link MAX_FILE_BYTES}. */
 function fileTooLargeMessage(path: string): string {
