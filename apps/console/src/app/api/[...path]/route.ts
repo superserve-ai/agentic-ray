@@ -197,8 +197,20 @@ async function proxyRequest(
         { status: 500 },
       )
     }
+    const actorUserId = user?.id
+    if (!actorUserId) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "unauthorized",
+            message: "Not authenticated",
+          },
+        },
+        { status: 401 },
+      )
+    }
     headers.set("Authorization", `Bearer ${internalToken}`)
-    headers.set("X-Actor-User-Id", user.id)
+    headers.set("X-Actor-User-Id", actorUserId)
   }
 
   // Internal billing always targets the platform API, not the user's cell.

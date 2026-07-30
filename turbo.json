@@ -19,7 +19,9 @@
         "NEXT_PUBLIC_POSTHOG_KEY",
         "NEXT_PUBLIC_ENABLE_DEV_AUTH",
         "SUPABASE_SERVICE_ROLE_KEY",
-        "SANDBOX_API_URL"
+        "SANDBOX_API_URL",
+        "CONSOLE_PROXY_SECRET",
+        "MULTI_CELL_UI_ALLOWLIST"
       ],
       "outputs": ["dist/**", ".next/**"]
     },
