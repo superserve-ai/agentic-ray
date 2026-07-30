@@ -20,10 +20,13 @@ const summary: PlatformBillingSummary = {
     credits_applied_usd: 35,
     expected_invoice_amount_usd: 105,
     credits_remaining_usd: 95,
+    teams: 2,
+    succeeded: 1,
+    failed: 1,
   },
   pagination: {
-    page: 1,
-    page_size: 1,
+    limit: 1,
+    offset: 0,
     total: 2,
   },
   rows: [
@@ -31,34 +34,34 @@ const summary: PlatformBillingSummary = {
       team_id: "team-pilot",
       team_name: "pilot-team",
       summary: {
-        region: "use",
         current_charges_usd: 100,
         credits_applied_usd: 25,
         credits_remaining_usd: 75,
         expected_invoice_amount_usd: 75,
-        compute_usd: 60,
-        memory_usd: 30,
-        storage_usd: 10,
-        billing_period_start: "2026-07-01T00:00:00Z",
-        billing_period_end: "2026-08-01T00:00:00Z",
-        billing_mode: "active",
+        cost_breakdown_usd: {
+          compute: 60,
+          memory: 30,
+          storage: 10,
+        },
+        billing_period: {
+          start: "2026-07-01T00:00:00Z",
+          end: "2026-08-01T00:00:00Z",
+        },
+        pricing_tier: {
+          plan_key: "payg",
+          plan_name: "Pay as you go",
+          currency: "USD",
+        },
+        calculated_at: "2026-07-30T21:30:00Z",
       },
     },
     {
       team_id: "team-example",
       team_name: "example-team",
-      summary: {
-        region: "use",
-        current_charges_usd: 40,
-        credits_applied_usd: 10,
-        credits_remaining_usd: 20,
-        expected_invoice_amount_usd: 30,
-        compute_usd: 20,
-        memory_usd: 15,
-        storage_usd: 5,
-        billing_period_start: "2026-07-01T00:00:00Z",
-        billing_period_end: "2026-08-01T00:00:00Z",
-        billing_mode: "active",
+      summary: null,
+      error: {
+        code: "billing_cell_unreachable",
+        message: "Cell use is temporarily unreachable",
       },
     },
   ],
@@ -89,8 +92,16 @@ describe("PlatformBillingPage", () => {
     expect(screen.getByText("Platform Billing")).toBeInTheDocument()
     expect(screen.getByText("$140.00")).toBeInTheDocument()
     expect(screen.getByText("$105.00")).toBeInTheDocument()
+    expect(screen.getByText(/1 succeeded/)).toBeInTheDocument()
     expect(screen.getByText("pilot-team")).toBeInTheDocument()
     expect(screen.getByText("example-team")).toBeInTheDocument()
+    expect(screen.getAllByText(/Pay as you go/)).toHaveLength(2)
+    expect(screen.getAllByText(/calculated/)).toHaveLength(2)
+    expect(
+      screen.getByText(
+        "Billing unavailable: billing_cell_unreachable: Cell use is temporarily unreachable",
+      ),
+    ).toBeInTheDocument()
   })
 
   it("updates the URL when sorting, searching, and paginating", async () => {
@@ -132,10 +143,7 @@ describe("PlatformBillingPage", () => {
           rows: [
             {
               ...summary.rows[0],
-              summary: {
-                ...summary.rows[0].summary,
-                billing_mode: "unavailable",
-              },
+              summary: null,
               error: {
                 code: "billing_cell_unreachable",
                 message: "Cell use is temporarily unreachable",

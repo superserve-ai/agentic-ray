@@ -20,6 +20,7 @@ import { TableToolbar } from "@/components/table-toolbar"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import type {
   PlatformBillingRow,
+  PlatformBillingRowSummary,
   PlatformBillingSortColumn,
   PlatformBillingSummary,
 } from "@/lib/api/platform-billing"
@@ -45,6 +46,17 @@ function formatPeriod(start: string | null, end: string | null): string {
   return `${formatter.format(new Date(start))} - ${formatter.format(new Date(end))}`
 }
 
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(value))
+}
+
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="border border-border/80 bg-background/75 p-4">
@@ -58,21 +70,49 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
   )
 }
 
-function UsageCell({ row }: { row: PlatformBillingRow }) {
-  if (row.summary.billing_mode === "unavailable") {
+function UsageCell({ summary }: { summary: PlatformBillingRowSummary | null }) {
+  if (!summary) {
     return <span className="text-sm text-muted">Unavailable</span>
   }
 
   return (
     <div>
       <div className="font-mono font-medium tabular-nums">
-        {formatCurrency(row.summary.current_charges_usd)}
+        {formatCurrency(summary.current_charges_usd)}
       </div>
       <div className="mt-1 text-xs text-muted">
-        Compute {formatCurrency(row.summary.compute_usd)} · Memory{" "}
-        {formatCurrency(row.summary.memory_usd)} · Storage{" "}
-        {formatCurrency(row.summary.storage_usd)}
+        Compute {formatCurrency(summary.cost_breakdown_usd.compute)} · Memory{" "}
+        {formatCurrency(summary.cost_breakdown_usd.memory)} · Storage{" "}
+        {formatCurrency(summary.cost_breakdown_usd.storage)}
       </div>
+      <div className="mt-1 text-xs text-muted">
+        {summary.pricing_tier.plan_name} · {summary.pricing_tier.currency} ·{" "}
+        calculated {formatDateTime(summary.calculated_at)}
+      </div>
+    </div>
+  )
+}
+
+function BillingMeta({
+  summary,
+  error,
+}: {
+  summary: PlatformBillingRowSummary | null
+  error: string | null
+}) {
+  if (!summary) {
+    return (
+      <div className="mt-1 text-xs text-destructive" title={error ?? undefined}>
+        Billing unavailable{error ? `: ${error}` : ""}
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-1 text-xs text-muted">
+      {formatPeriod(summary.billing_period.start, summary.billing_period.end)} ·{" "}
+      {summary.pricing_tier.plan_name} · {summary.pricing_tier.currency} ·{" "}
+      calculated {formatDateTime(summary.calculated_at)}
     </div>
   )
 }
@@ -119,12 +159,12 @@ export function PlatformBillingPage({
   const searchParams = useSearchParams()
   const [query, setQuery] = useState(search)
   const debouncedQuery = useDebouncedValue(query, 300)
-  const effectivePageSize = summary.pagination.page_size || pageSize
+  const effectivePageSize = summary.pagination.limit || pageSize
   const pageCount = Math.max(
     1,
     Math.ceil(summary.pagination.total / effectivePageSize),
   )
-  const currentPeriod = summary.rows[0]?.summary ?? null
+  const currentPeriod = summary.rows.find((row) => row.summary)?.summary ?? null
 
   useEffect(() => {
     setQuery(search)
@@ -181,12 +221,16 @@ export function PlatformBillingPage({
         <div>
           <h2 className="text-sm font-medium text-foreground">
             {formatPeriod(
-              currentPeriod?.billing_period_start ?? null,
-              currentPeriod?.billing_period_end ?? null,
+              currentPeriod?.billing_period.start ?? null,
+              currentPeriod?.billing_period.end ?? null,
             )}
           </h2>
           <p className="mt-1 text-xs text-muted">
             Totals across all customers with available billing data.
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            {summary.totals.teams} teams · {summary.totals.succeeded} succeeded
+            · {summary.totals.failed} failed
           </p>
         </div>
 
@@ -289,41 +333,30 @@ export function PlatformBillingPage({
                 <StickyHoverTableBody>
                   {summary.rows.map((row) => {
                     const error = formatRowError(row.error)
-                    const { summary: rowSummary } = row
+                    const rowSummary = row.summary
                     return (
-                      <TableRow key={`${rowSummary.region}:${row.team_id}`}>
+                      <TableRow key={row.team_id}>
                         <TableCell>
                           <div className="font-medium">{row.team_name}</div>
-                          <div className="mt-1 text-xs text-muted">
-                            {rowSummary.region}
-                          </div>
-                          {rowSummary.billing_mode === "unavailable" && (
-                            <div
-                              className="mt-1 text-xs text-destructive"
-                              title={error ?? undefined}
-                            >
-                              Billing unavailable
-                              {error ? `: ${error}` : ""}
-                            </div>
-                          )}
+                          <BillingMeta summary={rowSummary} error={error} />
                         </TableCell>
                         <TableCell>
-                          <UsageCell row={row} />
+                          <UsageCell summary={rowSummary} />
                         </TableCell>
                         <TableCell className="text-right font-mono tabular-nums">
-                          {rowSummary.billing_mode === "active"
+                          {rowSummary
                             ? formatCurrency(rowSummary.credits_applied_usd)
                             : "—"}
                         </TableCell>
                         <TableCell className="text-right font-mono font-semibold tabular-nums">
-                          {rowSummary.billing_mode === "active"
+                          {rowSummary
                             ? formatCurrency(
                                 rowSummary.expected_invoice_amount_usd,
                               )
                             : "—"}
                         </TableCell>
                         <TableCell className="text-right font-mono tabular-nums">
-                          {rowSummary.billing_mode === "active"
+                          {rowSummary
                             ? formatCurrency(rowSummary.credits_remaining_usd)
                             : "—"}
                         </TableCell>

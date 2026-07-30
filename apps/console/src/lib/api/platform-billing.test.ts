@@ -25,10 +25,13 @@ describe("platform billing api", () => {
         credits_applied_usd: 35,
         credits_remaining_usd: 95,
         expected_invoice_amount_usd: 105,
+        teams: 2,
+        succeeded: 1,
+        failed: 1,
       },
       pagination: {
-        page: 2,
-        page_size: 25,
+        limit: 25,
+        offset: 25,
         total: 2,
       },
       rows: [
@@ -36,23 +39,43 @@ describe("platform billing api", () => {
           team_id: "team-pilot",
           team_name: "pilot-team",
           summary: {
-            region: "use",
             current_charges_usd: 100,
             credits_applied_usd: 25,
             credits_remaining_usd: 75,
             expected_invoice_amount_usd: 75,
-            compute_usd: 60,
-            memory_usd: 30,
-            storage_usd: 10,
-            billing_period_start: "2026-07-01T00:00:00Z",
-            billing_period_end: "2026-08-01T00:00:00Z",
-            billing_mode: "active",
+            cost_breakdown_usd: {
+              compute: 60,
+              memory: 30,
+              storage: 10,
+            },
+            billing_period: {
+              start: "2026-07-01T00:00:00Z",
+              end: "2026-08-01T00:00:00Z",
+            },
+            pricing_tier: {
+              plan_key: "payg",
+              plan_name: "Pay as you go",
+              currency: "USD",
+            },
+            calculated_at: "2026-07-30T21:30:00Z",
+          },
+        },
+        {
+          team_id: "team-example",
+          team_name: "example-team",
+          summary: null,
+          error: {
+            code: "billing_cell_unreachable",
+            message: "Cell use is temporarily unreachable",
           },
         },
       ],
     } satisfies PlatformBillingSummary
 
-    expect(response.rows[0]?.summary.billing_mode).toBe("active")
+    expect(response.rows[0]?.summary?.pricing_tier.plan_name).toBe(
+      "Pay as you go",
+    )
+    expect(response.rows[1]?.summary).toBeNull()
     expect(response.pagination.total).toBe(2)
   })
 })

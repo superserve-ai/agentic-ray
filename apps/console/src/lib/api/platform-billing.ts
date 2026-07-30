@@ -4,6 +4,8 @@ export const PLATFORM_BILLING_SORT_COLUMNS = [
   "team_name",
   "current_charges_usd",
   "expected_invoice_amount_usd",
+  // `credits_applied_usd` is intentionally omitted until the platform billing
+  // API exposes a server-side sort key for it.
   "credits_remaining_usd",
 ] as const
 
@@ -26,22 +28,32 @@ export type PlatformBillingRowError =
       details?: string[]
     }
 
+export interface PlatformBillingRowSummary {
+  current_charges_usd: number
+  credits_applied_usd: number
+  credits_remaining_usd: number
+  expected_invoice_amount_usd: number
+  cost_breakdown_usd: {
+    compute: number
+    memory: number
+    storage: number
+  }
+  billing_period: {
+    start: string
+    end: string
+  }
+  pricing_tier: {
+    plan_key: string
+    plan_name: string
+    currency: string
+  }
+  calculated_at: string
+}
+
 export interface PlatformBillingRow {
   team_id: string
   team_name: string
-  summary: {
-    region: string
-    current_charges_usd: number
-    credits_applied_usd: number
-    credits_remaining_usd: number
-    expected_invoice_amount_usd: number
-    compute_usd: number
-    memory_usd: number
-    storage_usd: number
-    billing_period_start: string
-    billing_period_end: string
-    billing_mode: "active" | "unavailable"
-  }
+  summary: PlatformBillingRowSummary | null
   error?: PlatformBillingRowError
 }
 
@@ -50,11 +62,14 @@ export interface PlatformBillingTotals {
   credits_applied_usd: number
   credits_remaining_usd: number
   expected_invoice_amount_usd: number
+  teams: number
+  succeeded: number
+  failed: number
 }
 
 export interface PlatformBillingPagination {
-  page: number
-  page_size: number
+  limit: number
+  offset: number
   total: number
 }
 
