@@ -2,6 +2,8 @@ import type { User } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 
 import { getImpersonationContext } from "@/lib/admin/impersonation"
+import { canReadPlatformBilling } from "@/lib/admin/permissions"
+import { isStaff } from "@/lib/admin/staff"
 import {
   getApiBaseUrlForUser,
   getAuthApiKeyForUser,
@@ -55,6 +57,27 @@ function shouldSkipKeyInjection(path: string): boolean {
   return SKIP_KEY_INJECTION.some((prefix) => path.startsWith(prefix))
 }
 
+function isInternalBillingPath(path: string): boolean {
+  return path === "internal/billing" || path.startsWith("internal/billing/")
+}
+
+async function requirePlatformBillingUser(): Promise<User | null> {
+  const supabase = await createServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return null
+  }
+
+  if (!isStaff(user) || !canReadPlatformBilling(user)) {
+    throw new Error("Forbidden: platform billing read access required")
+  }
+
+  return user
+}
+
 function setImpersonationDebugHeaders(
   headers: Headers,
   debugEnabled: boolean,
@@ -78,6 +101,7 @@ async function proxyRequest(
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
+  const internalBilling = isInternalBillingPath(joinedPath)
   const skipKeyInjection = shouldSkipKeyInjection(joinedPath)
   const debugImpersonation =
     request.nextUrl.searchParams.get("__debug_impersonation") === "1"
@@ -85,7 +109,38 @@ async function proxyRequest(
   let impersonationContext: { teamId: string; region: string } | null = null
   let impersonating = false
 
-  if (!skipKeyInjection) {
+  if (internalBilling) {
+    try {
+      user = await requirePlatformBillingUser()
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === "Forbidden: platform billing read access required"
+      ) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "forbidden",
+              message: error.message,
+            },
+          },
+          { status: 403 },
+        )
+      }
+      throw error
+    }
+    if (!user) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "unauthorized",
+            message: "Not authenticated",
+          },
+        },
+        { status: 401 },
+      )
+    }
+  } else if (!skipKeyInjection) {
     const supabase = await createServerClient()
     const {
       data: { user: authUser },
@@ -118,7 +173,10 @@ async function proxyRequest(
   const headers = new Headers()
   for (const [key, value] of request.headers.entries()) {
     const lowerKey = key.toLowerCase()
-    if (!skipKeyInjection && lowerKey === "authorization") {
+    if (
+      (internalBilling || !skipKeyInjection) &&
+      (lowerKey === "authorization" || lowerKey === "x-api-key")
+    ) {
       continue
     }
     if (FORWARD_REQUEST_HEADERS.has(lowerKey)) {
@@ -126,13 +184,36 @@ async function proxyRequest(
     }
   }
 
-  // Paths that carry their own auth (no key injection) go to the default
-  // cell; authenticated requests go to the user's team's home cell.
-  let apiBaseUrl = cellFor(DEFAULT_REGION).apiBaseUrl
+  if (internalBilling) {
+    const internalToken = process.env.INTERNAL_API_TOKEN?.trim()
+    if (!internalToken) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "missing_internal_api_token",
+            message: "Missing INTERNAL_API_TOKEN",
+          },
+        },
+        { status: 500 },
+      )
+    }
+    headers.set("Authorization", `Bearer ${internalToken}`)
+    headers.set("X-Actor-User-Id", user.id)
+  }
 
-  // Inject server-side API key for authenticated requests
-  let authMode = skipKeyInjection ? "skipped" : "none"
-  if (!skipKeyInjection) {
+  // Internal billing always targets the platform API, not the user's cell.
+  // Other authenticated requests go to the user's team's home cell.
+  let apiBaseUrl = internalBilling
+    ? SANDBOX_API_URL
+    : cellFor(DEFAULT_REGION).apiBaseUrl
+
+  // Inject server-side API key for tenant requests only.
+  let authMode = internalBilling
+    ? "internal"
+    : skipKeyInjection
+      ? "skipped"
+      : "none"
+  if (!internalBilling && !skipKeyInjection) {
     const apiKey = await getAuthApiKeyForUser(user, impersonationContext)
 
     if (!apiKey || !user) {

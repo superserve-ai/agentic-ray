@@ -22,6 +22,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key"
 process.env.NEXT_PUBLIC_WEBSITE_URL = "https://www.superserve.ai"
 process.env.NEXT_PUBLIC_APP_URL = "https://console.superserve.ai"
 process.env.SANDBOX_API_URL = "https://api.test.superserve.ai"
+process.env.INTERNAL_API_TOKEN = "test-internal-api-token"
 process.env.NEXT_PUBLIC_SANDBOX_HOST = "sandbox.test.superserve.ai"
 process.env.CONSOLE_PROXY_SECRET =
   "test-secret-must-be-at-least-thirty-two-chars-long-abcdef"

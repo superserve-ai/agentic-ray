@@ -13,12 +13,18 @@ import { NextRequest } from "next/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mocks declared BEFORE the module under test is imported.
+vi.mock("@/lib/admin/permissions", () => ({
+  canReadPlatformBilling: vi.fn(),
+}))
 vi.mock("@/lib/api/proxy-auth", () => ({
   getApiBaseUrlForUser: vi.fn(),
   getAuthApiKeyForUser: vi.fn(),
 }))
 vi.mock("@/lib/admin/impersonation", () => ({
   getImpersonationContext: vi.fn(),
+}))
+vi.mock("@/lib/admin/staff", () => ({
+  isStaff: vi.fn(),
 }))
 vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
@@ -38,6 +44,8 @@ vi.stubGlobal("fetch", fetchSpy)
 // SANDBOX_API_URL is pre-stubbed in src/test/setup.ts; the route reads it at module load.
 
 import { getImpersonationContext } from "@/lib/admin/impersonation"
+import { canReadPlatformBilling } from "@/lib/admin/permissions"
+import { isStaff } from "@/lib/admin/staff"
 import {
   getApiBaseUrlForUser,
   getAuthApiKeyForUser,
@@ -71,6 +79,8 @@ describe("api proxy /api/[...path]", () => {
     vi.mocked(createServerClient).mockResolvedValue({
       auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) },
     } as never)
+    vi.mocked(isStaff).mockReturnValue(true)
+    vi.mocked(canReadPlatformBilling).mockReturnValue(true)
     vi.mocked(getAuthApiKeyForUser).mockReset()
     vi.mocked(getAuthApiKeyForUser).mockResolvedValue("ss_live_test_key")
     vi.mocked(getApiBaseUrlForUser).mockReset()
@@ -126,12 +136,49 @@ describe("api proxy /api/[...path]", () => {
     expect(fetchSpy.mock.calls[5][0]).toBe(
       "https://api.test.superserve.ai/internal/billing",
     )
+    const [, fetchInit] = fetchSpy.mock.calls[5]
+    const headers = fetchInit.headers as Headers
+    expect(headers.get("authorization")).toBe("Bearer test-internal-api-token")
+    expect(headers.get("x-actor-user-id")).toBe("u1")
+    expect(headers.get("x-api-key")).toBeNull()
   })
 
   it("returns 401 when the user is not authenticated", async () => {
     vi.mocked(getAuthApiKeyForUser).mockResolvedValue(null)
     const res = await GET(req("GET", ["sandboxes"]), params(["sandboxes"]))
     expect(res.status).toBe(401)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("returns 401 for internal billing when unauthenticated", async () => {
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: null } }) },
+    } as never)
+
+    const res = await GET(
+      req("GET", ["internal", "billing"]),
+      params(["internal", "billing"]),
+    )
+
+    expect(res.status).toBe(401)
+    await expect(res.json()).resolves.toMatchObject({
+      error: { code: "unauthorized" },
+    })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("returns 403 for internal billing when the user lacks access", async () => {
+    vi.mocked(isStaff).mockReturnValue(false)
+
+    const res = await GET(
+      req("GET", ["internal", "billing"]),
+      params(["internal", "billing"]),
+    )
+
+    expect(res.status).toBe(403)
+    await expect(res.json()).resolves.toMatchObject({
+      error: { code: "forbidden" },
+    })
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
