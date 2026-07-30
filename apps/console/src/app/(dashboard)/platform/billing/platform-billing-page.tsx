@@ -1,7 +1,13 @@
 "use client"
 
 import { ChartBarIcon, MagnifyingGlassIcon } from "@phosphor-icons/react"
-import { Table, TableCell, TableHeader, TableRow } from "@superserve/ui"
+import {
+  Table,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@superserve/ui"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 
@@ -53,19 +59,19 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
 }
 
 function UsageCell({ row }: { row: PlatformBillingRow }) {
-  if (row.billing_mode === "unavailable") {
+  if (row.summary.billing_mode === "unavailable") {
     return <span className="text-sm text-muted">Unavailable</span>
   }
 
   return (
     <div>
       <div className="font-mono font-medium tabular-nums">
-        {formatCurrency(row.current_charges_usd)}
+        {formatCurrency(row.summary.current_charges_usd)}
       </div>
       <div className="mt-1 text-xs text-muted">
-        Compute {formatCurrency(row.compute_usd)} · Memory{" "}
-        {formatCurrency(row.memory_usd)} · Storage{" "}
-        {formatCurrency(row.storage_usd)}
+        Compute {formatCurrency(row.summary.compute_usd)} · Memory{" "}
+        {formatCurrency(row.summary.memory_usd)} · Storage{" "}
+        {formatCurrency(row.summary.storage_usd)}
       </div>
     </div>
   )
@@ -113,7 +119,12 @@ export function PlatformBillingPage({
   const searchParams = useSearchParams()
   const [query, setQuery] = useState(search)
   const debouncedQuery = useDebouncedValue(query, 300)
-  const pageCount = Math.max(1, Math.ceil(summary.total / pageSize))
+  const effectivePageSize = summary.pagination.page_size || pageSize
+  const pageCount = Math.max(
+    1,
+    Math.ceil(summary.pagination.total / effectivePageSize),
+  )
+  const currentPeriod = summary.rows[0]?.summary ?? null
 
   useEffect(() => {
     setQuery(search)
@@ -123,7 +134,7 @@ export function PlatformBillingPage({
     if (debouncedQuery === search) return
     const next = updateSearchParams(
       new URLSearchParams(searchParams.toString()),
-      { q: debouncedQuery || null },
+      { search: debouncedQuery || null },
     )
     router.replace(next.toString() ? `${pathname}?${next}` : pathname)
   }, [debouncedQuery, pathname, router, search, searchParams])
@@ -149,7 +160,7 @@ export function PlatformBillingPage({
   }
 
   const emptyState =
-    summary.total === 0
+    summary.pagination.total === 0
       ? search
         ? {
             title: "No customers match that search",
@@ -169,7 +180,10 @@ export function PlatformBillingPage({
       <div className="flex-1 space-y-5 overflow-y-auto p-5">
         <div>
           <h2 className="text-sm font-medium text-foreground">
-            {formatPeriod(summary.period_start, summary.period_end)}
+            {formatPeriod(
+              currentPeriod?.billing_period_start ?? null,
+              currentPeriod?.billing_period_end ?? null,
+            )}
           </h2>
           <p className="mt-1 text-xs text-muted">
             Totals across all customers with available billing data.
@@ -179,19 +193,19 @@ export function PlatformBillingPage({
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <SummaryCard
             label="Usage subtotal"
-            value={summary.current_charges_usd}
+            value={summary.totals.current_charges_usd}
           />
           <SummaryCard
             label="Credits applied"
-            value={summary.credits_applied_usd}
+            value={summary.totals.credits_applied_usd}
           />
           <SummaryCard
             label="Net due"
-            value={summary.expected_invoice_amount_usd}
+            value={summary.totals.expected_invoice_amount_usd}
           />
           <SummaryCard
             label="Credits remaining"
-            value={summary.credits_remaining_usd}
+            value={summary.totals.credits_remaining_usd}
           />
         </div>
 
@@ -241,20 +255,7 @@ export function PlatformBillingPage({
                       }
                       className="w-[32%]"
                     />
-                    <SortableTableHead
-                      column="credits_applied_usd"
-                      label="Credits applied"
-                      activeSort={sort}
-                      order={order}
-                      onSort={(column) =>
-                        setParam({
-                          sort: column,
-                          order:
-                            sort === column && order === "asc" ? "desc" : "asc",
-                        })
-                      }
-                      className="w-[16%]"
-                    />
+                    <TableHead className="w-[16%]">Credits applied</TableHead>
                     <SortableTableHead
                       column="expected_invoice_amount_usd"
                       label="Net due"
@@ -288,14 +289,15 @@ export function PlatformBillingPage({
                 <StickyHoverTableBody>
                   {summary.rows.map((row) => {
                     const error = formatRowError(row.error)
+                    const { summary: rowSummary } = row
                     return (
-                      <TableRow key={`${row.region}:${row.team_id}`}>
+                      <TableRow key={`${rowSummary.region}:${row.team_id}`}>
                         <TableCell>
                           <div className="font-medium">{row.team_name}</div>
                           <div className="mt-1 text-xs text-muted">
-                            {row.region}
+                            {rowSummary.region}
                           </div>
-                          {row.billing_mode === "unavailable" && (
+                          {rowSummary.billing_mode === "unavailable" && (
                             <div
                               className="mt-1 text-xs text-destructive"
                               title={error ?? undefined}
@@ -309,18 +311,20 @@ export function PlatformBillingPage({
                           <UsageCell row={row} />
                         </TableCell>
                         <TableCell className="text-right font-mono tabular-nums">
-                          {row.billing_mode === "active"
-                            ? formatCurrency(row.credits_applied_usd)
+                          {rowSummary.billing_mode === "active"
+                            ? formatCurrency(rowSummary.credits_applied_usd)
                             : "—"}
                         </TableCell>
                         <TableCell className="text-right font-mono font-semibold tabular-nums">
-                          {row.billing_mode === "active"
-                            ? formatCurrency(row.expected_invoice_amount_usd)
+                          {rowSummary.billing_mode === "active"
+                            ? formatCurrency(
+                                rowSummary.expected_invoice_amount_usd,
+                              )
                             : "—"}
                         </TableCell>
                         <TableCell className="text-right font-mono tabular-nums">
-                          {row.billing_mode === "active"
-                            ? formatCurrency(row.credits_remaining_usd)
+                          {rowSummary.billing_mode === "active"
+                            ? formatCurrency(rowSummary.credits_remaining_usd)
                             : "—"}
                         </TableCell>
                       </TableRow>
@@ -333,11 +337,11 @@ export function PlatformBillingPage({
         )}
       </div>
 
-      {summary.total > 0 && !emptyState && (
+      {summary.pagination.total > 0 && !emptyState && (
         <Pagination
           page={page}
-          pageSize={pageSize}
-          total={summary.total}
+          pageSize={effectivePageSize}
+          total={summary.pagination.total}
           onPageChange={(nextPage) =>
             setParam({ page: String(nextPage) }, false)
           }

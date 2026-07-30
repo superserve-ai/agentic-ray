@@ -42,14 +42,14 @@ function parseListParams(
     PLATFORM_BILLING_SORT_COLUMNS.find((column) => column === rawSort) ??
     DEFAULT_SORT
   const order = firstParam(searchParams.order) === "asc" ? "asc" : "desc"
-  const q = firstParam(searchParams.q)?.trim() || undefined
+  const search = firstParam(searchParams.search)?.trim() || undefined
 
   return {
     page,
     pageSize,
     sort,
     order,
-    q,
+    search,
   }
 }
 
@@ -78,7 +78,7 @@ export default async function Page({
         pageSize={params.pageSize}
         sort={params.sort}
         order={params.order}
-        search={params.q ?? ""}
+        search={params.search ?? ""}
       />
     )
   } catch (error) {

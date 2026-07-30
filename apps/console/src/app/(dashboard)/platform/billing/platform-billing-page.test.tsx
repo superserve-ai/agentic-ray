@@ -15,43 +15,51 @@ vi.mock("next/navigation", () => ({
 import { PlatformBillingPage } from "./platform-billing-page"
 
 const summary: PlatformBillingSummary = {
-  period_start: "2026-07-01T00:00:00Z",
-  period_end: "2026-08-01T00:00:00Z",
-  current_charges_usd: 140,
-  credits_applied_usd: 35,
-  expected_invoice_amount_usd: 105,
-  credits_remaining_usd: 95,
-  total: 2,
+  totals: {
+    current_charges_usd: 140,
+    credits_applied_usd: 35,
+    expected_invoice_amount_usd: 105,
+    credits_remaining_usd: 95,
+  },
+  pagination: {
+    page: 1,
+    page_size: 1,
+    total: 2,
+  },
   rows: [
     {
-      team_id: "team-lindy",
-      team_name: "Lindy",
-      region: "use",
-      current_charges_usd: 100,
-      credits_applied_usd: 25,
-      credits_remaining_usd: 75,
-      expected_invoice_amount_usd: 75,
-      compute_usd: 60,
-      memory_usd: 30,
-      storage_usd: 10,
-      billing_period_start: "2026-07-01T00:00:00Z",
-      billing_period_end: "2026-08-01T00:00:00Z",
-      billing_mode: "active",
+      team_id: "team-pilot",
+      team_name: "pilot-team",
+      summary: {
+        region: "use",
+        current_charges_usd: 100,
+        credits_applied_usd: 25,
+        credits_remaining_usd: 75,
+        expected_invoice_amount_usd: 75,
+        compute_usd: 60,
+        memory_usd: 30,
+        storage_usd: 10,
+        billing_period_start: "2026-07-01T00:00:00Z",
+        billing_period_end: "2026-08-01T00:00:00Z",
+        billing_mode: "active",
+      },
     },
     {
-      team_id: "team-phaser",
-      team_name: "Phaser",
-      region: "use",
-      current_charges_usd: 40,
-      credits_applied_usd: 10,
-      credits_remaining_usd: 20,
-      expected_invoice_amount_usd: 30,
-      compute_usd: 20,
-      memory_usd: 15,
-      storage_usd: 5,
-      billing_period_start: "2026-07-01T00:00:00Z",
-      billing_period_end: "2026-08-01T00:00:00Z",
-      billing_mode: "active",
+      team_id: "team-example",
+      team_name: "example-team",
+      summary: {
+        region: "use",
+        current_charges_usd: 40,
+        credits_applied_usd: 10,
+        credits_remaining_usd: 20,
+        expected_invoice_amount_usd: 30,
+        compute_usd: 20,
+        memory_usd: 15,
+        storage_usd: 5,
+        billing_period_start: "2026-07-01T00:00:00Z",
+        billing_period_end: "2026-08-01T00:00:00Z",
+        billing_mode: "active",
+      },
     },
   ],
 }
@@ -59,7 +67,7 @@ const summary: PlatformBillingSummary = {
 describe("PlatformBillingPage", () => {
   beforeEach(() => {
     replace.mockReset()
-    searchParams.delete("q")
+    searchParams.delete("search")
     searchParams.delete("page")
     searchParams.delete("size")
     searchParams.delete("sort")
@@ -81,8 +89,8 @@ describe("PlatformBillingPage", () => {
     expect(screen.getByText("Platform Billing")).toBeInTheDocument()
     expect(screen.getByText("$140.00")).toBeInTheDocument()
     expect(screen.getByText("$105.00")).toBeInTheDocument()
-    expect(screen.getByText("Lindy")).toBeInTheDocument()
-    expect(screen.getByText("Phaser")).toBeInTheDocument()
+    expect(screen.getByText("pilot-team")).toBeInTheDocument()
+    expect(screen.getByText("example-team")).toBeInTheDocument()
   })
 
   it("updates the URL when sorting, searching, and paginating", async () => {
@@ -108,11 +116,11 @@ describe("PlatformBillingPage", () => {
 
     replace.mockClear()
     fireEvent.change(screen.getByLabelText("Search customers..."), {
-      target: { value: "lindy" },
+      target: { value: "pilot" },
     })
 
     await waitFor(() => {
-      expect(replace).toHaveBeenCalledWith("/platform/billing?q=lindy")
+      expect(replace).toHaveBeenCalledWith("/platform/billing?search=pilot")
     })
   })
 
@@ -124,14 +132,20 @@ describe("PlatformBillingPage", () => {
           rows: [
             {
               ...summary.rows[0],
-              billing_mode: "unavailable",
+              summary: {
+                ...summary.rows[0].summary,
+                billing_mode: "unavailable",
+              },
               error: {
                 code: "billing_cell_unreachable",
                 message: "Cell use is temporarily unreachable",
               },
             },
           ],
-          total: 1,
+          pagination: {
+            ...summary.pagination,
+            total: 1,
+          },
         }}
         page={1}
         pageSize={50}
