@@ -159,7 +159,9 @@
               "GET /sandboxes/{sandbox_id}/network",
               "GET /sandboxes/{sandbox_id}/preview-ports",
               "POST /sandboxes/{sandbox_id}/preview-ports",
-              "DELETE /sandboxes/{sandbox_id}/preview-ports/{port}"
+              "DELETE /sandboxes/{sandbox_id}/preview-ports/{port}",
+              "POST /sandboxes/{sandbox_id}/preview-ports/{port}/token",
+              "POST /sandboxes/{sandbox_id}/preview-ports/{port}/token/rotate"
             ]
           },
           {
