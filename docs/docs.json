@@ -238,7 +238,7 @@
         "groups": [
           {
             "group": "Recipes",
-            "pages": ["cookbook/pr-loop"]
+            "pages": ["cookbook/pr-loop", "cookbook/computer-use"]
           },
           {
             "group": "MCP",
