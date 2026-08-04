@@ -119,6 +119,18 @@
         "vite": "^7.3.1",
       },
     },
+    "examples/lakefs": {
+      "name": "@superserve/lakefs-example",
+      "version": "0.1.0",
+      "dependencies": {
+        "@superserve/sdk": "workspace:*",
+      },
+      "devDependencies": {
+        "@superserve/typescript-config": "workspace:*",
+        "@types/node": "^25.5.2",
+        "typescript": "^5.7.0",
+      },
+    },
     "examples/loops": {
       "name": "@superserve/loops",
       "version": "0.1.5",
@@ -936,6 +948,8 @@
     "@superserve/cli": ["@superserve/cli@workspace:packages/cli"],
 
     "@superserve/console": ["@superserve/console@workspace:apps/console"],
+
+    "@superserve/lakefs-example": ["@superserve/lakefs-example@workspace:examples/lakefs"],
 
     "@superserve/loops": ["@superserve/loops@workspace:examples/loops"],
 

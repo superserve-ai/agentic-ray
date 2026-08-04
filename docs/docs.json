@@ -117,7 +117,12 @@
           },
           {
             "group": "Storage",
-            "pages": ["storage/mesa", "storage/archil", "storage/cloud-buckets"]
+            "pages": [
+              "storage/mesa",
+              "storage/archil",
+              "storage/lakefs",
+              "storage/cloud-buckets"
+            ]
           },
           {
             "group": "Errors",
