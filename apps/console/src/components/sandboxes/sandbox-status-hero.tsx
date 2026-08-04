@@ -1,6 +1,8 @@
 "use client"
 
 import {
+  CheckIcon,
+  CopyIcon,
   DotsThreeVerticalIcon,
   PlayIcon,
   StopIcon,
@@ -15,6 +17,7 @@ import {
   MenuPopup,
   MenuTrigger,
 } from "@superserve/ui"
+import { useState } from "react"
 
 import type { SandboxResponse } from "@/lib/api/types"
 import { formatTime } from "@/lib/format"
@@ -71,6 +74,17 @@ export function SandboxStatusHero({
 }: SandboxStatusHeroProps) {
   const cfg = STATUS_CONFIG[sandbox.status]
   const created = formatTime(new Date(sandbox.created_at))
+  const [copied, setCopied] = useState(false)
+
+  const copyId = async () => {
+    try {
+      await navigator.clipboard.writeText(sandbox.id)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.warn("Failed to copy:", err)
+    }
+  }
 
   return (
     <section className={cn("border-b border-border px-4 py-6", cfg.bg)}>
@@ -96,7 +110,22 @@ export function SandboxStatusHero({
             <div className="mt-1.5 flex items-center gap-2 font-mono text-xs text-muted uppercase">
               <span className="text-foreground/80">{cfg.label}</span>
               <span>·</span>
-              <span title={sandbox.id}>{sandbox.id.slice(0, 8)}</span>
+              <button
+                type="button"
+                onClick={copyId}
+                aria-label={copied ? "Copied" : "Copy sandbox ID"}
+                className="flex min-w-0 items-center gap-1 transition-colors hover:text-foreground"
+              >
+                <span className="truncate normal-case">{sandbox.id}</span>
+                {copied ? (
+                  <CheckIcon
+                    className="h-3 w-3 shrink-0 text-success"
+                    weight="light"
+                  />
+                ) : (
+                  <CopyIcon className="h-3 w-3 shrink-0" weight="light" />
+                )}
+              </button>
               <span>·</span>
               <span title={created.absolute}>Created {created.relative}</span>
             </div>
