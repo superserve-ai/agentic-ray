@@ -8,7 +8,7 @@
  * not in an agent's tool-call transcript. `secret_list` returns metadata only.
  */
 
-import { z } from "zod"
+import * as z from "zod"
 
 import type { SandboxClient } from "../client.js"
 import { formatSdkError } from "../lib/errors.js"

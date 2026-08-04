@@ -1,6 +1,6 @@
 "use server"
 
-import { z } from "zod"
+import * as z from "zod"
 
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"

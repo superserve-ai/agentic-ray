@@ -1,6 +1,6 @@
 /** `sandbox_exec` — run a shell command in a sandbox. */
 
-import { z } from "zod"
+import * as z from "zod"
 
 import type { SandboxClient } from "../client.js"
 import {

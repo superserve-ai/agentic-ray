@@ -86,7 +86,7 @@ describe("api proxy /api/[...path]", () => {
     expect(res.status).toBe(404)
   })
 
-  it("forwards the secrets, providers, activity, and billing summary prefixes", async () => {
+  it("forwards the secrets, providers, activity, and billing prefixes", async () => {
     fetchSpy.mockImplementation(() =>
       Promise.resolve(
         new Response("[]", {
@@ -114,6 +114,71 @@ describe("api proxy /api/[...path]", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(5)
     expect(fetchSpy.mock.calls[4][0]).toBe(
       "https://api.test.superserve.ai/billing/summary",
+    )
+
+    const teamBillingRes = await GET(
+      req("GET", ["teams", "team-a", "billing", "usage"]),
+      params(["teams", "team-a", "billing", "usage"]),
+    )
+    expect(teamBillingRes.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledTimes(6)
+    expect(fetchSpy.mock.calls[5][0]).toBe(
+      "https://api.test.superserve.ai/teams/team-a/billing/usage",
+    )
+
+    const exportPreviewRes = await GET(
+      req("GET", [
+        "teams",
+        "team-a",
+        "billing",
+        "periods",
+        "period-1",
+        "export-preview",
+      ]),
+      params([
+        "teams",
+        "team-a",
+        "billing",
+        "periods",
+        "period-1",
+        "export-preview",
+      ]),
+    )
+    expect(exportPreviewRes.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledTimes(7)
+    expect(fetchSpy.mock.calls[6][0]).toBe(
+      "https://api.test.superserve.ai/teams/team-a/billing/periods/period-1/export-preview",
+    )
+
+    const stripeRes = await POST(
+      req("POST", ["stripe", "checkout-session"], {
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          success_url: "https://console.test/success",
+          cancel_url: "https://console.test/cancel",
+        }),
+      }),
+      params(["stripe", "checkout-session"]),
+    )
+    expect(stripeRes.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledTimes(8)
+    expect(fetchSpy.mock.calls[7][0]).toBe(
+      "https://api.test.superserve.ai/stripe/checkout-session",
+    )
+
+    const portalRes = await POST(
+      req("POST", ["stripe", "customer-portal-session"], {
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          return_url: "https://console.test/plan-usage",
+        }),
+      }),
+      params(["stripe", "customer-portal-session"]),
+    )
+    expect(portalRes.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledTimes(9)
+    expect(fetchSpy.mock.calls[8][0]).toBe(
+      "https://api.test.superserve.ai/stripe/customer-portal-session",
     )
   })
 

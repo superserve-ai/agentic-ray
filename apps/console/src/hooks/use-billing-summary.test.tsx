@@ -36,6 +36,74 @@ function formatCurrency(value: number): string {
   }).format(value)
 }
 
+const baseBillingSummary: BillingSummaryResponse = {
+  billing_mode: "live",
+  checkout_available: true,
+  portal_available: true,
+  payment_setup_required: false,
+  permissions: {
+    can_view: true,
+    can_manage: true,
+  },
+  current_charges_usd: 10,
+  credits_applied_usd: 0,
+  credits_remaining_usd: 0,
+  expected_invoice_amount_usd: 10,
+  cost_breakdown_usd: {
+    compute: 6,
+    memory: 3,
+    storage: 1,
+  },
+  resources: [
+    {
+      resource_key: "vcpu",
+      resource: "cpu",
+      display_name: "CPU",
+      sort_order: 10,
+      unit: "second",
+      display_unit: "vCPU-hours",
+      usage: 120,
+      tracked: true,
+      billable: true,
+      charge_usd: 6,
+    },
+    {
+      resource_key: "memory_gib",
+      resource: "memory",
+      display_name: "Memory",
+      sort_order: 20,
+      unit: "second",
+      display_unit: "GiB-hours",
+      usage: 2_048_000,
+      tracked: true,
+      billable: true,
+      charge_usd: 3,
+    },
+    {
+      resource_key: "storage_gib",
+      resource: "storage",
+      display_name: "Storage",
+      sort_order: 30,
+      unit: "second",
+      display_unit: "GiB-hours",
+      usage: 4_096_000,
+      tracked: true,
+      billable: false,
+      charge_usd: 1,
+    },
+  ],
+  billing_period: {
+    start: "2026-06-01T00:00:00.000Z",
+    end: "2026-07-01T00:00:00.000Z",
+  },
+  pricing_tier: {
+    plan_key: "payg",
+    plan_name: "Pay-as-you-go",
+    currency: "USD",
+  },
+  calculated_at: "2026-06-16T00:00:00.000Z",
+}
+
 function BillingSummaryValue() {
   const { data, isPending } = useBillingSummary()
 
@@ -67,25 +135,7 @@ describe("useBillingSummary", () => {
 
   it("drops Team A data immediately when switching to Team B and caches each team separately", async () => {
     const teamA = {
-      current_charges_usd: 10,
-      credits_applied_usd: 0,
-      credits_remaining_usd: 0,
-      expected_invoice_amount_usd: 10,
-      cost_breakdown_usd: {
-        compute: 6,
-        memory: 3,
-        storage: 1,
-      },
-      billing_period: {
-        start: "2026-06-01T00:00:00.000Z",
-        end: "2026-07-01T00:00:00.000Z",
-      },
-      pricing_tier: {
-        plan_key: "payg",
-        plan_name: "Pay-as-you-go",
-        currency: "USD",
-      },
-      calculated_at: "2026-06-16T00:00:00.000Z",
+      ...baseBillingSummary,
     } satisfies BillingSummaryResponse
     const teamB = {
       ...teamA,
@@ -96,6 +146,44 @@ describe("useBillingSummary", () => {
         memory: 7,
         storage: 3,
       },
+      resources: [
+        {
+          resource_key: "vcpu",
+          resource: "cpu",
+          display_name: "CPU",
+          sort_order: 10,
+          unit: "second",
+          display_unit: "vCPU-hours",
+          usage: 300,
+          tracked: true,
+          billable: true,
+          charge_usd: 15,
+        },
+        {
+          resource_key: "memory_gib",
+          resource: "memory",
+          display_name: "Memory",
+          sort_order: 20,
+          unit: "second",
+          display_unit: "GiB-hours",
+          usage: 4_096_000,
+          tracked: true,
+          billable: true,
+          charge_usd: 7,
+        },
+        {
+          resource_key: "storage_gib",
+          resource: "storage",
+          display_name: "Storage",
+          sort_order: 30,
+          unit: "second",
+          display_unit: "GiB-hours",
+          usage: 8_192_000,
+          tracked: true,
+          billable: false,
+          charge_usd: 3,
+        },
+      ],
     } satisfies BillingSummaryResponse
 
     const first = deferred<BillingSummaryResponse>()

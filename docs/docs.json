@@ -210,7 +210,13 @@
             "pages": [
               "GET /billing/pricing",
               "GET /billing/pricing/public",
-              "GET /billing/summary"
+              "GET /billing/summary",
+              "GET /teams/{team_id}/billing/periods",
+              "GET /teams/{team_id}/billing/periods/{period_id}/export-preview",
+              "GET /teams/{team_id}/billing/usage",
+              "POST /stripe/checkout-session",
+              "POST /stripe/customer-portal-session",
+              "POST /stripe/webhook"
             ]
           },
           {

@@ -47,7 +47,7 @@ export function TableToolbar({
   return (
     <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background px-4">
       {/* Left side: selection actions or filter tabs */}
-      <nav
+      <div
         className="flex items-center gap-1"
         onMouseLeave={() => setHoveredTab(null)}
       >
@@ -134,7 +134,7 @@ export function TableToolbar({
             )
           })
         )}
-      </nav>
+      </div>
 
       {/* Filters + Search */}
       <div className="flex items-center gap-2">

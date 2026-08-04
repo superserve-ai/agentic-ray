@@ -541,7 +541,7 @@ export function CreateSandboxDialog({
       <DialogPopup className="max-w-xl [&>.absolute]:hidden">
         <DialogHeader className="flex flex-row items-center justify-between gap-4 p-6 pb-4">
           <DialogTitle>Create Sandbox</DialogTitle>
-          <nav
+          <div
             className="flex items-center gap-1"
             onMouseLeave={() => setHoveredMode(null)}
           >
@@ -594,7 +594,7 @@ export function CreateSandboxDialog({
                 </button>
               )
             })}
-          </nav>
+          </div>
         </DialogHeader>
 
         {mode === "form" ? (
@@ -945,7 +945,7 @@ export function CreateSandboxDialog({
           <>
             {/* Language tabs */}
             <LayoutGroup id="create-lang">
-              <nav
+              <div
                 className="mx-6 flex items-center gap-1 border-b border-dashed border-border py-2"
                 onMouseLeave={() => setHoveredLang(null)}
               >
@@ -997,7 +997,7 @@ export function CreateSandboxDialog({
                     </button>
                   )
                 })}
-              </nav>
+              </div>
             </LayoutGroup>
 
             <div className="max-h-[60vh] space-y-5 overflow-y-auto p-6 pt-4">

@@ -24,6 +24,21 @@ const ALLOWED_PREFIXES = [
   "billing/summary",
 ]
 
+function isTeamBillingPath(path: string): boolean {
+  return (
+    /^teams\/[^/]+\/billing\/usage$/.test(path) ||
+    /^teams\/[^/]+\/billing\/periods$/.test(path) ||
+    /^teams\/[^/]+\/billing\/periods\/[^/]+\/export-preview$/.test(path)
+  )
+}
+
+function isStripeBillingPath(path: string): boolean {
+  return (
+    path === "stripe/checkout-session" ||
+    path === "stripe/customer-portal-session"
+  )
+}
+
 /** Paths that carry their own auth (e.g. Bearer token). */
 const SKIP_KEY_INJECTION = ["v1/auth/"]
 
@@ -45,6 +60,8 @@ const FORWARD_REQUEST_HEADERS = new Set([
 ])
 
 function isAllowedPath(path: string): boolean {
+  if (isTeamBillingPath(path)) return true
+  if (isStripeBillingPath(path)) return true
   return ALLOWED_PREFIXES.some(
     (prefix) => path === prefix || path.startsWith(`${prefix}/`),
   )

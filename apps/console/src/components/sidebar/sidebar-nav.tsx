@@ -22,7 +22,7 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
   const [hoveredHref, setHoveredHref] = useState<string | null>(null)
 
   return (
-    <nav
+    <div
       className="flex flex-col gap-0.5 px-2.5"
       onMouseLeave={() => setHoveredHref(null)}
     >
@@ -109,6 +109,6 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
 
         return link
       })}
-    </nav>
+    </div>
   )
 }
