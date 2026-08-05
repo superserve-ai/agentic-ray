@@ -88,11 +88,27 @@ function assertCommandSucceeded(
   }
 }
 
-/** Idempotent: reuses the secret if it already exists, so reruns don't fail. */
+/**
+ * Creates the secret once, then treats the current environment value as the
+ * source of truth on reruns. Refuse to rotate a same-named secret with a
+ * different host or auth type because another integration may own it.
+ */
 async function ensureApiSecret(name: string, hostname: string, value: string) {
   try {
-    await Secret.get(name)
-    console.log(`reusing existing Superserve secret ${name}`)
+    const existing = await Secret.get(name)
+    if (
+      existing.authType !== "basic" ||
+      existing.hosts.length !== 1 ||
+      existing.hosts[0] !== hostname
+    ) {
+      throw new Error(
+        `Superserve secret ${name} exists with auth=${existing.authType} ` +
+          `and hosts=${JSON.stringify(existing.hosts)}; expected basic auth ` +
+          `scoped only to ${hostname}. Recreate it or use a different name.`,
+      )
+    }
+    await existing.rotate(value)
+    console.log(`rotated existing Superserve secret ${name}`)
   } catch (error) {
     if (!(error instanceof NotFoundError)) throw error
     await Secret.create({

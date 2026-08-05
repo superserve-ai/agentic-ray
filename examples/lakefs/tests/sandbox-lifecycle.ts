@@ -75,8 +75,21 @@ let sandbox: Sandbox | undefined
 try {
   step("ensure the Superserve Secret exists")
   try {
-    await Secret.get(secretName)
-    console.log(`reusing existing secret ${secretName}`)
+    const existingSecret = await Secret.get(secretName)
+    const expectedHostname = new URL(endpoint).hostname
+    if (
+      existingSecret.authType !== "basic" ||
+      existingSecret.hosts.length !== 1 ||
+      existingSecret.hosts[0] !== expectedHostname
+    ) {
+      throw new Error(
+        `Superserve secret ${secretName} exists with auth=${existingSecret.authType} ` +
+          `and hosts=${JSON.stringify(existingSecret.hosts)}; expected basic auth ` +
+          `scoped only to ${expectedHostname}. Recreate it or use a different name.`,
+      )
+    }
+    await existingSecret.rotate(realSecret)
+    console.log(`rotated existing secret ${secretName}`)
   } catch (error) {
     if (!(error instanceof NotFoundError)) throw error
     await Secret.create({
