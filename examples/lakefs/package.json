@@ -6,7 +6,6 @@
   "type": "module",
   "scripts": {
     "example": "bun run src/multi-agent.ts",
-    "test:pause-resume": "bun run tests/pause-resume.ts",
     "test:sandbox": "bun run tests/sandbox-lifecycle.ts",
     "typecheck": "tsc --noEmit",
     "lint": "bunx oxlint",

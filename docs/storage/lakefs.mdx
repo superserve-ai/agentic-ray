@@ -140,8 +140,8 @@ Secret.create(
 
 ## 3. Mount the repository
 
-Bind the same secret under both the generic env var (used for branch/merge
-calls) and Everest's own credential env vars, then mount:
+Bind the secret once using Everest's credential variables. Branch and merge
+commands can reuse the same values, so the sandbox needs only one set:
 
 <CodeGroup>
 ```typescript TypeScript
@@ -151,13 +151,10 @@ const sandbox = await Sandbox.create({
   name: "lakefs-worker",
   fromTemplate: "lakefs-everest-base",
   envVars: {
-    LAKEFS_ENDPOINT: process.env.LAKEFS_ENDPOINT!,
-    LAKEFS_ACCESS_KEY_ID: process.env.LAKEFS_ACCESS_KEY_ID!,
     EVEREST_LAKEFS_SERVER_ENDPOINT_URL: process.env.LAKEFS_ENDPOINT!,
     EVEREST_LAKEFS_CREDENTIALS_ACCESS_KEY_ID: process.env.LAKEFS_ACCESS_KEY_ID!,
   },
   secrets: {
-    LAKEFS_API_SECRET_ACCESS_KEY: "lakefs-secret",
     EVEREST_LAKEFS_CREDENTIALS_SECRET_ACCESS_KEY: "lakefs-secret",
   },
 })
@@ -179,13 +176,10 @@ sandbox = Sandbox.create(
     name="lakefs-worker",
     from_template="lakefs-everest-base",
     env_vars={
-        "LAKEFS_ENDPOINT": os.environ["LAKEFS_ENDPOINT"],
-        "LAKEFS_ACCESS_KEY_ID": os.environ["LAKEFS_ACCESS_KEY_ID"],
         "EVEREST_LAKEFS_SERVER_ENDPOINT_URL": os.environ["LAKEFS_ENDPOINT"],
         "EVEREST_LAKEFS_CREDENTIALS_ACCESS_KEY_ID": os.environ["LAKEFS_ACCESS_KEY_ID"],
     },
     secrets={
-        "LAKEFS_API_SECRET_ACCESS_KEY": "lakefs-secret",
         "EVEREST_LAKEFS_CREDENTIALS_SECRET_ACCESS_KEY": "lakefs-secret",
     },
 )
@@ -282,12 +276,6 @@ merge in your own pipeline, not just in the demo. This is exactly the pattern
 `--k2=false` above protects: without it, that verification mount can report
 a false negative.
 
-The same example can pause and resume one agent's sandbox mid-run and
-re-verify the mount afterward — Superserve's sandbox pause/resume checkpoints
-the whole VM (including the live FUSE mount), so a long-running agent job can
-be suspended cheaply without losing its place. See [Sandbox
-lifecycle](/sandbox/lifecycle) for how pause/resume works in general.
-
 ## Unmount and cleanup
 
 Unmount before intentionally killing a sandbox so Everest can finish cleanly:
@@ -302,38 +290,6 @@ design — lakeFS is the system of record and Superserve compute is
 disposable. Uncommitted changes in a killed sandbox's mount are lost;
 branches and commits you did create remain in lakeFS until you delete them
 yourself.
-
-## How it complements pause and resume
-
-[Pause and resume](/sandbox/lifecycle) checkpoint one sandbox's full VM state:
-memory, processes, and local disk — including the FUSE mount and the Everest
-process backing it, so an agent can be suspended mid-task and pick up on the
-same mount when it resumes. lakeFS checkpoints the other half: a commit is a
-durable, named point in the *data* that outlives the sandbox entirely and that
-other sandboxes can mount.
-
-The two solve different problems, and the distinction matters when a run goes
-wrong. Pausing preserves work-in-progress cheaply, but it's still
-work-in-progress: uncommitted changes live only inside that one sandbox, and a
-`kill()` — or a failure you can't resume from — takes them with it. Committing
-is what makes results durable and shareable. So pause when an agent needs to
-stop and continue later; commit when it reaches a result worth keeping,
-handing to another agent, or rolling back to.
-
-<Tip>
-For long-running agents, commit at meaningful checkpoints rather than only at
-the end. Each commit is a point you can branch from, diff against, or restore,
-and it bounds how much work a failed sandbox can cost you.
-</Tip>
-
-## Tips
-
-- **Allowlist the object store if you turn presigned transfers back on.** With `--presign=false` everything goes through the lakeFS host, so that one [egress](/sandbox/networking) rule is enough. Drop the flag and Everest pulls and pushes file data over presigned URLs pointing at the object store instead — a sandbox allowing only the lakeFS host will then mount and list fine, and fail on the first real read.
-- **Scope credentials per agent for write workloads.** A dedicated lakeFS identity per agent gives you a clean audit trail and the smallest blast radius on revocation. Pair it with one branch per agent so merges stay explicit — see [Choosing a credential scope](#choosing-a-credential-scope).
-- **Mount a commit ID, not a branch, for reproducible reads.** A branch ref moves as others commit to it; a commit ID pins the exact dataset a run saw, which matters when you need to re-run an agent against identical inputs.
-- **Pass `--k2=false`.** Everest's default caching can serve a stale read after remounting a ref that changed elsewhere, while still reporting the correct commit ID. If your workload ever remounts a ref mid-run — the verification step in the multi-agent example does — leave this off.
-- **Unmount before you kill the sandbox.** `everest umount` lets Everest finish its own cleanup. Committed data is already safe in lakeFS, but uncommitted changes in the mount are lost either way, so commit first if you meant to keep them.
-- **Build the binary into a template, not into each sandbox.** [Templates](/templates/overview) snapshot the install, so every sandbox starts mount-ready instead of re-fetching Everest on each run.
 
 ## Related
 

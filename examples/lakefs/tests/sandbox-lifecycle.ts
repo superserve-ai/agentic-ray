@@ -40,9 +40,8 @@ const everestUrl = required("EVEREST_DOWNLOAD_URL")
 const everestSha256 = required("EVEREST_SHA256")
 
 const MOUNT = "/mnt/lakefs"
-const templateName =
-  process.env.SUPERSERVE_LAKEFS_TEMPLATE?.trim() || "lakefs-everest-demo"
-const secretName = process.env.LAKEFS_SECRET_NAME?.trim() || "lakefs-secret"
+const templateName = "lakefs-everest-demo"
+const secretName = "lakefs-secret"
 const branch = `sandbox-lifecycle-${Date.now().toString(36)}`
 
 const step = (s: string) => console.log(`\n=== ${s} ===`)
@@ -154,13 +153,10 @@ try {
     name: `lakefs-lifecycle-${Date.now().toString(36)}`,
     fromTemplate: templateId,
     envVars: {
-      LAKEFS_ENDPOINT: endpoint,
-      LAKEFS_ACCESS_KEY_ID: accessKeyId,
       EVEREST_LAKEFS_SERVER_ENDPOINT_URL: endpoint,
       EVEREST_LAKEFS_CREDENTIALS_ACCESS_KEY_ID: accessKeyId,
     },
     secrets: {
-      LAKEFS_API_SECRET_ACCESS_KEY: secretName,
       EVEREST_LAKEFS_CREDENTIALS_SECRET_ACCESS_KEY: secretName,
     },
     metadata: { integration: "lakefs", test: "sandbox-lifecycle" },

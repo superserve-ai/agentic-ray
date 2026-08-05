@@ -5,9 +5,9 @@ from collections import Counter
 from pathlib import Path
 
 
-mount_path = Path(os.environ["MOUNT_PATH"])
-input_path = mount_path / os.environ["INPUT_PREFIX"]
-output_path = mount_path / os.environ["OUTPUT_PREFIX"]
+mount_path = Path("/mnt/lakefs")
+input_path = mount_path / "input"
+output_path = mount_path / "results"
 agent_index = int(os.environ["AGENT_INDEX"])
 agent_count = int(os.environ["AGENT_COUNT"])
 
