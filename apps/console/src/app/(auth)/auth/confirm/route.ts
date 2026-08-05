@@ -128,27 +128,34 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   if (user && type === "signup") {
-    await trackEvent(AUTH_EVENTS.SIGN_UP_COMPLETED, user.id, {
-      provider: user.app_metadata?.provider || "email",
-      email: user.email,
-      is_new_user: true,
-    })
-
     const createdAt = new Date(user.created_at)
     const now = new Date()
     const isNewUser = now.getTime() - createdAt.getTime() < 30000
+    const sideEffects = [
+      trackEvent(AUTH_EVENTS.SIGN_UP_COMPLETED, user.id, {
+        provider: user.app_metadata?.provider || "email",
+        email: user.email,
+        is_new_user: true,
+      }),
+    ]
 
     if (isNewUser) {
-      await notifySlackOfNewUser(
-        user.email || "",
-        user.user_metadata?.full_name || null,
-        user.app_metadata?.provider || null,
+      sideEffects.push(
+        notifySlackOfNewUser(
+          user.email || "",
+          user.user_metadata?.full_name || null,
+          user.app_metadata?.provider || null,
+        ),
       )
-      sendWelcomeEmail(
-        user.email || "",
-        user.user_metadata?.full_name || "there",
-      ).catch(() => {})
+      sideEffects.push(
+        sendWelcomeEmail(
+          user.email || "",
+          user.user_metadata?.full_name || "there",
+        ),
+      )
     }
+
+    await Promise.allSettled(sideEffects)
   }
 
   return buildRedirectResponse(

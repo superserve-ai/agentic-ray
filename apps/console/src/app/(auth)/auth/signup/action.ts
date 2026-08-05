@@ -1,15 +1,12 @@
 "use server"
 
-import * as zod from "zod"
+import * as z from "zod/v3"
 
-import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { sendEmail } from "@/lib/email/send"
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
 import { WelcomeEmail } from "@/lib/email/templates/welcome"
 import { createAdminClient } from "@/lib/supabase/admin"
-
-const z = ((zod as { z?: unknown }).z ?? zod) as typeof import("zod").z
 
 const signUpSchema = z.object({
   email: z.string().email("Invalid email address."),
@@ -74,12 +71,6 @@ export const signUpWithEmail = async (
       subject: "Confirm your Superserve account",
       react: ConfirmationEmail({ confirmationUrl }),
     })
-
-    notifySlackOfNewUser(
-      parsed.data.email,
-      parsed.data.fullName,
-      "email",
-    ).catch(() => {})
 
     return { success: true }
   } catch (err) {

@@ -92,30 +92,36 @@ export async function GET(request: Request) {
         const createdAt = new Date(user.created_at)
         const now = new Date()
         const isNewUser = now.getTime() - createdAt.getTime() < 30000
-
         const provider = code
           ? user.app_metadata?.provider || "google"
           : "email"
+        const sideEffects = [
+          trackEvent(
+            isNewUser
+              ? AUTH_EVENTS.SIGN_UP_COMPLETED
+              : AUTH_EVENTS.SIGN_IN_COMPLETED,
+            user.id,
+            { provider, email: user.email, is_new_user: isNewUser },
+          ),
+        ]
 
         if (isNewUser) {
-          await notifySlackOfNewUser(
-            user.email || "",
-            user.user_metadata?.full_name || null,
-            user.app_metadata?.provider || null,
+          sideEffects.push(
+            notifySlackOfNewUser(
+              user.email || "",
+              user.user_metadata?.full_name || null,
+              user.app_metadata?.provider || null,
+            ),
           )
-          sendWelcomeEmail(
-            user.email || "",
-            user.user_metadata?.full_name || "there",
-          ).catch(() => {})
+          sideEffects.push(
+            sendWelcomeEmail(
+              user.email || "",
+              user.user_metadata?.full_name || "there",
+            ),
+          )
         }
 
-        await trackEvent(
-          isNewUser
-            ? AUTH_EVENTS.SIGN_UP_COMPLETED
-            : AUTH_EVENTS.SIGN_IN_COMPLETED,
-          user.id,
-          { provider, email: user.email, is_new_user: isNewUser },
-        )
+        await Promise.allSettled(sideEffects)
 
         if (!trustedAbsoluteNext && !next.startsWith("/device")) {
           next = "/sandboxes"

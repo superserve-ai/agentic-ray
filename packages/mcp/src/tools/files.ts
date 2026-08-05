@@ -1,7 +1,7 @@
 /** `sandbox_files_read`, `sandbox_files_write`, `sandbox_files_list`. */
 
 import { ValidationError } from "@superserve/sdk"
-import * as zod from "zod"
+import * as z from "zod/v3"
 
 import type { SandboxClient } from "../client.js"
 import {
@@ -16,8 +16,6 @@ import { defineTool } from "../lib/tool.js"
 
 const mib = (bytes: number): string =>
   `${Math.round(bytes / (1024 * 1024))} MiB`
-
-const z = ((zod as { z?: unknown }).z ?? zod) as typeof import("zod").z
 
 /** Guidance returned when a read exceeds {@link MAX_FILE_BYTES}. */
 function fileTooLargeMessage(path: string): string {

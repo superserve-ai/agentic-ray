@@ -143,6 +143,39 @@ describe("auth confirm route", () => {
     )
   })
 
+  it("still redirects when side effects fail after confirmation", async () => {
+    mockVerifyOtp.mockImplementation(async () => {
+      capturedSetAll?.([
+        {
+          name: "sb-access-token",
+          value: "access-token",
+          options: { path: "/" },
+        },
+      ])
+      return { error: null }
+    })
+    mockGetUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-1",
+          created_at: new Date().toISOString(),
+          email: "user@test.com",
+          user_metadata: { full_name: "Test User" },
+          app_metadata: { provider: "email" },
+        },
+      },
+    })
+    mockTrackEvent.mockRejectedValueOnce(new Error("posthog down"))
+
+    const request = new NextRequest(
+      "https://console.superserve.ai/auth/confirm?token_hash=abc123&type=signup",
+    )
+    const response = await GET(request)
+
+    expect(response.headers.get("location")).toContain("/sandboxes")
+    expect(response.cookies.get("sb-access-token")?.value).toBe("access-token")
+  })
+
   it("redirects blocked confirmations to the auth error page", async () => {
     mockVerifyOtp.mockResolvedValue({
       error: { message: "database error saving new user" },

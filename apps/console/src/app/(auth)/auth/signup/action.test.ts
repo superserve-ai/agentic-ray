@@ -27,18 +27,12 @@ vi.mock("@/lib/email/templates/welcome", () => ({
     `WelcomeEmail:${props.name}`,
 }))
 
-const mockSlack = vi.fn().mockResolvedValue(undefined)
-vi.mock("@/app/(auth)/auth/signin/action", () => ({
-  notifySlackOfNewUser: (...args: unknown[]) => mockSlack(...args),
-}))
-
 import { signUpWithEmail } from "./action"
 
 describe("signUpWithEmail", () => {
   beforeEach(() => {
     mockGenerateLink.mockReset()
     mockSendEmail.mockReset()
-    mockSlack.mockReset().mockResolvedValue(undefined)
   })
 
   it("returns error for invalid email", async () => {
@@ -171,20 +165,5 @@ describe("signUpWithEmail", () => {
       success: false,
       error: "Error creating account. Please try again.",
     })
-  })
-
-  it("notifies slack after successful signup (fire and forget)", async () => {
-    mockGenerateLink.mockResolvedValue({
-      data: { properties: { hashed_token: "abc123" } },
-      error: null,
-    })
-    mockSendEmail.mockResolvedValue({ success: true })
-    mockSlack.mockResolvedValue({ success: true })
-
-    await signUpWithEmail("user@test.com", "password123", "Test User")
-
-    // Slack is called fire-and-forget via .catch(), give it a tick
-    await new Promise((r) => setTimeout(r, 0))
-    expect(mockSlack).toHaveBeenCalled()
   })
 })

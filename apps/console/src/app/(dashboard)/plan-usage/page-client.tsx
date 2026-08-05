@@ -444,6 +444,7 @@ function CombinedComputeTrendPanel({
         className="mt-3 h-56 w-full overflow-visible"
         viewBox={`0 0 ${width} ${height}`}
         aria-label={`Combined compute ${bucket.label} line graph`}
+        role="img"
       >
         <title>{`Combined compute ${bucket.label} line graph`}</title>
         {leftTicks.map((tick) => {
@@ -646,6 +647,7 @@ function UsageTrendPanel({
         className="h-48 w-full overflow-visible"
         viewBox={`0 0 ${width} ${height}`}
         aria-label={`Storage ${bucket.label} line graph`}
+        role="img"
       >
         <title>{`Storage ${bucket.label} line graph`}</title>
         {yTicks.map((tick) => {

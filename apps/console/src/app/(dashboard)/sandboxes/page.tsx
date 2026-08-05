@@ -1,5 +1,17 @@
 "use client"
 
+import { Suspense } from "react"
+
+import { TableSkeleton } from "@/components/table-skeleton"
+
+export default function SandboxesPage() {
+  return (
+    <Suspense fallback={<TableSkeleton columns={6} tabs={3} />}>
+      <SandboxesPageContent />
+    </Suspense>
+  )
+}
+
 import { CubeIcon } from "@phosphor-icons/react"
 import {
   Checkbox,
@@ -11,7 +23,7 @@ import {
 } from "@superserve/ui"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
-import { Suspense, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
@@ -23,7 +35,6 @@ import { DeleteSandboxDialog } from "@/components/sandboxes/delete-sandbox-dialo
 import { SandboxTableRow } from "@/components/sandboxes/sandbox-table-row"
 import { SortableTableHead } from "@/components/sortable-table-head"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
-import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
 import { useCreateParam } from "@/hooks/use-create-param"
 import { useListParams } from "@/hooks/use-list-params"
@@ -38,14 +49,6 @@ import { useSelection } from "@/hooks/use-selection"
 import { SANDBOX_SORT_COLUMNS, type SandboxListParams } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 
-export default function SandboxesPage() {
-  return (
-    <Suspense fallback={<TableSkeleton columns={6} tabs={3} />}>
-      <SandboxesPageContent />
-    </Suspense>
-  )
-}
-
 const STATUS_TABS = [
   { label: "All", value: "all" },
   { label: "Active", value: "active" },
@@ -53,10 +56,6 @@ const STATUS_TABS = [
 ]
 
 function SandboxesPageContent() {
-  return <SandboxesPageContentInner />
-}
-
-function SandboxesPageContentInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const posthog = usePostHog()
