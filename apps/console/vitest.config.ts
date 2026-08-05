@@ -28,6 +28,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      zod: path.resolve(__dirname, "./src/test/stubs/zod.ts"),
       // @xterm/addon-ligatures' package.json has a broken `main` field —
       // vitest can't resolve it even though Next.js can (via `module`).
       // We dynamic-import it in source, but vitest still scans dynamic
