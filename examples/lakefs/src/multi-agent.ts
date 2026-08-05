@@ -183,6 +183,13 @@ async function ensureTemplate(name: string): Promise<string> {
 // See the integration guide for the full rationale.
 const MOUNT_FLAGS = "--protocol fuse --k2=false --presign=false"
 
+// Everest talks to lakeFS and object storage on every mount and commit, so
+// these outlast the SDK's 30s default request timeout on a large dataset or a
+// slow endpoint. Unmounting only tears down the local FUSE mount, so it gets a
+// shorter budget -- but still one that survives a wedged mount.
+const EVEREST_MOUNT_TIMEOUT_MS = 180_000
+const EVEREST_UMOUNT_TIMEOUT_MS = 60_000
+
 /** Branch create/merge/delete go through lakeFS's native REST API -- Everest has no concept of its own. */
 async function createBranch(
   sandbox: Sandbox,
@@ -303,6 +310,7 @@ try {
       await sandbox.commands.run(`mkdir -p ${mountPath}`)
       const mount = await sandbox.commands.run(
         `everest mount lakefs://${repository}/${branch}/ ${mountPath} ${MOUNT_FLAGS} --write-mode`,
+        { timeoutMs: EVEREST_MOUNT_TIMEOUT_MS },
       )
       assertCommandSucceeded(mount, `agent ${index + 1} mount`)
 
@@ -318,6 +326,7 @@ try {
 
       const commit = await sandbox.commands.run(
         `everest commit ${mountPath} -m "Superserve agent ${index + 1} dataset summary"`,
+        { timeoutMs: EVEREST_MOUNT_TIMEOUT_MS },
       )
       assertCommandSucceeded(commit, `agent ${index + 1} commit`)
       console.log(`agent ${index + 1}: ${branch}\n${commit.stdout}`)
@@ -346,6 +355,7 @@ try {
   await sandboxes[0].commands.run(`mkdir -p ${verifyMountPath}`)
   const verifyMount = await sandboxes[0].commands.run(
     `everest mount lakefs://${repository}/${transactionBranch}/ ${verifyMountPath} ${MOUNT_FLAGS}`,
+    { timeoutMs: EVEREST_MOUNT_TIMEOUT_MS },
   )
   assertCommandSucceeded(verifyMount, "read-back verification mount")
   try {
@@ -365,7 +375,9 @@ try {
     }
     console.log("read-back verification passed for all agents")
   } finally {
-    await sandboxes[0].commands.run(`everest umount ${verifyMountPath}`)
+    await sandboxes[0].commands.run(`everest umount ${verifyMountPath}`, {
+      timeoutMs: EVEREST_UMOUNT_TIMEOUT_MS,
+    })
   }
 
   const publish = await mergeBranch(
@@ -397,7 +409,16 @@ try {
 
   const cleanup = await Promise.allSettled(
     sandboxes.map(async (sandbox) => {
-      await sandbox.commands.run(`everest umount ${mountPath}`)
+      // A wedged FUSE mount or an unreachable sandbox must not strand a
+      // running sandbox, so unmount failures are reported but never skip the
+      // kill -- that is the call that actually stops billing.
+      try {
+        await sandbox.commands.run(`everest umount ${mountPath}`, {
+          timeoutMs: EVEREST_UMOUNT_TIMEOUT_MS,
+        })
+      } catch (error) {
+        console.error(`failed to unmount sandbox ${sandbox.id}:`, error)
+      }
       await sandbox.kill()
     }),
   )
