@@ -1,10 +1,12 @@
 "use server"
 
-import { z } from "zod"
+import * as zod from "zod"
 
 import { sendEmail } from "@/lib/email/send"
 import { PasswordResetEmail } from "@/lib/email/templates/password-reset"
 import { createAdminClient } from "@/lib/supabase/admin"
+
+const z = ((zod as { z?: unknown }).z ?? zod) as typeof import("zod").z
 
 const resetSchema = z.object({
   email: z.string().email(),

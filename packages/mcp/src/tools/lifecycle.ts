@@ -5,7 +5,7 @@
  */
 
 import type { BuildStep, NetworkConfig } from "@superserve/sdk"
-import { z } from "zod"
+import * as zod from "zod"
 
 import type { SandboxClient } from "../client.js"
 import {
@@ -19,6 +19,8 @@ import { RESERVED_PREVIEW_PORT } from "../lib/previewUrl.js"
 import { toolError, toolOk } from "../lib/result.js"
 import type { McpServer } from "../lib/sdk.js"
 import { defineTool } from "../lib/tool.js"
+
+const z = ((zod as { z?: unknown }).z ?? zod) as typeof import("zod").z
 
 /**
  * A `Record<string, string>` schema. A factory — not a shared constant —

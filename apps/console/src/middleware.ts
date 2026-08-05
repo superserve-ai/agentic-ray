@@ -6,6 +6,7 @@ const PUBLIC_ROUTES = [
   "/auth/signin",
   "/auth/signup",
   "/auth/forgot-password",
+  "/auth/confirm",
   "/auth/callback",
   "/auth/auth-code-error",
   "/device",
@@ -13,16 +14,18 @@ const PUBLIC_ROUTES = [
 
 export async function middleware(request: NextRequest) {
   const client = createMiddlewareClient(request)
-  if (!client.supabase) return client.response
+  const pathname = request.nextUrl.pathname
+  const isPublicRoute = matchesRoute(pathname, PUBLIC_ROUTES)
+
+  if (isPublicRoute || !client.supabase) {
+    return client.response
+  }
 
   const {
     data: { user },
   } = await client.supabase.auth.getUser()
 
-  const pathname = request.nextUrl.pathname
-  const isPublicRoute = matchesRoute(pathname, PUBLIC_ROUTES)
-
-  if (!user && !isPublicRoute) {
+  if (!user) {
     const signinUrl = request.nextUrl.clone()
     signinUrl.pathname = "/auth/signin"
     signinUrl.searchParams.set("next", pathname)

@@ -92,7 +92,7 @@ describe("signUpWithEmail", () => {
       password: "password123",
       options: {
         data: { full_name: "Test User" },
-        redirectTo: expect.stringContaining("/auth/callback"),
+        redirectTo: expect.stringContaining("/auth/confirm"),
       },
     })
     expect(mockSendEmail).toHaveBeenCalledWith(

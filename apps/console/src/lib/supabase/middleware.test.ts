@@ -91,4 +91,28 @@ describe("createMiddlewareClient", () => {
 
     expect(result.response).toBe(secondResponse)
   })
+
+  it("does not apply cookie domain on Vercel preview hosts", () => {
+    process.env.NEXT_PUBLIC_COOKIE_DOMAIN = ".example.com"
+
+    const mockRequest = {
+      nextUrl: new URL("https://preview-app.vercel.app/sandboxes"),
+      cookies: {
+        getAll: vi.fn(),
+        set: vi.fn(),
+      },
+    }
+
+    createMiddlewareClient(mockRequest as never)
+
+    const cookieConfig = mockCreateServerClient.mock.calls[0][2]
+    cookieConfig.cookies.setAll([
+      { name: "token", value: "abc", options: { path: "/" } },
+    ])
+
+    expect(mockRequest.cookies.set).toHaveBeenCalledWith({
+      name: "token",
+      value: "abc",
+    })
+  })
 })

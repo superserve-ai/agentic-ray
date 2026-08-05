@@ -1,6 +1,6 @@
 "use server"
 
-import { z } from "zod"
+import * as zod from "zod"
 
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
@@ -8,6 +8,8 @@ import { sendEmail } from "@/lib/email/send"
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
 import { WelcomeEmail } from "@/lib/email/templates/welcome"
 import { createAdminClient } from "@/lib/supabase/admin"
+
+const z = ((zod as { z?: unknown }).z ?? zod) as typeof import("zod").z
 
 const signUpSchema = z.object({
   email: z.string().email("Invalid email address."),
@@ -30,7 +32,7 @@ export const signUpWithEmail = async (
 
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
-    const redirectTo = `${appUrl}/auth/callback`
+    const redirectTo = `${appUrl}/auth/confirm`
 
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "signup",

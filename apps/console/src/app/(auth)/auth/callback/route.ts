@@ -7,9 +7,6 @@ import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createServerClient } from "@/lib/supabase/server"
 
-const TRUSTED_REDIRECT_PATTERN =
-  /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
-
 function buildRedirectUrl(origin: string, path: string): string {
   const base =
     process.env.VERCEL_ENV === "preview"
@@ -22,7 +19,6 @@ function buildRedirectUrl(origin: string, path: string): string {
 function sanitizeNext(raw: string | null): string {
   const next = raw ?? "/"
   if (next.startsWith("/") && !next.startsWith("//")) return next
-  if (TRUSTED_REDIRECT_PATTERN.test(next)) return next
   return "/"
 }
 
@@ -40,17 +36,17 @@ export async function GET(request: Request) {
   let next = sanitizeNext(searchParams.get("next"))
 
   if (code || tokenHash) {
+    if (tokenHash) {
+      const confirmUrl = new URL("/auth/confirm", origin)
+      confirmUrl.search = searchParams.toString()
+      return NextResponse.redirect(confirmUrl)
+    }
+
     const supabase = await createServerClient()
 
     let error = null
     if (code) {
       const result = await supabase.auth.exchangeCodeForSession(code)
-      error = result.error
-    } else if (tokenHash && type) {
-      const result = await supabase.auth.verifyOtp({
-        token_hash: tokenHash,
-        type,
-      })
       error = result.error
     }
 
@@ -114,14 +110,11 @@ export async function GET(request: Request) {
           { provider, email: user.email, is_new_user: isNewUser },
         )
 
-        if (!next.startsWith("/device") && !next.startsWith("https://")) {
+        if (!next.startsWith("/device")) {
           next = "/sandboxes"
         }
       }
 
-      if (next.startsWith("https://")) {
-        return NextResponse.redirect(next)
-      }
       return NextResponse.redirect(buildRedirectUrl(origin, next))
     }
   }

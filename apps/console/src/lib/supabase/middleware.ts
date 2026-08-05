@@ -7,6 +7,10 @@ export function matchesRoute(pathname: string, routes: string[]): boolean {
   )
 }
 
+function isVercelPreviewHost(hostname: string): boolean {
+  return hostname.endsWith(".vercel.app")
+}
+
 export function createMiddlewareClient(request: NextRequest) {
   let response = NextResponse.next({ request })
 
@@ -23,7 +27,11 @@ export function createMiddlewareClient(request: NextRequest) {
   }
 
   const cookieDomain = process.env.NEXT_PUBLIC_COOKIE_DOMAIN
-  const domainOpts = cookieDomain ? { domain: cookieDomain } : {}
+  const hostname = request.nextUrl?.hostname ?? ""
+  const domainOpts =
+    cookieDomain && !isVercelPreviewHost(hostname)
+      ? { domain: cookieDomain }
+      : {}
 
   const supabase = createServerClient(url, anonKey, {
     cookies: {

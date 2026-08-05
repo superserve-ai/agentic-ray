@@ -106,12 +106,14 @@ describe("middleware", () => {
       "/auth/signin",
       "/auth/signup",
       "/auth/forgot-password",
+      "/auth/confirm",
       "/auth/callback",
       "/device",
     ]) {
       const res = await middleware(buildRequest(path))
       // Not a redirect — we should get the raw client.response back.
       expect(res).toBe(mockClient.response)
+      expect(mockClient.supabase!.auth.getUser).not.toHaveBeenCalled()
     }
   })
 
