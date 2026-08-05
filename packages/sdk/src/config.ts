@@ -136,6 +136,19 @@ export interface DataPlaneTarget {
 }
 
 /**
+ * The shared data-plane origin for a sandbox host, or `undefined` when
+ * requests use per-sandbox subdomains instead (browsers, unsupported hosts).
+ */
+export function sharedDataPlaneOrigin(sandboxHost: string): string | undefined {
+  const isBrowser = typeof window !== "undefined"
+  const host = sandboxHost.toLowerCase()
+  if (!isBrowser && SUPPORTED_SHARED_HOSTS.has(host)) {
+    return `https://${host}`
+  }
+  return undefined
+}
+
+/**
  * Resolve the data-plane base URL + routing headers for a sandbox.
  *
  * On a supported host (server-side), routes via the shared origin with
@@ -146,16 +159,15 @@ export function dataPlaneTarget(
   sandboxId: string,
   sandboxHost: string,
 ): DataPlaneTarget {
-  const isBrowser = typeof window !== "undefined"
-  const host = sandboxHost.toLowerCase()
-  if (!isBrowser && SUPPORTED_SHARED_HOSTS.has(host)) {
+  const origin = sharedDataPlaneOrigin(sandboxHost)
+  if (origin !== undefined) {
     return {
-      url: `https://${host}`,
+      url: origin,
       headers: { [SANDBOX_ID_HEADER]: sandboxId },
     }
   }
   return {
-    url: `https://boxd-${sandboxId}.${host}`,
+    url: `https://boxd-${sandboxId}.${sandboxHost.toLowerCase()}`,
     headers: {},
   }
 }
