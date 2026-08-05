@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "example": "bun run src/multi-agent.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:sandbox": "bun run tests/sandbox-lifecycle.ts",
     "typecheck": "tsc --noEmit",
     "lint": "bunx oxlint",
@@ -18,6 +20,7 @@
   "devDependencies": {
     "@superserve/typescript-config": "workspace:*",
     "@types/node": "^25.5.2",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.0"
   }
 }

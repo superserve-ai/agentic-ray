@@ -23,21 +23,30 @@
 import { Buffer } from "node:buffer"
 
 import { NotFoundError, Sandbox, Secret, Template } from "@superserve/sdk"
-import type { BuildStep } from "@superserve/sdk"
 
-function required(name: string): string {
-  const v = process.env[name]?.trim()
-  if (!v) throw new Error(`${name} is required`)
-  return v
-}
+// Same validators the coordinator uses. These values reach shell commands
+// here too, so the rules have to be identical rather than re-derived.
+import {
+  requiredDownloadUrl,
+  requiredEndpoint,
+  requiredEnv,
+  requiredIdentifier,
+  requiredSha256,
+} from "../src/config"
+import {
+  EVEREST_MOUNT_TIMEOUT_MS,
+  MOUNT_FLAGS,
+  everestBuildSteps,
+  unmountAndKill,
+} from "../src/everest"
 
-required("SUPERSERVE_API_KEY") // read by the SDK itself; fail early if absent
-const endpoint = required("LAKEFS_ENDPOINT")
-const repository = required("LAKEFS_REPOSITORY")
-const accessKeyId = required("LAKEFS_ACCESS_KEY_ID")
-const realSecret = required("LAKEFS_SECRET_ACCESS_KEY")
-const everestUrl = required("EVEREST_DOWNLOAD_URL")
-const everestSha256 = required("EVEREST_SHA256")
+requiredEnv("SUPERSERVE_API_KEY") // read by the SDK itself; fail early if absent
+const endpoint = requiredEndpoint("LAKEFS_ENDPOINT")
+const repository = requiredIdentifier("LAKEFS_REPOSITORY")
+const accessKeyId = requiredEnv("LAKEFS_ACCESS_KEY_ID")
+const realSecret = requiredEnv("LAKEFS_SECRET_ACCESS_KEY")
+const everestUrl = requiredDownloadUrl("EVEREST_DOWNLOAD_URL")
+const everestSha256 = requiredSha256("EVEREST_SHA256")
 
 const MOUNT = "/mnt/lakefs"
 const templateName = "lakefs-everest-demo"
@@ -123,24 +132,10 @@ try {
     templateId = existing.id
     console.log(`reusing template ${templateName} (${existing.id})`)
   } else {
-    const steps: BuildStep[] = [
-      {
-        run: "apt-get update && apt-get install -y ca-certificates curl python3 util-linux fuse3",
-      },
-      {
-        run: [
-          `curl -sL -o /tmp/everest.tar.gz ${everestUrl}`,
-          `echo '${everestSha256}  /tmp/everest.tar.gz' | sha256sum -c -`,
-          "tar xzf /tmp/everest.tar.gz -C /usr/local/bin everest",
-          "chmod +x /usr/local/bin/everest",
-          "rm /tmp/everest.tar.gz",
-        ].join(" && "),
-      },
-    ]
     const built = await Template.create({
       name: templateName,
       from: "ubuntu:24.04",
-      steps,
+      steps: everestBuildSteps(everestUrl, everestSha256),
     })
     await built.waitUntilReady({
       onLog: (e) => console.log(`[build] ${e.text}`),
@@ -206,8 +201,8 @@ try {
   assertOk(await sandbox.commands.run(`mkdir -p ${MOUNT}`), "mkdir")
   assertOk(
     await sandbox.commands.run(
-      `everest mount lakefs://${repository}/${branch}/ ${MOUNT} --protocol fuse --k2=false --presign=false --write-mode`,
-      { timeoutMs: 180_000 },
+      `everest mount lakefs://${repository}/${branch}/ ${MOUNT} ${MOUNT_FLAGS} --write-mode`,
+      { timeoutMs: EVEREST_MOUNT_TIMEOUT_MS },
     ),
     "everest mount",
   )
@@ -282,7 +277,7 @@ try {
     await sandbox.commands.run(
       `everest commit ${MOUNT} -m "sandbox lifecycle test"`,
       {
-        timeoutMs: 180_000,
+        timeoutMs: EVEREST_MOUNT_TIMEOUT_MS,
       },
     ),
     "everest commit",
@@ -310,10 +305,9 @@ All real-sandbox checks passed:
 `)
 } finally {
   if (sandbox) {
-    await sandbox.commands
-      .run(`everest umount ${MOUNT}`, { timeoutMs: 60_000 })
-      .catch(() => {})
-    await sandbox.kill().catch((e) => console.warn("kill failed:", e))
+    await unmountAndKill(sandbox, MOUNT).catch((e) =>
+      console.warn("kill failed:", e),
+    )
     console.log("sandbox killed")
   }
   await lakefsApi(

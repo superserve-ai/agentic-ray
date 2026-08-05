@@ -55,6 +55,17 @@ are always unmounted and killed. The TypeScript coordinator implements this
 transaction pattern with lakeFS branch and merge REST calls; it does not add
 a dependency on the Python SDK's `transact()` helper.
 
+## Tests
+
+Unit tests cover the input validation and the teardown path — including the
+failure cases that are awkward to reach against real infrastructure, such as
+an unmount that hangs or errors while sandboxes still need to be killed. They
+need no credentials:
+
+```bash
+bun run --filter @superserve/lakefs-example test
+```
+
 ## Manual integration test
 
 The real-sandbox lifecycle test validates template creation, secret

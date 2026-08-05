@@ -2,55 +2,22 @@ import { randomUUID } from "node:crypto"
 import { readFile } from "node:fs/promises"
 
 import { NotFoundError, Sandbox, Secret, Template } from "@superserve/sdk"
-import type { BuildStep } from "@superserve/sdk"
 
-function required(name: string): string {
-  const value = process.env[name]?.trim()
-  if (!value) throw new Error(`${name} is required`)
-  return value
-}
-
-/**
- * Config that ends up interpolated into a shell command below (curl URLs,
- * template build steps) is restricted to a conservative charset first. These
- * values come from the operator's own environment rather than an untrusted
- * caller, but an example that gets copy-pasted into a CI job -- where they
- * may come from a pipeline variable -- shouldn't hand a `$(...)` or a quote
- * straight to a shell.
- */
-function matching(name: string, pattern: RegExp, value: string): string {
-  if (!pattern.test(value)) {
-    throw new Error(`${name} must match ${pattern}`)
-  }
-  return value
-}
-
-/** lakeFS repository and ref names: alphanumerics, dash, underscore, dot. */
-const LAKEFS_IDENTIFIER = /^[A-Za-z0-9._-]+$/
-
-function requiredIdentifier(name: string): string {
-  return matching(name, LAKEFS_IDENTIFIER, required(name))
-}
-
-/** Rejects credentials, query strings, and anything a shell would expand. */
-function requiredEndpoint(name: string): string {
-  const raw = required(name)
-  let url: URL
-  try {
-    url = new URL(raw)
-  } catch {
-    throw new Error(`${name} must be a valid URL`)
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error(`${name} must use http or https`)
-  }
-  if (url.username || url.password || url.search || url.hash) {
-    throw new Error(
-      `${name} must not contain credentials, a query, or a fragment`,
-    )
-  }
-  return matching(name, /^[A-Za-z0-9:/._-]+$/, raw.replace(/\/+$/, ""))
-}
+import {
+  positiveInteger,
+  requiredDownloadUrl,
+  requiredEndpoint,
+  requiredEnv,
+  requiredIdentifier,
+  requiredSha256,
+} from "./config"
+import {
+  EVEREST_MOUNT_TIMEOUT_MS,
+  EVEREST_UMOUNT_TIMEOUT_MS,
+  MOUNT_FLAGS,
+  everestBuildSteps,
+  shutdownSandboxes,
+} from "./everest"
 
 // Everest is proprietary and requires lakeFS Cloud or Enterprise. Obtain the
 // Linux x86_64 binary, or an authorized download URL for it, from lakeFS --
@@ -58,26 +25,8 @@ function requiredEndpoint(name: string): string {
 // here redistributes lakeFS's artifact. Supply both: the checksum is
 // required so the build step verifies what it fetched rather than trusting
 // the download.
-const EVEREST_DOWNLOAD_URL = matching(
-  "EVEREST_DOWNLOAD_URL",
-  /^https:\/\/[A-Za-z0-9:/._-]+$/,
-  required("EVEREST_DOWNLOAD_URL"),
-)
-const EVEREST_SHA256 = matching(
-  "EVEREST_SHA256",
-  /^[a-f0-9]{64}$/,
-  required("EVEREST_SHA256"),
-)
-
-function positiveInteger(name: string, fallback: number): number {
-  const raw = process.env[name]
-  if (!raw) return fallback
-  const value = Number(raw)
-  if (!Number.isSafeInteger(value) || value < 1 || value > 16) {
-    throw new Error(`${name} must be an integer between 1 and 16`)
-  }
-  return value
-}
+const EVEREST_DOWNLOAD_URL = requiredDownloadUrl("EVEREST_DOWNLOAD_URL")
+const EVEREST_SHA256 = requiredSha256("EVEREST_SHA256")
 
 function assertCommandSucceeded(
   result: Awaited<ReturnType<Sandbox["commands"]["run"]>>,
@@ -156,39 +105,17 @@ async function ensureTemplate(name: string): Promise<string> {
   }
 
   console.log(`building template ${name}...`)
-  const steps: BuildStep[] = [
-    {
-      run: "apt-get update && apt-get install -y ca-certificates curl python3 util-linux fuse3",
-    },
-    {
-      run: [
-        `curl -sL -o /tmp/everest.tar.gz ${EVEREST_DOWNLOAD_URL}`,
-        `echo '${EVEREST_SHA256}  /tmp/everest.tar.gz' | sha256sum -c -`,
-        "tar xzf /tmp/everest.tar.gz -C /usr/local/bin everest",
-        "chmod +x /usr/local/bin/everest",
-        "rm /tmp/everest.tar.gz",
-      ].join(" && "),
-    },
-  ]
-  const built = await Template.create({ name, from: "ubuntu:24.04", steps })
+  const built = await Template.create({
+    name,
+    from: "ubuntu:24.04",
+    steps: everestBuildSteps(EVEREST_DOWNLOAD_URL, EVEREST_SHA256),
+  })
   await built.waitUntilReady({
     onLog: (event) => console.log(`[template build] ${event.text}`),
   })
   console.log(`template ${name} ready`)
   return built.id
 }
-
-// Disable stale remount caching and route object traffic through lakeFS until
-// the Superserve egress proxy preserves Content-Length on presigned uploads.
-// See the integration guide for the full rationale.
-const MOUNT_FLAGS = "--protocol fuse --k2=false --presign=false"
-
-// Everest talks to lakeFS and object storage on every mount and commit, so
-// these outlast the SDK's 30s default request timeout on a large dataset or a
-// slow endpoint. Unmounting only tears down the local FUSE mount, so it gets a
-// shorter budget -- but still one that survives a wedged mount.
-const EVEREST_MOUNT_TIMEOUT_MS = 180_000
-const EVEREST_UMOUNT_TIMEOUT_MS = 60_000
 
 /** Branch create/merge/delete go through lakeFS's native REST API -- Everest has no concept of its own. */
 async function createBranch(
@@ -247,12 +174,12 @@ const secretName = "lakefs-secret"
 
 const endpoint = requiredEndpoint("LAKEFS_ENDPOINT")
 const repository = requiredIdentifier("LAKEFS_REPOSITORY")
-const accessKeyId = required("LAKEFS_ACCESS_KEY_ID")
+const accessKeyId = requiredEnv("LAKEFS_ACCESS_KEY_ID")
 // The only place the real lakeFS secret key enters this orchestrator
 // process. It's stored once as a host-scoped Superserve Secret. Everest and
 // the branch/merge calls share that binding, so the real value never enters a
 // sandbox.
-const realSecretAccessKey = required("LAKEFS_SECRET_ACCESS_KEY")
+const realSecretAccessKey = requiredEnv("LAKEFS_SECRET_ACCESS_KEY")
 
 await ensureApiSecret(
   secretName,
@@ -375,9 +302,16 @@ try {
     }
     console.log("read-back verification passed for all agents")
   } finally {
-    await sandboxes[0].commands.run(`everest umount ${verifyMountPath}`, {
-      timeoutMs: EVEREST_UMOUNT_TIMEOUT_MS,
-    })
+    // Verification is already done by this point, and the sandbox gets killed
+    // during cleanup regardless, so a stuck unmount here must not mask a
+    // verification failure or block publishing a batch that did verify.
+    await sandboxes[0].commands
+      .run(`everest umount ${verifyMountPath}`, {
+        timeoutMs: EVEREST_UMOUNT_TIMEOUT_MS,
+      })
+      .catch((error) =>
+        console.error(`failed to unmount ${verifyMountPath}:`, error),
+      )
   }
 
   const publish = await mergeBranch(
@@ -407,27 +341,5 @@ try {
     }
   }
 
-  const cleanup = await Promise.allSettled(
-    sandboxes.map(async (sandbox) => {
-      // A wedged FUSE mount or an unreachable sandbox must not strand a
-      // running sandbox, so unmount failures are reported but never skip the
-      // kill -- that is the call that actually stops billing.
-      try {
-        await sandbox.commands.run(`everest umount ${mountPath}`, {
-          timeoutMs: EVEREST_UMOUNT_TIMEOUT_MS,
-        })
-      } catch (error) {
-        console.error(`failed to unmount sandbox ${sandbox.id}:`, error)
-      }
-      await sandbox.kill()
-    }),
-  )
-  cleanup.forEach((result, index) => {
-    if (result.status === "rejected") {
-      console.error(
-        `failed to clean up sandbox ${sandboxes[index].id}:`,
-        result.reason,
-      )
-    }
-  })
+  await shutdownSandboxes(sandboxes, mountPath)
 }

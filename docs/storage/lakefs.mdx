@@ -69,7 +69,7 @@ const template = await Template.create({
     },
     {
       run:
-        `curl -sL -o /tmp/everest.tar.gz ${everestUrl} && ` +
+        `curl -sfL -o /tmp/everest.tar.gz '${everestUrl}' && ` +
         `echo '${everestSha256}  /tmp/everest.tar.gz' | sha256sum -c - && ` +
         "tar xzf /tmp/everest.tar.gz -C /usr/local/bin everest && chmod +x /usr/local/bin/everest",
     },
@@ -81,6 +81,8 @@ await template.waitUntilReady()
 
 ```python Python
 import os
+import shlex
+
 from superserve import Template, RunStep
 
 # Supplied by you, from lakeFS -- not distributed with this guide.
@@ -95,7 +97,7 @@ template = Template.create(
             run="apt-get update && apt-get install -y ca-certificates curl python3 util-linux fuse3"
         ),
         RunStep(
-            run=f"curl -sL -o /tmp/everest.tar.gz {everest_url} && "
+            run=f"curl -sfL -o /tmp/everest.tar.gz {shlex.quote(everest_url)} && "
             f"echo '{everest_sha256}  /tmp/everest.tar.gz' | sha256sum -c - && "
             "tar xzf /tmp/everest.tar.gz -C /usr/local/bin everest && chmod +x /usr/local/bin/everest"
         ),
@@ -109,6 +111,11 @@ template.wait_until_ready()
 Superserve templates run Linux x86_64, so use that build of Everest.
 The checksum protects the template build from a corrupted or unexpected
 artifact; it is not a lakeFS credential or an entitlement check.
+
+The download URL is quoted because lakeFS usually issues a presigned one —
+unquoted, the `&` between its query parameters would split the shell command.
+`curl -f` makes an expired presigned URL fail as an HTTP error instead of
+saving the error page and failing later as a checksum mismatch.
 
 ## 2. Store the lakeFS credential
 
