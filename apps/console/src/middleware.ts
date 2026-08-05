@@ -17,7 +17,7 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const isPublicRoute = matchesRoute(pathname, PUBLIC_ROUTES)
 
-  if (isPublicRoute || !client.supabase) {
+  if (!client.supabase) {
     return client.response
   }
 
@@ -25,7 +25,7 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await client.supabase.auth.getUser()
 
-  if (!user) {
+  if (!user && !isPublicRoute) {
     const signinUrl = request.nextUrl.clone()
     signinUrl.pathname = "/auth/signin"
     signinUrl.searchParams.set("next", pathname)

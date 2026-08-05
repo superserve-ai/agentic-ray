@@ -1,12 +1,11 @@
 "use server"
 
-import * as z from "zod/v3"
-
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { sendEmail } from "@/lib/email/send"
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
 import { WelcomeEmail } from "@/lib/email/templates/welcome"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { z } from "@/lib/zod"
 
 const signUpSchema = z.object({
   email: z.string().email("Invalid email address."),

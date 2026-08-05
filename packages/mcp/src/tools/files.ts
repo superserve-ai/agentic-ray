@@ -1,7 +1,6 @@
 /** `sandbox_files_read`, `sandbox_files_write`, `sandbox_files_list`. */
 
 import { ValidationError } from "@superserve/sdk"
-import * as z from "zod/v3"
 
 import type { SandboxClient } from "../client.js"
 import {
@@ -13,6 +12,7 @@ import { formatSdkError } from "../lib/errors.js"
 import { toolError, toolOk } from "../lib/result.js"
 import type { McpServer } from "../lib/sdk.js"
 import { defineTool } from "../lib/tool.js"
+import { z } from "../lib/zod.js"
 
 const mib = (bytes: number): string =>
   `${Math.round(bytes / (1024 * 1024))} MiB`

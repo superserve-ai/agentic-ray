@@ -1,7 +1,5 @@
 /** `sandbox_exec` — run a shell command in a sandbox. */
 
-import * as z from "zod/v3"
-
 import type { SandboxClient } from "../client.js"
 import {
   DEFAULT_EXEC_TIMEOUT_MS,
@@ -13,6 +11,7 @@ import { formatSdkError } from "../lib/errors.js"
 import { toolError, toolOk, truncateText } from "../lib/result.js"
 import type { McpServer } from "../lib/sdk.js"
 import { defineTool } from "../lib/tool.js"
+import { z } from "../lib/zod.js"
 
 interface ExecArgs {
   sandbox_id: string

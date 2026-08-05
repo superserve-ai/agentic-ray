@@ -101,7 +101,7 @@ describe("middleware", () => {
     expect(refreshCookie?.value).toBe("refreshed-refresh")
   })
 
-  it("lets unauthenticated users through on public routes", async () => {
+  it("checks the session but lets unauthenticated users through on public routes", async () => {
     for (const path of [
       "/auth/signin",
       "/auth/signup",
@@ -110,10 +110,11 @@ describe("middleware", () => {
       "/auth/callback",
       "/device",
     ]) {
+      mockClient.supabase!.auth.getUser.mockClear()
       const res = await middleware(buildRequest(path))
       // Not a redirect — we should get the raw client.response back.
       expect(res).toBe(mockClient.response)
-      expect(mockClient.supabase!.auth.getUser).not.toHaveBeenCalled()
+      expect(mockClient.supabase!.auth.getUser).toHaveBeenCalledTimes(1)
     }
   })
 

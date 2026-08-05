@@ -5,7 +5,6 @@
  */
 
 import type { BuildStep, NetworkConfig } from "@superserve/sdk"
-import * as z from "zod/v3"
 
 import type { SandboxClient } from "../client.js"
 import {
@@ -19,6 +18,7 @@ import { RESERVED_PREVIEW_PORT } from "../lib/previewUrl.js"
 import { toolError, toolOk } from "../lib/result.js"
 import type { McpServer } from "../lib/sdk.js"
 import { defineTool } from "../lib/tool.js"
+import { z } from "../lib/zod.js"
 
 /**
  * A `Record<string, string>` schema. A factory — not a shared constant —

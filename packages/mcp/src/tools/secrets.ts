@@ -8,13 +8,12 @@
  * not in an agent's tool-call transcript. `secret_list` returns metadata only.
  */
 
-import * as z from "zod/v3"
-
 import type { SandboxClient } from "../client.js"
 import { formatSdkError } from "../lib/errors.js"
 import { toolError, toolOk } from "../lib/result.js"
 import type { McpServer } from "../lib/sdk.js"
 import { defineTool } from "../lib/tool.js"
+import { z } from "../lib/zod.js"
 
 type EmptyArgs = Record<string, never>
 
