@@ -4,6 +4,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { sendWelcomeEmail } from "@/app/(auth)/auth/signup/action"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
+import { trackEvent } from "@/lib/posthog/actions"
+import { AUTH_EVENTS } from "@/lib/posthog/events"
 
 type CookieToSet = {
   name: string
@@ -126,6 +128,12 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   if (user && type === "signup") {
+    await trackEvent(AUTH_EVENTS.SIGN_UP_COMPLETED, user.id, {
+      provider: user.app_metadata?.provider || "email",
+      email: user.email,
+      is_new_user: true,
+    })
+
     const createdAt = new Date(user.created_at)
     const now = new Date()
     const isNewUser = now.getTime() - createdAt.getTime() < 30000
@@ -144,7 +152,7 @@ export async function GET(request: NextRequest) {
   }
 
   return buildRedirectResponse(
-    buildRedirectUrl(origin, "/sandboxes?confirmed=email"),
+    buildRedirectUrl(origin, "/sandboxes"),
     cookiesToSet,
     domainOpts,
   )

@@ -38,8 +38,6 @@ import { useSelection } from "@/hooks/use-selection"
 import { SANDBOX_SORT_COLUMNS, type SandboxListParams } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 
-import { AuthConfirmationTracker } from "./auth-confirmation-tracker"
-
 export default function SandboxesPage() {
   return (
     <Suspense fallback={<TableSkeleton columns={6} tabs={3} />}>
@@ -55,12 +53,7 @@ const STATUS_TABS = [
 ]
 
 function SandboxesPageContent() {
-  return (
-    <>
-      <AuthConfirmationTracker />
-      <SandboxesPageContentInner />
-    </>
-  )
+  return <SandboxesPageContentInner />
 }
 
 function SandboxesPageContentInner() {

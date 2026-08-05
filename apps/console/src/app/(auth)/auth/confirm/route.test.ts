@@ -17,6 +17,17 @@ vi.mock("@/app/(auth)/auth/signup/action", () => ({
   sendWelcomeEmail: (...args: unknown[]) => mockSendWelcomeEmail(...args),
 }))
 
+const mockTrackEvent = vi.fn().mockResolvedValue(undefined)
+vi.mock("@/lib/posthog/actions", () => ({
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+}))
+
+vi.mock("@/lib/posthog/events", () => ({
+  AUTH_EVENTS: {
+    SIGN_UP_COMPLETED: "auth_sign_up_completed",
+  },
+}))
+
 import { GET } from "./route"
 
 describe("auth confirm route", () => {
@@ -63,6 +74,7 @@ describe("auth confirm route", () => {
     mockGetUser.mockReset()
     mockNotifySlackOfNewUser.mockReset().mockResolvedValue(undefined)
     mockSendWelcomeEmail.mockReset().mockResolvedValue(undefined)
+    mockTrackEvent.mockReset().mockResolvedValue(undefined)
     capturedSetAll = null
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co"
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-key"
@@ -89,6 +101,7 @@ describe("auth confirm route", () => {
     mockGetUser.mockResolvedValue({
       data: {
         user: {
+          id: "user-1",
           created_at: new Date().toISOString(),
           email: "user@test.com",
           user_metadata: { full_name: "Test User" },
@@ -114,9 +127,16 @@ describe("auth confirm route", () => {
     expect(mockGetUser).toHaveBeenCalled()
     expect(mockNotifySlackOfNewUser).toHaveBeenCalled()
     expect(mockSendWelcomeEmail).toHaveBeenCalled()
-    expect(response.headers.get("location")).toContain(
-      "/sandboxes?confirmed=email",
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_sign_up_completed",
+      expect.any(String),
+      expect.objectContaining({
+        provider: "email",
+        email: "user@test.com",
+        is_new_user: true,
+      }),
     )
+    expect(response.headers.get("location")).toContain("/sandboxes")
     expect(response.cookies.get("sb-access-token")?.value).toBe("access-token")
     expect(response.cookies.get("sb-refresh-token")?.value).toBe(
       "refresh-token",

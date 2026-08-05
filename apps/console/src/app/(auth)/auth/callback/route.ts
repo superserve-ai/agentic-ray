@@ -7,6 +7,9 @@ import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createServerClient } from "@/lib/supabase/server"
 
+const TRUSTED_REDIRECT_PATTERN =
+  /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
+
 function buildRedirectUrl(origin: string, path: string): string {
   const base =
     process.env.VERCEL_ENV === "preview"
@@ -19,6 +22,7 @@ function buildRedirectUrl(origin: string, path: string): string {
 function sanitizeNext(raw: string | null): string {
   const next = raw ?? "/"
   if (next.startsWith("/") && !next.startsWith("//")) return next
+  if (TRUSTED_REDIRECT_PATTERN.test(next)) return next
   return "/"
 }
 
@@ -33,7 +37,10 @@ export async function GET(request: Request) {
     | "magiclink"
     | "email"
     | null
-  let next = sanitizeNext(searchParams.get("next"))
+  const rawNext = searchParams.get("next")
+  const trustedAbsoluteNext =
+    rawNext && TRUSTED_REDIRECT_PATTERN.test(rawNext) ? rawNext : null
+  let next = sanitizeNext(rawNext)
 
   if (code || tokenHash) {
     if (tokenHash) {
@@ -110,9 +117,17 @@ export async function GET(request: Request) {
           { provider, email: user.email, is_new_user: isNewUser },
         )
 
-        if (!next.startsWith("/device")) {
+        if (!trustedAbsoluteNext && !next.startsWith("/device")) {
           next = "/sandboxes"
         }
+      }
+
+      if (trustedAbsoluteNext) {
+        return NextResponse.redirect(trustedAbsoluteNext)
+      }
+
+      if (next.startsWith("https://")) {
+        return NextResponse.redirect(next)
       }
 
       return NextResponse.redirect(buildRedirectUrl(origin, next))
