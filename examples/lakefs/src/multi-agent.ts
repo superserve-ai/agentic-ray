@@ -167,7 +167,7 @@ async function ensureTemplate(name: string): Promise<string> {
 // See the integration guide for the full rationale.
 const MOUNT_FLAGS = "--protocol fuse --k2=false --presign=false"
 
-/** Branch create/merge go through lakeFS's native REST API -- Everest has no concept of its own. */
+/** Branch create/merge/delete go through lakeFS's native REST API -- Everest has no concept of its own. */
 async function createBranch(
   sandbox: Sandbox,
   endpoint: string,
@@ -181,6 +181,19 @@ async function createBranch(
       `"${endpoint}/api/v1/repositories/${repository}/branches"`,
   )
   assertCommandSucceeded(result, `create branch ${branch}`)
+}
+
+async function deleteBranch(
+  sandbox: Sandbox,
+  endpoint: string,
+  repository: string,
+  branch: string,
+): Promise<void> {
+  const result = await sandbox.commands.run(
+    `curl --fail-with-body --silent --show-error --request DELETE --user "$EVEREST_LAKEFS_CREDENTIALS_ACCESS_KEY_ID:$EVEREST_LAKEFS_CREDENTIALS_SECRET_ACCESS_KEY" ` +
+      `"${endpoint}/api/v1/repositories/${repository}/branches/${branch}"`,
+  )
+  assertCommandSucceeded(result, `delete branch ${branch}`)
 }
 
 async function mergeBranch(
@@ -200,15 +213,12 @@ async function mergeBranch(
 }
 
 const agentCount = positiveInteger("LAKEFS_AGENT_COUNT", 2)
-const baseRef = matching(
-  "LAKEFS_BASE_REF",
-  LAKEFS_IDENTIFIER,
-  process.env.LAKEFS_BASE_REF?.trim() || "main",
-)
+const baseRef = "main"
 const mountPath = "/mnt/lakefs"
 const verifyMountPath = "/mnt/lakefs-verify"
 const outputPrefix = "results"
 const runId = randomUUID().slice(0, 8)
+const transactionBranch = `superserve-${runId}-transaction`
 const templateName = "lakefs-everest-demo"
 const secretName = "lakefs-secret"
 
@@ -234,6 +244,7 @@ const branches = Array.from(
 )
 const sandboxes: Sandbox[] = []
 const worker = await readFile(new URL("../worker.py", import.meta.url), "utf8")
+let transactionBranchCreated = false
 
 try {
   for (let index = 0; index < agentCount; index += 1) {
@@ -252,11 +263,27 @@ try {
     sandboxes.push(sandbox)
   }
 
+  await createBranch(
+    sandboxes[0],
+    endpoint,
+    repository,
+    transactionBranch,
+    baseRef,
+  )
+  transactionBranchCreated = true
+  console.log(`created transaction branch ${transactionBranch} from ${baseRef}`)
+
   const results = await Promise.allSettled(
     sandboxes.map(async (sandbox, index) => {
       const branch = branches[index]
 
-      await createBranch(sandbox, endpoint, repository, branch, baseRef)
+      await createBranch(
+        sandbox,
+        endpoint,
+        repository,
+        branch,
+        transactionBranch,
+      )
       await sandbox.commands.run(`mkdir -p ${mountPath}`)
       const mount = await sandbox.commands.run(
         `everest mount lakefs://${repository}/${branch}/ ${mountPath} ${MOUNT_FLAGS} --write-mode`,
@@ -292,16 +319,17 @@ try {
       endpoint,
       repository,
       branch,
-      baseRef,
+      transactionBranch,
     )
-    console.log(`merged ${branch} into ${baseRef}\n${merge}`)
+    console.log(`merged ${branch} into ${transactionBranch}\n${merge}`)
   }
 
-  // Fresh-mount baseRef and verify every agent's output landed after merge.
-  console.log("verifying merged results from a fresh read-only mount...")
+  // Validate the complete batch before the one merge that publishes it to
+  // main. Consumers of main therefore see every result or none of them.
+  console.log("validating the transaction from a fresh read-only mount...")
   await sandboxes[0].commands.run(`mkdir -p ${verifyMountPath}`)
   const verifyMount = await sandboxes[0].commands.run(
-    `everest mount lakefs://${repository}/${baseRef}/ ${verifyMountPath} ${MOUNT_FLAGS}`,
+    `everest mount lakefs://${repository}/${transactionBranch}/ ${verifyMountPath} ${MOUNT_FLAGS}`,
   )
   assertCommandSucceeded(verifyMount, "read-back verification mount")
   try {
@@ -324,10 +352,33 @@ try {
     await sandboxes[0].commands.run(`everest umount ${verifyMountPath}`)
   }
 
+  const publish = await mergeBranch(
+    sandboxes[0],
+    endpoint,
+    repository,
+    transactionBranch,
+    baseRef,
+  )
   console.log(
-    `completed run ${runId}; results verified under ${outputPrefix}/ on ${baseRef}`,
+    `atomically published ${transactionBranch} to ${baseRef}\n${publish}`,
+  )
+
+  console.log(
+    `completed run ${runId}; results are under ${outputPrefix}/ on ${baseRef}`,
   )
 } finally {
+  if (transactionBranchCreated && sandboxes[0]) {
+    try {
+      await deleteBranch(sandboxes[0], endpoint, repository, transactionBranch)
+      console.log(`deleted transaction branch ${transactionBranch}`)
+    } catch (error) {
+      console.error(
+        `failed to delete transaction branch ${transactionBranch}:`,
+        error,
+      )
+    }
+  }
+
   const cleanup = await Promise.allSettled(
     sandboxes.map(async (sandbox) => {
       await sandbox.commands.run(`everest umount ${mountPath}`)

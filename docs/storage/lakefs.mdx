@@ -33,14 +33,22 @@ policy. Superserve does not provision or operate lakeFS.
 <Note>
 Everest is proprietary software that requires **lakeFS Cloud or Enterprise**.
 Obtain the binary, or an authorized download URL for it, from lakeFS. The
-entitlement is a property of the lakeFS deployment you mount against, not of
-the credentials you authenticate with — Everest checks it against the server
-at mount time.
+binary can be downloaded and installed without authenticating to the lakeFS
+API, but that alone grants no data access. A usable mount still requires a
+Cloud or Enterprise deployment, valid lakeFS credentials, and sufficient
+repository permissions.
 </Note>
+
+| Input or check | What it controls |
+| --- | --- |
+| Everest URL and SHA-256 | Downloads and verifies the binary. Success does not authenticate to lakeFS. |
+| lakeFS endpoint and key pair | Authenticates Everest and REST API requests. Invalid credentials prevent a usable mount. |
+| lakeFS RBAC policy | Authorizes repository reads, writes, commits, and branch operations. |
+| Cloud or Enterprise deployment | Makes the Mount feature available on the target lakeFS server. |
 
 ## 1. Add Everest to a template
 
-Fetch Everest from the download URL lakeFS gave you and verify it against the
+Fetch Everest from the download URL and verify it against the
 checksum they published for that artifact — pin both rather than trusting the
 download:
 
@@ -99,6 +107,8 @@ template.wait_until_ready()
 </CodeGroup>
 
 Superserve templates run Linux x86_64, so use that build of Everest.
+The checksum protects the template build from a corrupted or unexpected
+artifact; it is not a lakeFS credential or an entitlement check.
 
 ## 2. Store the lakeFS credential
 
@@ -138,6 +148,11 @@ Secret.create(
 ```
 </CodeGroup>
 
+Creating the Superserve Secret stores the credential but does not validate it.
+The first authenticated lakeFS request rejects an invalid key pair; in the
+multi-agent example, that is the request that creates the temporary run
+branch, before Everest attempts a mount.
+
 ## 3. Mount the repository
 
 Bind the secret once using Everest's credential variables. Branch and merge
@@ -160,9 +175,12 @@ const sandbox = await Sandbox.create({
 })
 
 await sandbox.commands.run("mkdir -p /mnt/lakefs")
-await sandbox.commands.run(
+const mount = await sandbox.commands.run(
   "everest mount lakefs://my-repository/main/ /mnt/lakefs --protocol fuse --k2=false --presign=false",
 )
+if (mount.exitCode !== 0) {
+  throw new Error(`Everest mount failed: ${mount.stderr || mount.stdout}`)
+}
 
 const files = await sandbox.commands.run("find /mnt/lakefs -maxdepth 2 -type f")
 console.log(files.stdout)
@@ -185,9 +203,11 @@ sandbox = Sandbox.create(
 )
 
 sandbox.commands.run("mkdir -p /mnt/lakefs")
-sandbox.commands.run(
+mount = sandbox.commands.run(
     "everest mount lakefs://my-repository/main/ /mnt/lakefs --protocol fuse --k2=false --presign=false"
 )
+if mount.exit_code != 0:
+    raise RuntimeError(f"Everest mount failed: {mount.stderr or mount.stdout}")
 
 files = sandbox.commands.run("find /mnt/lakefs -maxdepth 2 -type f")
 print(files.stdout)
@@ -216,6 +236,11 @@ reads. A locked-down sandbox needs HTTPS egress to your lakeFS endpoint — with
 `--presign=false` all metadata *and* object data flow through it, so the
 object store doesn't need its own egress rule. If you later switch presigned
 transfers back on, allow the object-store hosts too.
+
+An installed Everest binary is not a security boundary. With invalid
+credentials it cannot resolve the requested ref or create a usable mount;
+with valid but under-scoped credentials, lakeFS rejects whichever read,
+write, commit, or branch operations the identity is not authorized to perform.
 
 ## Choosing a credential scope
 
@@ -258,8 +283,8 @@ await sandbox.commands.run('everest commit /mnt/lakefs -m "Add agent 1 results"'
 ```
 
 Give each write-capable sandbox its own branch and output path to avoid merge
-conflicts, and merge explicitly through the lakeFS REST API once every agent
-has committed.
+conflicts. Merge those branches into a temporary run branch, validate the
+combined result, and publish it with one final merge into `main`.
 
 ## Multiple agents on one dataset
 
@@ -269,12 +294,16 @@ once. The [multi-agent
 example](https://github.com/superserve-ai/superserve/tree/main/examples/lakefs)
 creates one branch and sandbox per agent, partitions a shared input dataset
 across them (so agents don't step on each other's files), has each agent
-commit its own results, merges every branch back into the base ref, and then
-**verifies the merge** by mounting the base ref read-only from a fresh mount
-and checking every agent's output landed — worth doing before you trust a
-merge in your own pipeline, not just in the demo. This is exactly the pattern
-`--k2=false` above protects: without it, that verification mount can report
-a false negative.
+commit its own results, and merges every branch into an isolated transaction
+branch. It then mounts that branch read-only from a fresh mount and checks
+that every agent's output landed before a single final merge publishes the
+complete batch to `main`. Readers of `main` therefore see all results or none
+from that run. The TypeScript coordinator implements lakeFS's transaction
+pattern explicitly with branch and merge REST calls; it does not require the
+Python SDK's `transact()` context manager. This is exactly the pattern
+`--k2=false` above protects: without it, the validation mount can report a
+false negative. The example deletes the temporary transaction branch during
+cleanup and leaves the per-agent branches available for inspection.
 
 ## Unmount and cleanup
 
@@ -299,3 +328,5 @@ yourself.
 - [Templates](/templates/overview)
 - [lakeFS Mount (Everest) releases](https://docs.lakefs.io/releases/everest/)
 - [lakeFS Mount (Everest) reference](https://docs.lakefs.io/mount/)
+- [lakeFS authentication](https://docs.lakefs.io/security/authentication/)
+- [lakeFS Python transaction helper](https://docs.lakefs.io/reference/python/transactions/)
