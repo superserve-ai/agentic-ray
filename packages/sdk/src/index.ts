@@ -10,6 +10,13 @@ export {
   resolveConfig,
 } from "./config.js"
 export type { ResolvedConfig } from "./config.js"
+export { DESKTOP_STREAM_PORT } from "./desktop.js"
+export type {
+  DesktopAction,
+  MouseButton,
+  Screenshot,
+  StreamUrlOptions,
+} from "./desktop.js"
 export {
   AuthenticationError,
   BuildError,

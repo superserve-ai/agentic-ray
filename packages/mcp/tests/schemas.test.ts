@@ -11,6 +11,7 @@ const EXPECTED_TOOLS = [
   "sandbox_list",
   "sandbox_info",
   "sandbox_exec",
+  "sandbox_computer",
   "sandbox_files_read",
   "sandbox_files_write",
   "sandbox_files_list",

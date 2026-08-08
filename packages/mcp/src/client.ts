@@ -25,6 +25,8 @@ import {
 import type {
   BuildStep,
   CommandResult,
+  DesktopAction,
+  Screenshot,
   NetworkConfig,
   NetworkEvent,
   NetworkLogPage,
@@ -238,6 +240,13 @@ export interface SandboxClient {
   pause(id: string): Promise<void>
   resume(id: string): Promise<SandboxSummary>
   kill(id: string): Promise<void>
+  /** Capture the desktop as PNG bytes + dimensions (desktop templates only). */
+  desktopScreenshot(id: string): Promise<Screenshot>
+  /** Execute an ordered input batch under the sandbox's input lock. */
+  desktopActions(id: string, actions: DesktopAction[]): Promise<void>
+  desktopResize(id: string, width: number, height: number): Promise<void>
+  /** Publish the noVNC viewer port and return its browser URL. */
+  desktopStreamUrl(id: string): Promise<string>
 }
 
 function defaultName(): string {
@@ -553,6 +562,26 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
       throw new SandboxError(
         `Could not list ${path}${detail ? `: ${detail}` : ""}`,
       )
+    },
+
+    async desktopScreenshot(id) {
+      const sb = await Sandbox.connect(id, conn)
+      return sb.desktop.screenshot()
+    },
+
+    async desktopActions(id, actions) {
+      const sb = await Sandbox.connect(id, conn)
+      await sb.desktop.actions(actions)
+    },
+
+    async desktopResize(id, width, height) {
+      const sb = await Sandbox.connect(id, conn)
+      await sb.desktop.resize(width, height)
+    },
+
+    async desktopStreamUrl(id) {
+      const sb = await Sandbox.connect(id, conn)
+      return sb.desktop.getStreamUrl()
     },
 
     async pause(id) {

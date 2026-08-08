@@ -12,6 +12,7 @@ import httpx
 from ._config import ResolvedConfig, preview_url, resolve_config
 from ._http import api_request
 from .commands import Commands, CommandsDeps
+from .desktop import DESKTOP_STREAM_PORT, Desktop, DesktopDeps
 from .errors import NotFoundError, SandboxError
 from .files import Files, FilesDeps
 from .types import (
@@ -74,6 +75,21 @@ class Sandbox:
                 sandbox_host=config.sandbox_host,
                 get_access_token=lambda: self._access_token,
                 refresh_activate=self._refresh_activate,
+            ),
+            client=self._http_client,
+        )
+
+        def _publish_stream_port() -> None:
+            self.publish_preview_port(DESKTOP_STREAM_PORT)
+
+        self.desktop = Desktop(
+            DesktopDeps(
+                sandbox_id=self.id,
+                sandbox_host=config.sandbox_host,
+                get_access_token=lambda: self._access_token,
+                refresh_activate=self._refresh_activate,
+                publish_stream_port=_publish_stream_port,
+                stream_base_url=lambda: self.get_preview_url(DESKTOP_STREAM_PORT),
             ),
             client=self._http_client,
         )

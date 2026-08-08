@@ -16,6 +16,7 @@
 
 import { Commands } from "./commands.js"
 import { previewUrl, type ResolvedConfig, resolveConfig } from "./config.js"
+import { Desktop, DESKTOP_STREAM_PORT } from "./desktop.js"
 import { NotFoundError, SandboxError } from "./errors.js"
 import { Files } from "./files.js"
 import { request, requestVoid } from "./http.js"
@@ -73,6 +74,12 @@ export class Sandbox {
    */
   readonly files: Files
 
+  /**
+   * Control a GUI desktop inside this sandbox (screenshot, mouse, keyboard,
+   * live viewer). Requires a desktop-enabled template.
+   */
+  readonly desktop: Desktop
+
   private _accessToken: string
   private _refreshInFlight: Promise<string> | null = null
   private readonly _config: ResolvedConfig
@@ -103,6 +110,16 @@ export class Sandbox {
       sandboxHost: config.sandboxHost,
       getAccessToken: () => this._accessToken,
       refreshActivate: () => this._refreshActivate(),
+    })
+    this.desktop = new Desktop({
+      sandboxId: this.id,
+      sandboxHost: config.sandboxHost,
+      getAccessToken: () => this._accessToken,
+      refreshActivate: () => this._refreshActivate(),
+      publishStreamPort: async () => {
+        await this.publishPreviewPort(DESKTOP_STREAM_PORT)
+      },
+      streamBaseUrl: () => this.getPreviewUrl(DESKTOP_STREAM_PORT),
     })
   }
 

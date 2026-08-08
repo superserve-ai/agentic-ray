@@ -50,6 +50,31 @@ sandbox to strict `public`. `legacy_public` is returned only for pre-migration
 sandboxes.
 See the [preview URL guide](https://docs.superserve.ai/sandbox/preview-urls).
 
+## Desktop (computer use)
+
+Control a GUI desktop inside a sandbox — screenshot, mouse, keyboard, and a
+live browser viewer. Requires a desktop-enabled template.
+
+```python
+sandbox = Sandbox.create(template="superserve/desktop")
+
+shot = sandbox.desktop.screenshot()  # PNG bytes + dimensions
+sandbox.desktop.click(640, 400)
+sandbox.desktop.write("hello")  # no per-character pacing
+sandbox.desktop.press("ctrl+l")
+sandbox.desktop.drag((10, 10), (200, 200))  # one atomic request
+
+# Several model-emitted actions in a single round trip:
+sandbox.desktop.actions([
+    {"type": "click", "x": 640, "y": 32},
+    {"type": "write", "text": "https://example.com"},
+    {"type": "press", "key": "enter"},
+])
+
+sandbox.desktop.resize(1920, 1080)  # live, no restart
+viewer = sandbox.desktop.get_stream_url()  # noVNC URL
+```
+
 ## Authentication
 
 Set the `SUPERSERVE_API_KEY` environment variable:
