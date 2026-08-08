@@ -29,6 +29,13 @@ const USER_AGENT = `@superserve/sdk/${SDK_VERSION} (node/${
 
 // Retry tuning
 const DEFAULT_MAX_ATTEMPTS = 3
+// A retryable 409 (see retryConflict) gets a longer budget: the server returns
+// it while a sandbox is mid-transition (resuming/pausing/starting) and clears
+// it once the worker settles, which takes seconds — longer than a transient
+// 5xx/429 blip. Eight attempts of capped exponential backoff span ~13s, enough
+// to outlast a normal transition while staying far under the server's
+// stale-transition grace.
+const CONFLICT_MAX_ATTEMPTS = 8
 const BASE_BACKOFF_MS = 100
 const MAX_BACKOFF_MS = 30_000
 const RETRYABLE_STATUSES = new Set([429, 502, 503, 504])
@@ -51,6 +58,15 @@ interface RequestOptions {
    * control-plane responses (the default — unchanged `res.text()` behavior).
    */
   maxBytes?: number
+  /**
+   * Retry a 409 response on this (idempotent) request. Set it only where a 409
+   * is transient and self-clearing: the sandbox delete endpoint returns 409
+   * while the sandbox is mid-transition (resuming/pausing/starting) and clears
+   * it once the worker settles. Leave it unset where 409 is a terminal
+   * precondition (e.g. deleting a template that still has active sandboxes), so
+   * the call fails fast instead of retrying in vain. Only honored on GET/DELETE.
+   */
+  retryConflict?: boolean
 }
 
 /**
@@ -124,7 +140,8 @@ function isNetworkError(err: unknown): boolean {
  * and optional retry on transient conditions (429, 5xx, network errors).
  *
  * Only retries when `opts.retryable` is true. Callers must ensure the
- * operation is idempotent before enabling retries.
+ * operation is idempotent before enabling retries. `opts.retryConflict` also
+ * retries a self-clearing 409 (see RequestOptions.retryConflict).
  */
 async function retryableFetch(
   input: RequestInfo | URL,
@@ -133,11 +150,13 @@ async function retryableFetch(
     timeoutMs: number
     maxAttempts?: number
     retryable: boolean
+    retryConflict?: boolean
     userSignal?: AbortSignal
   },
 ): Promise<Response> {
   const maxAttempts = opts.retryable
-    ? (opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS)
+    ? (opts.maxAttempts ??
+      (opts.retryConflict ? CONFLICT_MAX_ATTEMPTS : DEFAULT_MAX_ATTEMPTS))
     : 1
 
   let lastError: unknown
@@ -154,8 +173,14 @@ async function retryableFetch(
     try {
       const res = await fetch(input, { ...init, signal })
 
-      // Retry on specific 5xx / 429
-      if (opts.retryable && RETRYABLE_STATUSES.has(res.status)) {
+      // Retry transient 5xx / 429. Also retry a 409 when the caller marked this
+      // request's conflict as self-clearing (a sandbox delete deferred while
+      // the sandbox is mid-transition) — that delete is idempotent, so retrying
+      // is safe; other 409s (e.g. a template with active sandboxes) are terminal.
+      const retryableStatus =
+        RETRYABLE_STATUSES.has(res.status) ||
+        (res.status === 409 && opts.retryConflict === true)
+      if (opts.retryable && retryableStatus) {
         if (attempt >= maxAttempts) {
           return res
         }
@@ -227,8 +252,10 @@ async function readErrorBody(
  *
  * Throws typed SandboxError subclasses on non-2xx responses.
  *
- * Retries GET/DELETE on transient failures (429, 502/503/504, network errors).
- * POST/PATCH are never retried (not idempotent).
+ * Retries GET/DELETE on transient failures (429, 502/503/504, network errors),
+ * and — when `retryConflict` is set — a self-clearing 409 (a mid-transition
+ * sandbox that clears once its worker settles). POST/PATCH are never retried
+ * (not idempotent).
  */
 export async function request<T>(opts: RequestOptions): Promise<T> {
   const {
@@ -239,6 +266,7 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
     timeoutMs = DEFAULT_TIMEOUT_MS,
     signal: userSignal,
     maxBytes,
+    retryConflict,
   } = opts
 
   const retryable = method === "GET" || method === "DELETE"
@@ -256,7 +284,7 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
         headers: mergedHeaders,
         body: body !== undefined ? JSON.stringify(body) : undefined,
       },
-      { timeoutMs, retryable, userSignal },
+      { timeoutMs, retryable, retryConflict, userSignal },
     )
 
     if (!res.ok) {

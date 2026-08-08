@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
+  ConflictError,
   NotFoundError,
   SandboxError,
   ServerError,
@@ -140,6 +141,42 @@ describe("http.request", () => {
         body: { a: 1 },
       }),
     ).rejects.toBeInstanceOf(ServerError)
+    expect(mock).toHaveBeenCalledTimes(1)
+  })
+
+  it("retries DELETE on 409 with retryConflict, then succeeds", async () => {
+    let call = 0
+    const mock = installFetch(async () => {
+      call++
+      if (call === 1) {
+        return jsonResponse(
+          { error: { code: "conflict", message: "mid-transition" } },
+          { status: 409 },
+        )
+      }
+      return emptyResponse(204)
+    })
+    const out = await request<void>({
+      method: "DELETE",
+      url: "https://example.com/sandboxes/abc",
+      retryConflict: true,
+    })
+    expect(out).toBeUndefined()
+    expect(mock).toHaveBeenCalledTimes(2)
+  })
+
+  it("does NOT retry 409 on DELETE without retryConflict", async () => {
+    // A terminal 409 (e.g. deleting a template with active sandboxes) must fail
+    // fast, not spin the conflict-retry budget.
+    const mock = installFetch(async () =>
+      jsonResponse(
+        { error: { code: "conflict", message: "has active sandboxes" } },
+        { status: 409 },
+      ),
+    )
+    await expect(
+      request({ method: "DELETE", url: "https://example.com/templates/abc" }),
+    ).rejects.toBeInstanceOf(ConflictError)
     expect(mock).toHaveBeenCalledTimes(1)
   })
 
