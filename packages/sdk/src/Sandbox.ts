@@ -289,8 +289,8 @@ export class Sandbox {
         url: `${config.baseUrl}/sandboxes/${sandboxId}`,
         headers: { "X-API-Key": config.apiKey },
         signal: options.signal,
-        // The server returns 409 while the sandbox is mid-transition and clears
-        // it once the worker settles; retry so a bulk delete doesn't leave it.
+        // Retry the mid-transition 409 so a bulk delete doesn't leave the
+        // sandbox behind (see RequestOptions.retryConflict).
         retryConflict: true,
       })
     } catch (err) {
@@ -373,8 +373,8 @@ export class Sandbox {
         method: "DELETE",
         url: `${this._config.baseUrl}/sandboxes/${this.id}`,
         headers: { "X-API-Key": this._config.apiKey },
-        // The server returns 409 while the sandbox is mid-transition and clears
-        // it once the worker settles; retry so a bulk delete doesn't leave it.
+        // Retry the mid-transition 409 so a bulk delete doesn't leave the
+        // sandbox behind (see RequestOptions.retryConflict).
         retryConflict: true,
       })
     } catch (err) {

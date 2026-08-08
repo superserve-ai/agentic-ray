@@ -29,12 +29,10 @@ const USER_AGENT = `@superserve/sdk/${SDK_VERSION} (node/${
 
 // Retry tuning
 const DEFAULT_MAX_ATTEMPTS = 3
-// A retryable 409 (see retryConflict) gets a longer budget: the server returns
-// it while a sandbox is mid-transition (resuming/pausing/starting) and clears
-// it once the worker settles, which takes seconds — longer than a transient
-// 5xx/429 blip. Eight attempts of capped exponential backoff span ~13s, enough
-// to outlast a normal transition while staying far under the server's
-// stale-transition grace.
+// A retryable 409 (see retryConflict) gets a longer budget than a transient
+// 5xx/429: the conflict only clears once a mid-transition sandbox finishes
+// transitioning, which takes seconds. Eight attempts of capped exponential
+// backoff span ~13s.
 const CONFLICT_MAX_ATTEMPTS = 8
 const BASE_BACKOFF_MS = 100
 const MAX_BACKOFF_MS = 30_000
@@ -60,11 +58,11 @@ interface RequestOptions {
   maxBytes?: number
   /**
    * Retry a 409 response on this (idempotent) request. Set it only where a 409
-   * is transient and self-clearing: the sandbox delete endpoint returns 409
-   * while the sandbox is mid-transition (resuming/pausing/starting) and clears
-   * it once the worker settles. Leave it unset where 409 is a terminal
-   * precondition (e.g. deleting a template that still has active sandboxes), so
-   * the call fails fast instead of retrying in vain. Only honored on GET/DELETE.
+   * is transient and self-clearing: a sandbox delete returns 409 while the
+   * sandbox is mid-transition (resuming/pausing/starting) and clears once the
+   * transition completes. Leave it unset where 409 is a terminal precondition
+   * (e.g. deleting a template that still has active sandboxes), so the call
+   * fails fast instead of retrying in vain. Only honored on GET/DELETE.
    */
   retryConflict?: boolean
 }
@@ -173,10 +171,8 @@ async function retryableFetch(
     try {
       const res = await fetch(input, { ...init, signal })
 
-      // Retry transient 5xx / 429. Also retry a 409 when the caller marked this
-      // request's conflict as self-clearing (a sandbox delete deferred while
-      // the sandbox is mid-transition) — that delete is idempotent, so retrying
-      // is safe; other 409s (e.g. a template with active sandboxes) are terminal.
+      // Transient 5xx / 429, plus a caller-marked self-clearing 409 (see
+      // RequestOptions.retryConflict).
       const retryableStatus =
         RETRYABLE_STATUSES.has(res.status) ||
         (res.status === 409 && opts.retryConflict === true)
@@ -254,8 +250,8 @@ async function readErrorBody(
  *
  * Retries GET/DELETE on transient failures (429, 502/503/504, network errors),
  * and — when `retryConflict` is set — a self-clearing 409 (a mid-transition
- * sandbox that clears once its worker settles). POST/PATCH are never retried
- * (not idempotent).
+ * sandbox that clears once the transition completes). POST/PATCH are never
+ * retried (not idempotent).
  */
 export async function request<T>(opts: RequestOptions): Promise<T> {
   const {
