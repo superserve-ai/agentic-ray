@@ -30,10 +30,11 @@ const USER_AGENT = `@superserve/sdk/${SDK_VERSION} (node/${
 // Retry tuning
 const DEFAULT_MAX_ATTEMPTS = 3
 // A retryable 409 (see retryConflict) gets a longer budget than a transient
-// 5xx/429: the conflict only clears once a mid-transition sandbox finishes
-// transitioning, which takes seconds. Eight attempts of capped exponential
-// backoff span ~13s.
-const CONFLICT_MAX_ATTEMPTS = 8
+// 5xx/429: it only clears once a mid-transition sandbox finishes, which can
+// take up to ~60s (a pause/resume). With backoff capped at MAX_BACKOFF_MS,
+// twelve attempts put the last few retries past ~80s, covering that window;
+// a shorter budget would give up mid-transition and leave the sandbox.
+const CONFLICT_MAX_ATTEMPTS = 12
 const BASE_BACKOFF_MS = 100
 const MAX_BACKOFF_MS = 30_000
 const RETRYABLE_STATUSES = new Set([429, 502, 503, 504])
