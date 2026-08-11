@@ -29,11 +29,9 @@ const USER_AGENT = `@superserve/sdk/${SDK_VERSION} (node/${
 
 // Retry tuning
 const DEFAULT_MAX_ATTEMPTS = 3
-// A retryable 409 (see retryConflict) gets a longer budget than a transient
-// 5xx/429: it only clears once a mid-transition sandbox finishes, which can
-// take up to ~60s (a pause/resume). With backoff capped at MAX_BACKOFF_MS,
-// twelve attempts put the last few retries past ~80s, covering that window;
-// a shorter budget would give up mid-transition and leave the sandbox.
+// The conflict budget (see retryConflict) must outlast a pause/resume, which
+// can take ~60s. With backoff capped at MAX_BACKOFF_MS, twelve attempts put the
+// last retries past ~80s; fewer would give up mid-transition.
 const CONFLICT_MAX_ATTEMPTS = 12
 const BASE_BACKOFF_MS = 100
 const MAX_BACKOFF_MS = 30_000
@@ -153,9 +151,8 @@ async function retryableFetch(
     userSignal?: AbortSignal
   },
 ): Promise<Response> {
-  // Starts at the default bound; a retryConflict request extends it to the
-  // conflict budget only once an actual 409 is seen (below), so unrelated
-  // transient failures (429/5xx/network) keep their normal bound.
+  // Extends to the conflict budget only after an actual 409 (below), so
+  // transient 5xx/429/network keep their default bound.
   let maxAttempts = opts.retryable
     ? (opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS)
     : 1
@@ -257,8 +254,7 @@ async function readErrorBody(
  * Throws typed SandboxError subclasses on non-2xx responses.
  *
  * Retries GET/DELETE on transient failures (429, 502/503/504, network errors),
- * and — when `retryConflict` is set — a self-clearing 409 (a mid-transition
- * sandbox that clears once the transition completes). POST/PATCH are never
+ * and — when `retryConflict` is set — a self-clearing 409. POST/PATCH are never
  * retried (not idempotent).
  */
 export async function request<T>(opts: RequestOptions): Promise<T> {
