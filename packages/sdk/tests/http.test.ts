@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   ConflictError,
   NotFoundError,
+  RateLimitError,
   SandboxError,
   ServerError,
   TimeoutError,
@@ -163,6 +164,23 @@ describe("http.request", () => {
     })
     expect(out).toBeUndefined()
     expect(mock).toHaveBeenCalledTimes(2)
+  })
+
+  it("retryConflict does not extend the budget for non-409 failures", async () => {
+    // A rate-limited delete keeps the default 3-attempt bound; only an actual
+    // 409 unlocks the longer conflict budget.
+    const mock = installFetch(
+      async () =>
+        new Response("{}", { status: 429, headers: { "Retry-After": "0" } }),
+    )
+    await expect(
+      request({
+        method: "DELETE",
+        url: "https://example.com/sandboxes/abc",
+        retryConflict: true,
+      }),
+    ).rejects.toBeInstanceOf(RateLimitError)
+    expect(mock).toHaveBeenCalledTimes(3)
   })
 
   it("does NOT retry 409 on DELETE without retryConflict", async () => {

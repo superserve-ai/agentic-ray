@@ -152,9 +152,11 @@ async function retryableFetch(
     userSignal?: AbortSignal
   },
 ): Promise<Response> {
-  const maxAttempts = opts.retryable
-    ? (opts.maxAttempts ??
-      (opts.retryConflict ? CONFLICT_MAX_ATTEMPTS : DEFAULT_MAX_ATTEMPTS))
+  // Starts at the default bound; a retryConflict request extends it to the
+  // conflict budget only once an actual 409 is seen (below), so unrelated
+  // transient failures (429/5xx/network) keep their normal bound.
+  let maxAttempts = opts.retryable
+    ? (opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS)
     : 1
 
   let lastError: unknown
@@ -177,6 +179,11 @@ async function retryableFetch(
         RETRYABLE_STATUSES.has(res.status) ||
         (res.status === 409 && opts.retryConflict === true)
       if (opts.retryable && retryableStatus) {
+        // A self-clearing 409 (implies retryConflict) extends the budget; a
+        // caller-set maxAttempts is respected as-is.
+        if (res.status === 409 && opts.maxAttempts === undefined) {
+          maxAttempts = CONFLICT_MAX_ATTEMPTS
+        }
         if (attempt >= maxAttempts) {
           return res
         }
