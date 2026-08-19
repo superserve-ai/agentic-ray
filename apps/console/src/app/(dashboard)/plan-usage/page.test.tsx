@@ -11,6 +11,7 @@ const useBillingUsage = vi.fn()
 const useSandboxesPage = vi.fn()
 const useUser = vi.fn()
 const useTeams = vi.fn()
+const useDashboardTeamContext = vi.fn()
 const useCustomerBillingPeriods = vi.fn()
 const useCustomerBillingUsage = vi.fn()
 const useCustomerBillingExportPreview = vi.fn()
@@ -51,6 +52,11 @@ vi.mock("@/hooks/use-user", () => ({
   useUser: () => useUser(),
 }))
 
+vi.mock("@/components/query-provider", () => ({
+  useDashboardTeamContext: () => useDashboardTeamContext(),
+  useQueryScope: () => "self",
+}))
+
 vi.mock("@superserve/ui", async () => {
   const actual =
     await vi.importActual<typeof import("@superserve/ui")>("@superserve/ui")
@@ -80,6 +86,7 @@ describe("PlanUsagePage", () => {
       user: { id: "user-1" },
       loading: false,
     })
+    useDashboardTeamContext.mockReturnValue(null)
     useTeams.mockReturnValue({
       data: {
         teams: [{ id: "team-1", name: "Pilot Team", region: "use" }],
@@ -407,5 +414,31 @@ describe("PlanUsagePage", () => {
     expect(screen.getByTestId("compute-section")).toBeInTheDocument()
     expect(screen.getByTestId("storage-section")).toBeInTheDocument()
     expect(screen.queryByText("CPU Usage")).not.toBeInTheDocument()
+  })
+
+  it("shows customer billing for impersonated teams outside the member directory", () => {
+    useDashboardTeamContext.mockReturnValue({
+      teamId: "impersonated-team",
+      region: "use",
+      name: "Impersonated Team",
+    })
+    useTeams.mockReturnValue({
+      data: {
+        teams: [],
+        activeTeamId: "team-1",
+        activeRegion: "use",
+      },
+      isPending: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    renderPage()
+
+    expect(screen.getByTestId("customer-billing-section")).toBeInTheDocument()
+    expect(useCustomerBillingPeriods).toHaveBeenCalledWith(
+      "impersonated-team",
+      "use:impersonated-team",
+    )
   })
 })

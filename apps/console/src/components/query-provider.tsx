@@ -6,9 +6,22 @@ import { createContext, useContext, useState } from "react"
 import { ApiError } from "@/lib/api/client"
 
 const QueryScopeContext = createContext("self")
+export interface DashboardTeamContextValue {
+  teamId: string
+  region: string
+  name: string
+}
+
+const DashboardTeamContext = createContext<DashboardTeamContextValue | null>(
+  null,
+)
 
 export function useQueryScope(): string {
   return useContext(QueryScopeContext)
+}
+
+export function useDashboardTeamContext(): DashboardTeamContextValue | null {
+  return useContext(DashboardTeamContext)
 }
 
 function createQueryClient(): QueryClient {
@@ -34,16 +47,22 @@ function createQueryClient(): QueryClient {
 
 export function QueryProvider({
   cacheScope = "self",
+  teamContext = null,
   children,
 }: {
   cacheScope?: string
+  teamContext?: DashboardTeamContextValue | null
   children: React.ReactNode
 }) {
   const [queryClient] = useState(() => createQueryClient())
 
   return (
     <QueryScopeContext.Provider value={cacheScope}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <DashboardTeamContext.Provider value={teamContext}>
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      </DashboardTeamContext.Provider>
     </QueryScopeContext.Provider>
   )
 }

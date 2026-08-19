@@ -16,7 +16,10 @@ import { DateRangeFilter, type DateRange } from "@/components/date-range-filter"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
-import { useQueryScope } from "@/components/query-provider"
+import {
+  useDashboardTeamContext,
+  useQueryScope,
+} from "@/components/query-provider"
 import { TableSkeleton } from "@/components/table-skeleton"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { useBillingUsage } from "@/hooks/use-billing-usage"
@@ -76,6 +79,7 @@ export function PlanUsagePageClient() {
   const queryScope = useQueryScope()
   const { user, loading: userLoading } = useUser()
   const teamsQuery = useTeams()
+  const dashboardTeam = useDashboardTeamContext()
   const summaryQuery = useBillingSummary(!userLoading && !!user)
   const summary = summaryQuery.data
   const activeTeam = useMemo(() => {
@@ -92,6 +96,19 @@ export function PlanUsagePageClient() {
       ) ?? null
     )
   }, [queryScope, teamsQuery.data])
+  const billingTeam = useMemo(() => {
+    if (dashboardTeam) {
+      return dashboardTeam
+    }
+    if (activeTeam) {
+      return {
+        teamId: activeTeam.id,
+        region: activeTeam.region,
+        name: activeTeam.name,
+      }
+    }
+    return null
+  }, [activeTeam, dashboardTeam])
   const billingPeriod = useMemo(
     () => toDateRange(summary?.billing_period),
     [summary?.billing_period],
@@ -225,11 +242,11 @@ export function PlanUsagePageClient() {
               <BillingSummary summary={summary} />
             ) : null}
 
-            {activeTeam && (
+            {billingTeam && (
               <CustomerBillingSection
-                teamId={activeTeam.id}
-                teamRegion={activeTeam.region}
-                teamName={activeTeam.name}
+                teamId={billingTeam.teamId}
+                teamRegion={billingTeam.region}
+                teamName={billingTeam.name}
                 summary={summary ?? null}
               />
             )}
