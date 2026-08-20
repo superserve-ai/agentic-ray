@@ -397,7 +397,7 @@ class SandboxStatus(str, Enum):
 - `active` - running and ready to accept commands
 - `pausing` - transient, briefly visible while a pause is in progress
 - `paused` - stopped with state saved to disk
-- `resuming` - transient, briefly visible while a paused sandbox is being restored to `active` (retry shortly)
+- `resuming` - transient, briefly visible while a paused sandbox is being restored to `active`
 - `failed` - the sandbox couldn't boot or resume; the entry remains until you delete it
 - `deleted` - removed; deleted sandboxes do not appear in list results
 
