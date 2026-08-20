@@ -11,7 +11,14 @@ import { SandboxError } from "./errors.js"
 // Sandbox
 // ---------------------------------------------------------------------------
 
-export type SandboxStatus = "active" | "paused" | "resuming" | "failed"
+export type SandboxStatus =
+  | "starting"
+  | "active"
+  | "pausing"
+  | "paused"
+  | "resuming"
+  | "failed"
+  | "deleted"
 
 /** Current preview-routing policy returned by the API. */
 export type PreviewAccess = "legacy_public" | "public" | "private"
@@ -85,22 +92,11 @@ export interface SandboxCreateOptions extends ConnectionOptions {
   previewAccess?: PreviewAccessPolicy
 }
 
-/** Status values the list endpoint accepts as a filter — a superset of
- * `SandboxStatus` that includes the transitional and terminal states. */
-export type SandboxStatusFilter =
-  | "starting"
-  | "active"
-  | "pausing"
-  | "paused"
-  | "resuming"
-  | "failed"
-  | "deleted"
-
 export interface SandboxListOptions extends ConnectionOptions {
   metadata?: Record<string, string>
   /** Only return sandboxes in this status (e.g. `"active"` for currently
    * running ones — usually a far smaller set than the full history). */
-  status?: SandboxStatusFilter
+  status?: SandboxStatus
   /** Maximum rows to return. The API clamps values above its page-size cap.
    * Omitting it returns the team's entire sandbox list. */
   limit?: number

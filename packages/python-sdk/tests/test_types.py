@@ -126,17 +126,23 @@ class TestToSandboxInfo:
 
 class TestSandboxStatus:
     def test_all_statuses_exist(self) -> None:
+        assert SandboxStatus.STARTING.value == "starting"
         assert SandboxStatus.ACTIVE.value == "active"
+        assert SandboxStatus.PAUSING.value == "pausing"
         assert SandboxStatus.PAUSED.value == "paused"
         assert SandboxStatus.RESUMING.value == "resuming"
         assert SandboxStatus.FAILED.value == "failed"
+        assert SandboxStatus.DELETED.value == "deleted"
 
     def test_status_enum_values(self) -> None:
         assert {s.value for s in SandboxStatus} == {
+            "starting",
             "active",
+            "pausing",
             "paused",
             "resuming",
             "failed",
+            "deleted",
         }
 
 

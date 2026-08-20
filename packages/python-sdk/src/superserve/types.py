@@ -13,10 +13,13 @@ from .errors import SandboxError
 
 
 class SandboxStatus(str, Enum):
+    STARTING = "starting"
     ACTIVE = "active"
+    PAUSING = "pausing"
     PAUSED = "paused"
     RESUMING = "resuming"
     FAILED = "failed"
+    DELETED = "deleted"
 
 
 class PreviewAccess(str, Enum):
