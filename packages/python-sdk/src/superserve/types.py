@@ -139,7 +139,8 @@ def list_query(
     """Build the query string for the list-sandboxes endpoint ("" when empty)."""
     params: dict[str, str] = {f"metadata.{k}": v for k, v in (metadata or {}).items()}
     if status is not None:
-        params["status"] = status
+        # A (str, Enum) member urlencodes as "SandboxStatus.ACTIVE"; send its value.
+        params["status"] = status.value if isinstance(status, Enum) else status
     if limit is not None:
         params["limit"] = str(limit)
     if offset is not None:

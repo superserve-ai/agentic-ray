@@ -321,6 +321,14 @@ class TestList:
             Sandbox.list(metadata={"env": "prod"})
             assert "metadata.env=prod" in str(route.calls.last.request.url)
 
+    def test_status_enum_serializes_as_value(self) -> None:
+        with respx.mock() as router:
+            route = router.get(url__regex=rf"{API}/sandboxes.*").mock(
+                return_value=httpx.Response(200, json=[])
+            )
+            Sandbox.list(status=SandboxStatus.ACTIVE)
+            assert "status=active" in str(route.calls.last.request.url)
+
     def test_passes_status_and_pagination(self) -> None:
         with respx.mock() as router:
             route = router.get(url__regex=rf"{API}/sandboxes.*").mock(
