@@ -27,7 +27,9 @@ sandbox.commands.run("ls /app")
 
 ## Find sandboxes with `list`
 
-List all sandboxes on the team, or filter by metadata. Filters combine with AND.
+List all sandboxes on the team, or narrow the result with filters. `metadata`
+filters combine with AND; `status` selects one lifecycle state; `limit` and
+`offset` page through large lists.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -36,6 +38,13 @@ const all = await Sandbox.list()
 const prod = await Sandbox.list({
   metadata: { env: "prod", owner: "agent-7" },
 })
+
+// Only currently running sandboxes — a much smaller set than the
+// full history once paused sandboxes accumulate.
+const running = await Sandbox.list({ status: "active" })
+
+// Page through everything, 100 rows at a time.
+const page = await Sandbox.list({ limit: 100, offset: 100 })
 
 for (const info of prod) {
   console.log(info.id, info.name, info.status)
@@ -46,6 +55,13 @@ for (const info of prod) {
 all_boxes = Sandbox.list()
 
 prod = Sandbox.list(metadata={"env": "prod", "owner": "agent-7"})
+
+# Only currently running sandboxes — a much smaller set than the
+# full history once paused sandboxes accumulate.
+running = Sandbox.list(status="active")
+
+# Page through everything, 100 rows at a time.
+page = Sandbox.list(limit=100, offset=100)
 
 for info in prod:
     print(info.id, info.name, info.status.value)

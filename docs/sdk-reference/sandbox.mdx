@@ -102,21 +102,32 @@ sandbox = Sandbox.connect("7a3f2b8c-1234-...")
 ### `Sandbox.list`
 
 List sandboxes on the authenticated team. `metadata` filters combine with AND.
+`status` filters to one lifecycle state, and `limit`/`offset` page through the
+list.
 
 <CodeGroup>
 ```typescript TypeScript
 const all = await Sandbox.list()
 const prod = await Sandbox.list({ metadata: { env: "prod" } })
+const running = await Sandbox.list({ status: "active" })
+const page = await Sandbox.list({ limit: 100, offset: 100 })
 ```
 
 ```python Python
 all_boxes = Sandbox.list()
 prod = Sandbox.list(metadata={"env": "prod"})
+running = Sandbox.list(status="active")
+page = Sandbox.list(limit=100, offset=100)
 ```
 
 </CodeGroup>
 
 Returns an array of [`SandboxInfo`](#sandboxinfo).
+
+Without `limit`, the entire team history is returned in one response. Paused
+sandboxes are kept until you delete them, so long-running teams accumulate
+large lists — prefer `status: "active"` when you only need running sandboxes,
+or `limit`/`offset` paging when you need the full history.
 
 ### `Sandbox.killById` / `Sandbox.kill_by_id`
 
