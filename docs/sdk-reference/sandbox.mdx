@@ -167,12 +167,12 @@ Fetch the current server-side state. Returns a fresh [`SandboxInfo`](#sandboxinf
 <CodeGroup>
 ```typescript TypeScript
 const info = await sandbox.getInfo()
-console.log(info.status)  // "active" | "paused" | "resuming" | "failed"
+console.log(info.status)  // e.g. "active" — see SandboxStatus
 ```
 
 ```python Python
 info = sandbox.get_info()
-print(info.status.value)  # "active" | "paused" | "resuming" | "failed"
+print(info.status.value)  # e.g. "active" — see SandboxStatus
 ```
 
 </CodeGroup>
@@ -368,25 +368,38 @@ for e in page.events:
 
 <CodeGroup>
 ```typescript TypeScript
-type SandboxStatus = "active" | "paused" | "resuming" | "failed"
+type SandboxStatus =
+  | "starting"
+  | "active"
+  | "pausing"
+  | "paused"
+  | "resuming"
+  | "failed"
+  | "deleted"
 ```
 
 ```python Python
 from enum import Enum
 
 class SandboxStatus(str, Enum):
+    STARTING = "starting"
     ACTIVE = "active"
+    PAUSING = "pausing"
     PAUSED = "paused"
     RESUMING = "resuming"
     FAILED = "failed"
+    DELETED = "deleted"
 ```
 
 </CodeGroup>
 
+- `starting` - transient, briefly visible while a new sandbox boots
 - `active` - running and ready to accept commands
+- `pausing` - transient, briefly visible while a pause is in progress
 - `paused` - stopped with state saved to disk
 - `resuming` - transient, briefly visible while a paused sandbox is being restored to `active` (retry shortly)
 - `failed` - the sandbox couldn't boot or resume; the entry remains until you delete it
+- `deleted` - removed; deleted sandboxes do not appear in list results
 
 Deletion removes the sandbox entirely - subsequent API calls return `404`.
 
