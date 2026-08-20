@@ -52,6 +52,17 @@ class TestAsyncStaticMethodsAreAsync:
 
 
 class TestAsyncSandboxSmoke:
+    async def test_list_passes_status_and_pagination(self) -> None:
+        with respx.mock() as router:
+            route = router.get(url__regex=rf"{API}/sandboxes.*").mock(
+                return_value=httpx.Response(200, json=[])
+            )
+            await AsyncSandbox.list(status="active", limit=100, offset=200)
+            url = str(route.calls.last.request.url)
+            assert "status=active" in url
+            assert "limit=100" in url
+            assert "offset=200" in url
+
     async def test_create_returns_instance(self) -> None:
         with respx.mock() as router:
             router.post(f"{API}/sandboxes").mock(

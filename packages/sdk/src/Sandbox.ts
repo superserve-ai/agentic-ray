@@ -235,13 +235,20 @@ export class Sandbox {
   }
 
   /**
-   * List all sandboxes belonging to the authenticated team.
+   * List sandboxes belonging to the authenticated team.
+   *
+   * Without `limit`, the entire list is returned — for teams with a long
+   * sandbox history, prefer a `status` filter or `limit`+`offset` paging.
    *
    * @param options.metadata — Filter by metadata key-value pairs.
+   * @param options.status — Only return sandboxes in this status.
+   * @param options.limit — Maximum rows to return.
+   * @param options.offset — Rows to skip; combine with `limit` to page.
    *
    * @example
    * ```typescript
-   * const sandboxes = await Sandbox.list()
+   * const running = await Sandbox.list({ status: "active" })
+   * const page = await Sandbox.list({ limit: 100, offset: 200 })
    * const prodBoxes = await Sandbox.list({ metadata: { env: "prod" } })
    * ```
    */
@@ -249,13 +256,15 @@ export class Sandbox {
     const config = resolveConfig(options)
 
     let url = `${config.baseUrl}/sandboxes`
-    if (options.metadata && Object.keys(options.metadata).length > 0) {
-      const params = new URLSearchParams()
-      for (const [key, value] of Object.entries(options.metadata)) {
-        params.set(`metadata.${key}`, value)
-      }
-      url += `?${params.toString()}`
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(options.metadata ?? {})) {
+      params.set(`metadata.${key}`, value)
     }
+    if (options.status !== undefined) params.set("status", options.status)
+    if (options.limit !== undefined) params.set("limit", String(options.limit))
+    if (options.offset !== undefined)
+      params.set("offset", String(options.offset))
+    if (params.toString()) url += `?${params.toString()}`
 
     const raw = await request<ApiSandboxResponse[]>({
       method: "GET",
