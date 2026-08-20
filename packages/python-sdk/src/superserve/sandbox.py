@@ -215,10 +215,9 @@ class Sandbox:
     ) -> builtins.list[SandboxInfo]:
         """List sandboxes belonging to the authenticated team.
 
-        Without ``limit``, the entire list is returned — for teams with a long
-        sandbox history, prefer a ``status`` filter (e.g. ``"active"``) or
-        ``limit``+``offset`` paging. The API clamps ``limit`` at its page-size
-        cap.
+        Optional filters: ``metadata`` (AND semantics), ``status``, and
+        ``limit``/``offset`` paging. Without ``limit`` the full list is
+        returned.
         """
         config = resolve_config(api_key=api_key, base_url=base_url)
         url = f"{config.base_url}/sandboxes"

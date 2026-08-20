@@ -39,11 +39,8 @@ const prod = await Sandbox.list({
   metadata: { env: "prod", owner: "agent-7" },
 })
 
-// Only currently running sandboxes — a much smaller set than the
-// full history once paused sandboxes accumulate.
 const running = await Sandbox.list({ status: "active" })
 
-// Page through everything, 100 rows at a time.
 const page = await Sandbox.list({ limit: 100, offset: 100 })
 
 for (const info of prod) {
@@ -56,11 +53,8 @@ all_boxes = Sandbox.list()
 
 prod = Sandbox.list(metadata={"env": "prod", "owner": "agent-7"})
 
-# Only currently running sandboxes — a much smaller set than the
-# full history once paused sandboxes accumulate.
 running = Sandbox.list(status="active")
 
-# Page through everything, 100 rows at a time.
 page = Sandbox.list(limit=100, offset=100)
 
 for info in prod:

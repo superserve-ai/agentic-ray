@@ -237,9 +237,6 @@ export class Sandbox {
   /**
    * List sandboxes belonging to the authenticated team.
    *
-   * Without `limit`, the entire list is returned — for teams with a long
-   * sandbox history, prefer a `status` filter or `limit`+`offset` paging.
-   *
    * @param options.metadata — Filter by metadata key-value pairs.
    * @param options.status — Only return sandboxes in this status.
    * @param options.limit — Maximum rows to return.

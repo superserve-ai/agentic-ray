@@ -94,14 +94,11 @@ export interface SandboxCreateOptions extends ConnectionOptions {
 
 export interface SandboxListOptions extends ConnectionOptions {
   metadata?: Record<string, string>
-  /** Only return sandboxes in this status (e.g. `"active"` for currently
-   * running ones — usually a far smaller set than the full history). */
+  /** Only return sandboxes in this status. */
   status?: SandboxStatus
-  /** Maximum rows to return. The API clamps values above its page-size cap.
-   * Omitting it returns the team's entire sandbox list. */
+  /** Maximum rows to return. Omit to return the full list. */
   limit?: number
-  /** Rows to skip before the first returned one; combine with `limit` to
-   * page through large lists. */
+  /** Rows to skip; combine with `limit` to page. */
   offset?: number
 }
 

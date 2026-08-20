@@ -124,11 +124,6 @@ page = Sandbox.list(limit=100, offset=100)
 
 Returns an array of [`SandboxInfo`](#sandboxinfo).
 
-Without `limit`, the entire team history is returned in one response. Paused
-sandboxes are kept until you delete them, so long-running teams accumulate
-large lists — prefer `status: "active"` when you only need running sandboxes,
-or `limit`/`offset` paging when you need the full history.
-
 ### `Sandbox.killById` / `Sandbox.kill_by_id`
 
 Delete a sandbox by ID without instantiating it. Idempotent.
