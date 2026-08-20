@@ -26,6 +26,12 @@ const EXEMPT_PATHS = new Set([
   "/health",
   "/billing/pricing",
   "/billing/pricing/public",
+  "/teams/{team_id}/billing/usage",
+  "/teams/{team_id}/billing/periods",
+  "/teams/{team_id}/billing/periods/{period_id}/export-preview",
+  "/stripe/checkout-session",
+  "/stripe/customer-portal-session",
+  "/stripe/webhook",
 ])
 
 const OP_RE = new RegExp(`^(${HTTP_METHODS.join("|")})\\s+/`)
