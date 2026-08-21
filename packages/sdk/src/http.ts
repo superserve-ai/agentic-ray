@@ -32,10 +32,11 @@ const DEFAULT_MAX_ATTEMPTS = 3
 // The conflict budget (see retryConflict) must outlast a transition. Typical
 // transitions settle in single-digit seconds, but a pause writes the sandbox's
 // memory snapshot and can legitimately take 30-60s on large sandboxes (see
-// tests/sdk-e2e-ts/README.md). Ten attempts give ~51s of backoff (~61s with
-// jitter), spanning that window; callers who can't wait pass an AbortSignal,
-// which cancels mid-backoff.
-const CONFLICT_MAX_ATTEMPTS = 10
+// tests/sdk-e2e-ts/README.md). Eleven attempts guarantee a request after the
+// 60s mark: even at minimum jitter (0.8x) the sleeps before the final attempt
+// sum past ~70s. Callers who can't wait pass an AbortSignal, which cancels
+// mid-backoff.
+const CONFLICT_MAX_ATTEMPTS = 11
 const BASE_BACKOFF_MS = 100
 const MAX_BACKOFF_MS = 30_000
 const RETRYABLE_STATUSES = new Set([429, 502, 503, 504])
