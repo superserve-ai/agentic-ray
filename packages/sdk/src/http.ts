@@ -80,8 +80,27 @@ function composeSignals(
   return AbortSignal.any([internal, user])
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+// Backoff sleep that settles early (rejecting with the abort reason) if the
+// caller's signal fires — without this, cancelling mid-backoff would silently
+// wait out the full delay before the abort is noticed on the next attempt.
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const abortErr = () =>
+      signal?.reason ?? new DOMException("Aborted", "AbortError")
+    if (signal?.aborted) {
+      reject(abortErr())
+      return
+    }
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(abortErr())
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener("abort", onAbort, { once: true })
+  })
 }
 
 /**
@@ -201,7 +220,7 @@ async function retryableFetch(
           // ignore
         }
         clearTimeout(timer)
-        await sleep(delay)
+        await sleep(delay, opts.userSignal)
         continue
       }
 
@@ -226,7 +245,7 @@ async function retryableFetch(
 
       // Retry network errors if retryable and attempts remain
       if (opts.retryable && isNetworkError(err) && attempt < maxAttempts) {
-        await sleep(backoffDelay(attempt))
+        await sleep(backoffDelay(attempt), opts.userSignal)
         continue
       }
 

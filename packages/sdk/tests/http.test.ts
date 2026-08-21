@@ -166,6 +166,29 @@ describe("http.request", () => {
     expect(mock).toHaveBeenCalledTimes(2)
   })
 
+  it("settles promptly when aborted during a conflict backoff", async () => {
+    installFetch(async () =>
+      jsonResponse(
+        { error: { code: "conflict", message: "mid-transition" } },
+        { status: 409 },
+      ),
+    )
+    const controller = new AbortController()
+    const started = Date.now()
+    const pending = request<void>({
+      method: "DELETE",
+      url: "https://example.com/sandboxes/abc",
+      retryConflict: true,
+      signal: controller.signal,
+    })
+    // Let the first 409 land and the backoff sleep begin, then cancel.
+    await new Promise((r) => setTimeout(r, 50))
+    controller.abort()
+    await expect(pending).rejects.toThrow()
+    // Must settle on the abort, not after sleeping out the remaining backoff.
+    expect(Date.now() - started).toBeLessThan(1_000)
+  })
+
   it("retryConflict does not extend the budget for non-409 failures", async () => {
     // A rate-limited delete keeps the default 3-attempt bound; only an actual
     // 409 unlocks the longer conflict budget.
