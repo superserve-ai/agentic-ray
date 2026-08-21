@@ -29,12 +29,13 @@ const USER_AGENT = `@superserve/sdk/${SDK_VERSION} (node/${
 
 // Retry tuning
 const DEFAULT_MAX_ATTEMPTS = 3
-// The conflict budget (see retryConflict) must outlast a normal transition —
-// the post-create/resume bookkeeping flip and a typical pause both settle in
-// single-digit seconds. Eight attempts give ~13s of backoff; a sandbox still
-// transitional after that is wedged and clears on a much longer horizon than
-// any client should block on.
-const CONFLICT_MAX_ATTEMPTS = 8
+// The conflict budget (see retryConflict) must outlast a transition. Typical
+// transitions settle in single-digit seconds, but a pause writes the sandbox's
+// memory snapshot and can legitimately take 30-60s on large sandboxes (see
+// tests/sdk-e2e-ts/README.md). Ten attempts give ~51s of backoff (~61s with
+// jitter), spanning that window; callers who can't wait pass an AbortSignal,
+// which cancels mid-backoff.
+const CONFLICT_MAX_ATTEMPTS = 10
 const BASE_BACKOFF_MS = 100
 const MAX_BACKOFF_MS = 30_000
 const RETRYABLE_STATUSES = new Set([429, 502, 503, 504])
