@@ -28,8 +28,8 @@ sandbox.commands.run("ls /app")
 ## Find sandboxes with `list`
 
 List all sandboxes on the team, or narrow the result with filters. `metadata`
-filters combine with AND; `status` selects one lifecycle state; `limit` and
-`offset` page through large lists.
+returns only sandboxes matching every key-value pair you pass; `status`
+selects one lifecycle state; `limit` and `offset` page through large lists.
 
 <CodeGroup>
 ```typescript TypeScript
