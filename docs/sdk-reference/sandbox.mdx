@@ -393,11 +393,11 @@ class SandboxStatus(str, Enum):
 
 </CodeGroup>
 
-- `starting` - transient, briefly visible while a new sandbox boots
+- `starting` - a new sandbox is booting
 - `active` - running and ready to accept commands
-- `pausing` - transient, briefly visible while a pause is in progress
+- `pausing` - a pause is in progress
 - `paused` - stopped with state saved to disk
-- `resuming` - transient, briefly visible while a paused sandbox is being restored to `active`
+- `resuming` - a paused sandbox is being restored
 - `failed` - the sandbox couldn't boot or resume; the entry remains until you delete it
 - `deleted` - removed; deleted sandboxes do not appear in list results
 
