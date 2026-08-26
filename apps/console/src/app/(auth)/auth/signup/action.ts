@@ -7,6 +7,7 @@ import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { sendEmail } from "@/lib/email/send"
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
 import { WelcomeEmail } from "@/lib/email/templates/welcome"
+import { verifyRecaptcha } from "@/lib/recaptcha/verify"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 const signUpSchema = z.object({
@@ -19,10 +20,24 @@ export const signUpWithEmail = async (
   email: string,
   password: string,
   fullName: string,
+  recaptchaToken?: string,
 ) => {
   const parsed = signUpSchema.safeParse({ email, password, fullName })
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0].message }
+  }
+
+  const recaptcha = await verifyRecaptcha(recaptchaToken, "signup")
+  if (!recaptcha.verified) {
+    console.warn("Signup blocked by reCAPTCHA", {
+      email: parsed.data.email,
+      reason: recaptcha.reason,
+    })
+    return {
+      success: false,
+      error: "We couldn't verify you're human. Please try again.",
+      errorCode: "captcha_failed" as const,
+    }
   }
 
   try {

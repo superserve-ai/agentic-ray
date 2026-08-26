@@ -187,6 +187,7 @@ describe("SignUpPage", () => {
       "test@test.com",
       "password123",
       "Test User",
+      undefined,
     )
   })
 

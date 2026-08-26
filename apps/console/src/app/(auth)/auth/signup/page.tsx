@@ -5,6 +5,7 @@ import { Button, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
+import Script from "next/script"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
 
@@ -15,6 +16,68 @@ import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 import { signUpWithEmail } from "./action"
+
+const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+
+declare global {
+  interface Window {
+    grecaptcha?: {
+      enterprise: {
+        ready: (callback: () => void) => void
+        execute: (
+          siteKey: string,
+          options: { action: string },
+        ) => Promise<string>
+      }
+    }
+  }
+}
+
+// The script loads with strategy="afterInteractive", so a user who submits
+// immediately (e.g. autofill + fast Enter) can beat it. Poll briefly rather
+// than bailing on the first check, since verify.ts hard-rejects a configured
+// key with no token — bailing too early would false-positive real users.
+const waitForGrecaptcha = async (timeoutMs = 8000): Promise<boolean> => {
+  if (window.grecaptcha) return true
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    if (window.grecaptcha) return true
+  }
+  return false
+}
+
+const RECAPTCHA_EXECUTE_TIMEOUT_MS = 8000
+
+// Best-effort: an ad-blocked script or a missing site key just means no
+// token is sent, and the server fails open when reCAPTCHA isn't configured.
+const getRecaptchaToken = async (
+  action: string,
+): Promise<string | undefined> => {
+  if (!RECAPTCHA_SITE_KEY) return undefined
+  if (!(await waitForGrecaptcha())) return undefined
+  try {
+    const tokenPromise = new Promise<string>((resolve, reject) => {
+      window.grecaptcha!.enterprise.ready(() => {
+        window
+          .grecaptcha!.enterprise.execute(RECAPTCHA_SITE_KEY, { action })
+          .then(resolve)
+          .catch(reject)
+      })
+    })
+    // ready()/execute() have no built-in deadline — during a partial Google
+    // outage they can hang indefinitely and stall the signup form.
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error("recaptcha_execute_timeout")),
+        RECAPTCHA_EXECUTE_TIMEOUT_MS,
+      ),
+    )
+    return await Promise.race([tokenPromise, timeoutPromise])
+  } catch {
+    return undefined
+  }
+}
 
 function SignUpContent() {
   const [isLoading, setIsLoading] = useState(false)
@@ -56,7 +119,13 @@ function SignUpContent() {
     }
     setIsLoading(true)
     try {
-      const result = await signUpWithEmail(email, password, fullName)
+      const recaptchaToken = await getRecaptchaToken("signup")
+      const result = await signUpWithEmail(
+        email,
+        password,
+        fullName,
+        recaptchaToken,
+      )
       if (!result.success) {
         posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
           method: "email",
@@ -103,6 +172,12 @@ function SignUpContent() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
+      {RECAPTCHA_SITE_KEY && (
+        <Script
+          src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
+          strategy="afterInteractive"
+        />
+      )}
       <DitherBackground />
       <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">
         <CornerBrackets size="lg" />
