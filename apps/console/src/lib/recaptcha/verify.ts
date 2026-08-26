@@ -69,14 +69,16 @@ export const verifyRecaptcha = async (
         response.status,
         await response.text(),
       )
-      // A malformed/forged token still gets a 200 with tokenProperties.valid
-      // === false (handled below) — Google validates token content inside a
-      // successful assessment, and the one HTTP-level bypass (an oversized
-      // token) is already rejected above by MAX_TOKEN_LENGTH. A non-OK
-      // response here means the *request* was rejected for a reason we
-      // don't control (bad API key, wrong project, site key/project
-      // mismatch, quota) — fail open so a config mistake degrades to "no
-      // CAPTCHA" rather than "no signups."
+      // 429 (quota exhaustion) is unlike every other non-OK response here:
+      // it's something a caller can directly induce by sending enough
+      // requests, so failing open on it would turn "burn the quota with
+      // junk tokens" into a way to disable verification for everyone.
+      // Every other non-OK status reflects our own setup (bad API key,
+      // wrong project, site key mismatch) and isn't something a caller's
+      // request pattern controls, so those still fail open.
+      if (response.status === 429) {
+        return { verified: false, reason: "quota_exhausted" }
+      }
       return { verified: true }
     }
 
