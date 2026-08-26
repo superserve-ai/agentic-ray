@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // --- Mocks ---
 
@@ -52,6 +52,12 @@ vi.mock("next/image", () => ({
   ),
 }))
 
+// jsdom/happy-dom actually attempts the network load for a real <script>,
+// which errors loudly but harmlessly in this environment — mock it out.
+vi.mock("next/script", () => ({
+  default: () => null,
+}))
+
 const mockSignInWithOAuth = vi.fn()
 vi.mock("@/lib/supabase/client", () => ({
   createBrowserClient: () => ({
@@ -88,16 +94,39 @@ vi.mock("posthog-js/react", () => ({
   usePostHog: () => ({ capture: mockCapture }),
 }))
 
-import SignUpPage from "./page"
+// Captured once at module load, before any test mutates it, so both describe
+// blocks below can reliably restore whatever the real environment had.
+const ORIGINAL_RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+
+function restoreRecaptchaSiteKey() {
+  if (ORIGINAL_RECAPTCHA_SITE_KEY === undefined) {
+    delete process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+  } else {
+    process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = ORIGINAL_RECAPTCHA_SITE_KEY
+  }
+}
 
 describe("SignUpPage", () => {
   const user = userEvent.setup()
+  // RECAPTCHA_SITE_KEY is read from process.env at module load. A static
+  // top-level `import SignUpPage from "./page"` would resolve before any
+  // beforeEach runs, so clearing the env var here wouldn't matter if a
+  // dev/CI environment had it set — dynamically import a fresh module per
+  // test instead, after the env var is explicitly cleared.
+  let SignUpPage: (typeof import("./page"))["default"]
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockSignUpWithEmail.mockReset()
     mockSignInWithOAuth.mockReset()
     mockCapture.mockReset()
     mockRouterPush.mockReset()
+    delete process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+    vi.resetModules()
+    ;({ default: SignUpPage } = await import("./page"))
+  })
+
+  afterEach(() => {
+    restoreRecaptchaSiteKey()
   })
 
   it("renders the signup form", async () => {
@@ -284,5 +313,85 @@ describe("SignUpPage", () => {
 
     const signInLink = await screen.findByRole("link", { name: "Sign in" })
     expect(signInLink).toHaveAttribute("href", "/auth/signin")
+  })
+})
+
+// RECAPTCHA_SITE_KEY is read from process.env at module load, so exercising
+// the "configured" path needs a fresh module instance per test — same
+// reasoning as the dynamic import in the describe block above.
+describe("SignUpPage with reCAPTCHA configured", () => {
+  const user = userEvent.setup()
+
+  beforeEach(() => {
+    mockSignUpWithEmail.mockReset()
+    process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = "test-site-key"
+    vi.resetModules()
+  })
+
+  afterEach(() => {
+    restoreRecaptchaSiteKey()
+    delete (window as { grecaptcha?: unknown }).grecaptcha
+    vi.resetModules()
+  })
+
+  it("shows an actionable error instead of submitting when the token can't be obtained", async () => {
+    ;(window as { grecaptcha?: unknown }).grecaptcha = {
+      enterprise: {
+        ready: (callback: () => void) => callback(),
+        execute: () => Promise.reject(new Error("blocked by content blocker")),
+      },
+    }
+    const { default: ConfiguredSignUpPage } = await import("./page")
+    render(<ConfiguredSignUpPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Full Name"),
+      "Test User",
+    )
+    await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
+    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(
+      screen.getByPlaceholderText("Confirm Password"),
+      "password123",
+    )
+    await user.click(screen.getByRole("button", { name: "Sign Up" }))
+
+    expect(
+      await screen.findByText(/content or ad blocker/i),
+    ).toBeInTheDocument()
+    expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+  })
+
+  it("submits with a token once reCAPTCHA succeeds", async () => {
+    mockSignUpWithEmail.mockResolvedValue({ success: true })
+    ;(window as { grecaptcha?: unknown }).grecaptcha = {
+      enterprise: {
+        ready: (callback: () => void) => callback(),
+        execute: () => Promise.resolve("real-token"),
+      },
+    }
+    const { default: ConfiguredSignUpPage } = await import("./page")
+    render(<ConfiguredSignUpPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Full Name"),
+      "Test User",
+    )
+    await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
+    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(
+      screen.getByPlaceholderText("Confirm Password"),
+      "password123",
+    )
+    await user.click(screen.getByRole("button", { name: "Sign Up" }))
+
+    await waitFor(() => {
+      expect(mockSignUpWithEmail).toHaveBeenCalledWith(
+        "test@test.com",
+        "password123",
+        "Test User",
+        "real-token",
+      )
+    })
   })
 })

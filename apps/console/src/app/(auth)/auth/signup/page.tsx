@@ -49,8 +49,13 @@ const waitForGrecaptcha = async (timeoutMs = 8000): Promise<boolean> => {
 
 const RECAPTCHA_EXECUTE_TIMEOUT_MS = 8000
 
-// Best-effort: an ad-blocked script or a missing site key just means no
-// token is sent, and the server fails open when reCAPTCHA isn't configured.
+// A missing site key means the token is never requested and the server
+// fails open (reCAPTCHA isn't configured). But if a site key IS configured
+// and this still returns undefined — script blocked, timed out, or execute()
+// failed — verify.ts hard-rejects the missing token rather than failing
+// open, since that's also exactly what a scripted signup bypassing the
+// browser widget looks like. handleSignUp below surfaces that case with an
+// actionable message instead of the generic server rejection.
 const getRecaptchaToken = async (
   action: string,
 ): Promise<string | undefined> => {
@@ -120,6 +125,12 @@ function SignUpContent() {
     setIsLoading(true)
     try {
       const recaptchaToken = await getRecaptchaToken("signup")
+      if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+        setErrors({
+          form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
+        })
+        return
+      }
       const result = await signUpWithEmail(
         email,
         password,

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mock dependencies before importing the action
 const mockGenerateLink = vi.fn()
@@ -34,11 +34,32 @@ vi.mock("@/app/(auth)/auth/signin/action", () => ({
 
 import { signUpWithEmail } from "./action"
 
+// verifyRecaptcha reads these at call time (not module load), so these
+// tests — which assert unconfigured (fail-open) behavior and never pass a
+// token — need them explicitly cleared rather than relying on the ambient
+// environment. A dev/CI env with reCAPTCHA configured would otherwise
+// reject every one of these as a missing token.
+const ORIGINAL_RECAPTCHA_ENV = {
+  RECAPTCHA_API_KEY: process.env.RECAPTCHA_API_KEY,
+  RECAPTCHA_PROJECT_ID: process.env.RECAPTCHA_PROJECT_ID,
+  NEXT_PUBLIC_RECAPTCHA_SITE_KEY: process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY,
+}
+
 describe("signUpWithEmail", () => {
   beforeEach(() => {
     mockGenerateLink.mockReset()
     mockSendEmail.mockReset()
     mockSlack.mockReset().mockResolvedValue(undefined)
+    delete process.env.RECAPTCHA_API_KEY
+    delete process.env.RECAPTCHA_PROJECT_ID
+    delete process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+  })
+
+  afterEach(() => {
+    for (const [name, value] of Object.entries(ORIGINAL_RECAPTCHA_ENV)) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
   })
 
   it("returns error for invalid email", async () => {
