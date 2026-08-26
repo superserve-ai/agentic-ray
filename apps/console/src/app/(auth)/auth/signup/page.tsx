@@ -6,15 +6,18 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useCallback, useEffect, useState } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { Turnstile } from "@/components/turnstile"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 import { signUpWithEmail } from "./action"
+
+const TURNSTILE_ACTION = "signup"
 
 function SignUpContent() {
   const [isLoading, setIsLoading] = useState(false)
@@ -26,12 +29,20 @@ function SignUpContent() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const posthog = usePostHog()
   const router = useRouter()
   const searchParams = useSearchParams()
   const rawNext = searchParams.get("next") || "/"
   const nextUrl = rawNext.startsWith("/") ? rawNext : "/"
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
+  const turnstileEnabled = Boolean(turnstileSiteKey)
+  const handleTurnstileToken = useCallback(
+    (token: string | null) => setTurnstileToken(token),
+    [],
+  )
 
   useEffect(() => {
     if (searchParams.get("error") === "link_expired") {
@@ -50,13 +61,20 @@ function SignUpContent() {
       newErrors.password = "Must be at least 8 characters."
     if (password && password !== confirmPassword)
       newErrors.confirmPassword = "Passwords do not match."
+    if (turnstileEnabled && !turnstileToken)
+      newErrors.form = "Please complete the verification challenge."
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
       return
     }
     setIsLoading(true)
     try {
-      const result = await signUpWithEmail(email, password, fullName)
+      const result = await signUpWithEmail(
+        email,
+        password,
+        fullName,
+        turnstileToken ?? undefined,
+      )
       if (!result.success) {
         posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
           method: "email",
@@ -65,6 +83,10 @@ function SignUpContent() {
         if ("errorCode" in result && result.errorCode === "blocked_email") {
           router.push("/auth/auth-code-error?reason=signup_blocked")
           return
+        }
+        if ("errorCode" in result && result.errorCode === "turnstile_failed") {
+          setTurnstileToken(null)
+          setTurnstileResetKey((key) => key + 1)
         }
         setErrors({ form: result.error || "Error creating account." })
         return
@@ -223,12 +245,24 @@ function SignUpContent() {
                   </button>
                 }
               />
+              {turnstileSiteKey && (
+                <Turnstile
+                  siteKey={turnstileSiteKey}
+                  action={TURNSTILE_ACTION}
+                  resetKey={turnstileResetKey}
+                  onToken={handleTurnstileToken}
+                />
+              )}
               {errors.form && (
                 <p className="text-xs text-destructive">{errors.form}</p>
               )}
               <Button
                 type="submit"
-                disabled={isLoading || isGoogleLoading}
+                disabled={
+                  isLoading ||
+                  isGoogleLoading ||
+                  (turnstileEnabled && !turnstileToken)
+                }
                 className="w-full"
               >
                 {isLoading ? <Spinner /> : null}
