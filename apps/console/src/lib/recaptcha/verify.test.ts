@@ -166,8 +166,17 @@ describe("verifyRecaptcha (configured)", () => {
     expect(result).toEqual({ verified: false, reason: "quota_exhausted" })
   })
 
-  it("fails open on a non-quota HTTP error (e.g. bad credentials)", async () => {
+  it("fails closed on credential/configuration HTTP errors", async () => {
     fetchSpy.mockResolvedValue(new Response("forbidden", { status: 403 }))
+    const result = await verifyRecaptcha("token", "signup")
+    expect(result).toEqual({
+      verified: false,
+      reason: "assessment_http_403",
+    })
+  })
+
+  it("fails open on transient provider errors", async () => {
+    fetchSpy.mockResolvedValue(new Response("unavailable", { status: 503 }))
     const result = await verifyRecaptcha("token", "signup")
     expect(result).toEqual({ verified: true })
   })

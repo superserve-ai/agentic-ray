@@ -26,9 +26,9 @@ const getScoreThreshold = (): number => {
   return parsed
 }
 
-// reCAPTCHA Enterprise. Fails open (treats the request as verified) whenever
-// the integration itself isn't configured or errors, so a misconfigured or
-// unreachable check never blocks real signups.
+// reCAPTCHA Enterprise. An unconfigured integration and transient availability
+// failures fail open; rejected requests and credential/configuration failures
+// fail closed so they cannot silently disable the abuse control.
 export const verifyRecaptcha = async (
   // Server actions expose an RPC endpoint with no runtime type enforcement —
   // a caller can send any JSON, not just what the TS signature promises.
@@ -69,16 +69,19 @@ export const verifyRecaptcha = async (
         response.status,
         await response.text(),
       )
-      // 429 (quota exhaustion) is unlike every other non-OK response here:
-      // it's something a caller can directly induce by sending enough
-      // requests, so failing open on it would turn "burn the quota with
-      // junk tokens" into a way to disable verification for everyone.
-      // Every other non-OK status reflects our own setup (bad API key,
-      // wrong project, site key mismatch) and isn't something a caller's
-      // request pattern controls, so those still fail open.
-      if (response.status === 429) {
-        return { verified: false, reason: "quota_exhausted" }
+      // Client errors indicate a rejected token or a credential/configuration
+      // problem, neither of which should silently disable the abuse control.
+      if (response.status >= 400 && response.status < 500) {
+        return {
+          verified: false,
+          reason:
+            response.status === 429
+              ? "quota_exhausted"
+              : `assessment_http_${response.status}`,
+        }
       }
+      // 5xx responses are transient provider availability failures; network
+      // errors and timeouts below follow the same fail-open availability policy.
       return { verified: true }
     }
 
