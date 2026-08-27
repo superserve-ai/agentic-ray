@@ -1,14 +1,67 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+let currentUser: {
+  id: string
+  email: string
+  app_metadata?: { provider?: string; providers?: string[] }
+} | null = {
+  id: "u1",
+  email: "pavitra@superserve.ai",
+}
+
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({
     auth: {
       getUser: async () => ({
-        data: { user: { id: "u1", email: "pavitra@superserve.ai" } },
+        data: { user: currentUser },
       }),
     },
   }),
 }))
+
+let googleUser = false
+let directoryState = {
+  memberships: [] as Array<{ teamId: string; region: string }>,
+  degradedRegions: [] as string[],
+}
+const mockRequireGoogleSignupProof = vi.fn()
+const mockConsumeGoogleSignupProof = vi.fn()
+const mockEnsureGoogleOnboardingMembership = vi.fn()
+const mockReadVerifiedGoogleOnboardingMembership = vi.fn()
+const mockClassifyGoogleMembershipState = vi.fn(
+  async (
+    userId: string,
+    directory: {
+      memberships: Array<{ teamId: string; region: string }>
+      degradedRegions: string[]
+    },
+  ) => {
+    const membership = directory.memberships[0]
+    if (membership) {
+      return { kind: "existing" as const, membership }
+    }
+    if (directory.degradedRegions.length > 0) {
+      const onboardingMembership =
+        await mockReadVerifiedGoogleOnboardingMembership(userId)
+      if (onboardingMembership) {
+        return { kind: "existing" as const, membership: onboardingMembership }
+      }
+      return {
+        kind: "indeterminate" as const,
+        degradedRegions: directory.degradedRegions,
+      }
+    }
+    return { kind: "first_time" as const }
+  },
+)
+const mockIsGoogleUser = vi.fn(
+  (_user: { app_metadata?: { provider?: string; providers?: string[] } }) =>
+    googleUser,
+)
+const mockListTeamMembershipsForUserDetailed = vi.fn(
+  async (_userId: string, _opts?: { maxAgeMs?: number }) => directoryState,
+)
+const mockTrackEvent = vi.fn()
 
 // Per-test knobs read lazily by the cells mock.
 let regions: string[] = ["use", "usw"]
@@ -94,12 +147,38 @@ vi.mock("@/lib/cells", () => ({
 let directoryTeams: Array<{ id: string; name: string; region: string }> = []
 vi.mock("@/lib/api/team-directory", () => ({
   listTeamsForUser: async () => directoryTeams,
+  listTeamMembershipsForUserDetailed: (
+    ...args: [string, { maxAgeMs?: number }?]
+  ) => mockListTeamMembershipsForUserDetailed(...args),
   membershipExistsInCell: async (
     region: string,
     _userId: string,
     teamId: string,
   ) => directoryTeams.some((t) => t.id === teamId && t.region === region),
   invalidateMembershipDirectory: () => {},
+}))
+vi.mock("@/lib/auth/google-signup-proof", () => ({
+  consumeGoogleSignupProof: (...args: unknown[]) =>
+    mockConsumeGoogleSignupProof(...args),
+  isGoogleUser: (user: {
+    app_metadata?: { provider?: string; providers?: string[] }
+  }) => mockIsGoogleUser(user),
+  requireGoogleSignupProof: (...args: unknown[]) =>
+    mockRequireGoogleSignupProof(...args),
+}))
+vi.mock("@/lib/auth/google-onboarding", () => ({
+  classifyGoogleMembershipState: (
+    userId: string,
+    directory: {
+      memberships: Array<{ teamId: string; region: string }>
+      degradedRegions: string[]
+    },
+  ) => mockClassifyGoogleMembershipState(userId, directory),
+  ensureGoogleOnboardingMembership: (...args: unknown[]) =>
+    mockEnsureGoogleOnboardingMembership(...args),
+}))
+vi.mock("@/lib/posthog/actions", () => ({
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
 }))
 
 // Cookie store stub capturing active-team writes.
@@ -126,8 +205,53 @@ describe("createTeamAction", () => {
   beforeEach(() => {
     regions = ["use", "usw"]
     directoryTeams = []
+    currentUser = { id: "u1", email: "pavitra@superserve.ai" }
+    googleUser = false
+    directoryState = { memberships: [], degradedRegions: [] }
     cookieValue = undefined
     cookieSets.length = 0
+    mockRequireGoogleSignupProof.mockReset()
+    mockConsumeGoogleSignupProof.mockReset()
+    mockEnsureGoogleOnboardingMembership
+      .mockReset()
+      .mockResolvedValue(undefined)
+    mockReadVerifiedGoogleOnboardingMembership
+      .mockReset()
+      .mockResolvedValue(null)
+    mockIsGoogleUser.mockReset().mockImplementation(() => googleUser)
+    mockListTeamMembershipsForUserDetailed
+      .mockReset()
+      .mockImplementation(async () => directoryState)
+    mockClassifyGoogleMembershipState.mockReset().mockImplementation(
+      async (
+        userId: string,
+        directory: {
+          memberships: Array<{ teamId: string; region: string }>
+          degradedRegions: string[]
+        },
+      ) => {
+        const membership = directory.memberships[0]
+        if (membership) {
+          return { kind: "existing" as const, membership }
+        }
+        if (directory.degradedRegions.length > 0) {
+          const onboardingMembership =
+            await mockReadVerifiedGoogleOnboardingMembership(userId)
+          if (onboardingMembership) {
+            return {
+              kind: "existing" as const,
+              membership: onboardingMembership,
+            }
+          }
+          return {
+            kind: "indeterminate" as const,
+            degradedRegions: directory.degradedRegions,
+          }
+        }
+        return { kind: "first_time" as const }
+      },
+    )
+    mockTrackEvent.mockReset().mockResolvedValue(undefined)
     cellClients = {
       use: recordingCellClient(),
       usw: recordingCellClient(),
@@ -158,6 +282,7 @@ describe("createTeamAction", () => {
         team_id: "team-new",
       },
     ])
+    expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
 
     // Nothing leaked into the default cell.
     expect(cellClients.use.from).not.toHaveBeenCalled()
@@ -189,6 +314,82 @@ describe("createTeamAction", () => {
     await expect(createTeamAction("   ")).rejects.toThrow(
       "Team name is required",
     )
+  })
+
+  it("requires the Google signup proof for a first-team Google user", async () => {
+    currentUser = {
+      id: "u1",
+      email: "pavitra@superserve.ai",
+      app_metadata: { provider: "google", providers: ["google"] },
+    }
+    googleUser = true
+    mockRequireGoogleSignupProof.mockResolvedValue(undefined)
+
+    await createTeamAction("west pilot", "usw")
+
+    expect(mockIsGoogleUser).toHaveBeenCalled()
+    expect(mockListTeamMembershipsForUserDetailed).toHaveBeenCalledWith("u1", {
+      maxAgeMs: 0,
+    })
+    expect(mockRequireGoogleSignupProof).toHaveBeenCalledTimes(1)
+    expect(mockConsumeGoogleSignupProof).toHaveBeenCalledWith("u1")
+  })
+
+  it("blocks a first-time Google user without proof", async () => {
+    currentUser = {
+      id: "u1",
+      email: "pavitra@superserve.ai",
+      app_metadata: { provider: "google", providers: ["google"] },
+    }
+    googleUser = true
+    mockRequireGoogleSignupProof.mockRejectedValue(
+      new Error("Google signup verification required"),
+    )
+
+    await expect(createTeamAction("west pilot", "usw")).rejects.toThrow(
+      "Google signup verification required",
+    )
+
+    expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
+    expect(cellClients.usw.writes).toEqual({})
+  })
+
+  it("lets an existing Google user create an additional team without a fresh proof", async () => {
+    currentUser = {
+      id: "u1",
+      email: "pavitra@superserve.ai",
+      app_metadata: { provider: "google", providers: ["google"] },
+    }
+    googleUser = true
+    directoryState = {
+      memberships: [{ teamId: "team-old", region: "use" }],
+      degradedRegions: [],
+    }
+
+    const team = await createTeamAction("west pilot", "usw")
+
+    expect(team).toEqual({ id: "team-new", name: "west pilot", region: "usw" })
+    expect(mockRequireGoogleSignupProof).not.toHaveBeenCalled()
+    expect(cellClients.usw.writes.team).toEqual([
+      { name: "west pilot", home_region: "usw" },
+    ])
+  })
+
+  it("fails transiently when a degraded empty lookup cannot be recovered", async () => {
+    currentUser = {
+      id: "u1",
+      email: "pavitra@superserve.ai",
+      app_metadata: { provider: "google", providers: ["google"] },
+    }
+    googleUser = true
+    directoryState = { memberships: [], degradedRegions: ["usw"] }
+
+    await expect(createTeamAction("west pilot", "usw")).rejects.toThrow(
+      "Google membership lookup degraded; please try again",
+    )
+
+    expect(mockRequireGoogleSignupProof).not.toHaveBeenCalled()
+    expect(cellClients.usw.writes.team).toBeUndefined()
   })
 })
 

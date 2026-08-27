@@ -15,7 +15,7 @@ import { GoogleIcon, Spinner } from "@/components/icons"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
-import { signUpWithEmail } from "./action"
+import { beginGoogleSignup, signUpWithEmail } from "./action"
 
 const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 
@@ -162,6 +162,20 @@ function SignUpContent() {
     setIsGoogleLoading(true)
     setErrors({})
     try {
+      const recaptchaToken = await getRecaptchaToken("signup_google")
+      if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+        setErrors({
+          form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
+        })
+        return
+      }
+
+      const proof = await beginGoogleSignup(recaptchaToken)
+      if (!proof.success) {
+        setErrors({ form: proof.error || "Google signup verification failed." })
+        return
+      }
+
       const supabase = createBrowserClient()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
       if (nextUrl && nextUrl !== "/") {

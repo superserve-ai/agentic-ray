@@ -1,7 +1,13 @@
+import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
+import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
+import {
+  consumeGoogleSignupProof,
+  isGoogleUser,
+  requireGoogleSignupProof,
+} from "@/lib/auth/google-signup-proof"
 import { cellFor } from "@/lib/cells"
+import { createServerClient } from "@/lib/supabase/server"
 
-// Role granted to a team's creator. Seeded by the control-plane RBAC
-// migration in every cell; looked up by name so the id can differ per cell.
 const TEAM_OWNER_ROLE = "team_owner"
 
 export interface ProvisionedTeam {
@@ -10,40 +16,54 @@ export interface ProvisionedTeam {
   region: string
 }
 
-/**
- * Create a team homed in `region` and write everything the control plane
- * needs to authorize `userId` as its owner, all in that cell: the profile
- * row (auth is global but profile rows are per-cell), the team with
- * home_region, the legacy team_member row the console's own lookups read,
- * and the RBAC chain (active membership + team_owner assignment). Without the
- * RBAC chain the console can list the team but the control plane rejects
- * every request for it.
- *
- * This is the ONLY correct way to create a team: both the explicit
- * create-team action and the first-login auto-provision route through it, so
- * a new user can never end up with a legacy-only team the control plane 403s.
- *
- * Postgrest calls aren't a transaction, so a failure mid-chain is unwound in
- * reverse dependency order — a partial team the console lists but the control
- * plane rejects is worse than no team. A per-cell RPC doing the whole chain
- * in one transaction is the durable replacement.
- *
- * ponytail: best-effort compensating unwind, not a real transaction —
- * replace with a per-cell RPC if half-written teams start showing up.
- *
- * The caller owns authorization (who may create where) and cache
- * invalidation; this only writes the rows.
- */
+async function guardFirstGoogleTeam(
+  userId: string,
+  user: {
+    id: string
+    app_metadata?: { provider?: string; providers?: string[] }
+  },
+): Promise<boolean> {
+  if (user.id !== userId || !isGoogleUser(user)) return false
+
+  const directory = await listTeamMembershipsForUserDetailed(userId, {
+    maxAgeMs: 0,
+  })
+  const state = await classifyGoogleMembershipState(userId, directory)
+  if (state.kind === "existing") return false
+  if (state.kind === "indeterminate") {
+    console.warn("Google onboarding blocked: membership lookup degraded", {
+      userId,
+      degradedRegions: state.degradedRegions,
+      stage: "provisioning",
+    })
+    throw new Error("Google membership lookup degraded; please try again")
+  }
+  await requireGoogleSignupProof()
+  return true
+}
+
 export async function provisionTeam(
   region: string,
   userId: string,
   email: string,
   name: string,
 ): Promise<ProvisionedTeam> {
+  // This is the common value boundary for lazy onboarding and explicit team
+  // creation. A direct Supabase Google OAuth session must not be able to call
+  // either path and receive its first team without the pre-auth proof.
+  const supabase = await createServerClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError)
+    throw new Error(`Unable to verify authenticated user: ${authError.message}`)
+  const googleUser = !!user && user.id === userId && isGoogleUser(user)
+  const consumeProof = googleUser
+    ? await guardFirstGoogleTeam(userId, user!)
+    : false
   const admin = cellFor(region).createAdminClient()
 
-  // The user may have never touched this cell before; upsert so a concurrent
-  // create can't fail on the unique id.
   const { error: profileErr } = await admin
     .from("profile")
     .upsert({ id: userId, email }, { onConflict: "id", ignoreDuplicates: true })
@@ -68,8 +88,6 @@ export async function provisionTeam(
       throw new Error(`Failed to add team member: ${memberErr.message}`)
     }
 
-    // Membership must exist (and be active) before the role assignment — the
-    // control-plane schema enforces that ordering with a trigger.
     const { error: membershipErr } = await admin
       .from("team_memberships")
       .insert({ team_id: team.id, user_id: userId, status: "active" })
@@ -104,10 +122,6 @@ export async function provisionTeam(
       )
     }
   } catch (chainErr) {
-    // Best-effort unwind in reverse dependency order, so a mid-chain failure
-    // can't leave a team the console lists but the control plane rejects.
-    // Failures here are logged and the original error is surfaced with the
-    // team id for manual repair.
     for (const [table, column] of [
       ["user_role_assignments", "team_id"],
       ["team_memberships", "team_id"],
@@ -130,5 +144,6 @@ export async function provisionTeam(
     )
   }
 
+  if (consumeProof) await consumeGoogleSignupProof(userId)
   return { id: team.id as string, name: team.name as string, region }
 }

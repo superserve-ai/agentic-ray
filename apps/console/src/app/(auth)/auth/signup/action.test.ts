@@ -32,7 +32,29 @@ vi.mock("@/app/(auth)/auth/signin/action", () => ({
   notifySlackOfNewUser: (...args: unknown[]) => mockSlack(...args),
 }))
 
-import { signUpWithEmail } from "./action"
+const mockVerifyRecaptcha = vi.fn()
+vi.mock("@/lib/recaptcha/verify", () => ({
+  verifyRecaptcha: (...args: unknown[]) => mockVerifyRecaptcha(...args),
+}))
+
+const mockIssueGoogleSignupProof = vi.fn()
+vi.mock("@/lib/auth/google-signup-proof", () => ({
+  issueGoogleSignupProof: () => mockIssueGoogleSignupProof(),
+}))
+
+const mockTrackEvent = vi.fn()
+vi.mock("@/lib/posthog/actions", () => ({
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+}))
+
+vi.mock("@/lib/posthog/events", () => ({
+  AUTH_EVENTS: {
+    GOOGLE_SIGNUP_CAPTCHA_FAILED: "auth_google_signup_captcha_failed",
+    GOOGLE_SIGNUP_CAPTCHA_VERIFIED: "auth_google_signup_captcha_verified",
+  },
+}))
+
+import { beginGoogleSignup, signUpWithEmail } from "./action"
 
 // verifyRecaptcha reads these at call time (not module load), so these
 // tests — which assert unconfigured (fail-open) behavior and never pass a
@@ -50,6 +72,9 @@ describe("signUpWithEmail", () => {
     mockGenerateLink.mockReset()
     mockSendEmail.mockReset()
     mockSlack.mockReset().mockResolvedValue(undefined)
+    mockVerifyRecaptcha.mockReset().mockResolvedValue({ verified: true })
+    mockIssueGoogleSignupProof.mockReset().mockResolvedValue(undefined)
+    mockTrackEvent.mockReset().mockResolvedValue(undefined)
     delete process.env.RECAPTCHA_API_KEY
     delete process.env.RECAPTCHA_PROJECT_ID
     delete process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
@@ -207,5 +232,71 @@ describe("signUpWithEmail", () => {
     // Slack is called fire-and-forget via .catch(), give it a tick
     await new Promise((r) => setTimeout(r, 0))
     expect(mockSlack).toHaveBeenCalled()
+  })
+})
+
+describe("beginGoogleSignup", () => {
+  beforeEach(() => {
+    mockVerifyRecaptcha.mockReset().mockResolvedValue({ verified: true })
+    mockIssueGoogleSignupProof.mockReset().mockResolvedValue(undefined)
+    mockTrackEvent.mockReset().mockResolvedValue(undefined)
+  })
+
+  it("verifies signup_google before issuing a proof", async () => {
+    const result = await beginGoogleSignup("google-token")
+
+    expect(result).toEqual({ success: true })
+    expect(mockVerifyRecaptcha).toHaveBeenCalledWith(
+      "google-token",
+      "signup_google",
+    )
+    expect(mockIssueGoogleSignupProof).toHaveBeenCalled()
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_google_signup_captcha_verified",
+      expect.any(String),
+      { stage: "captcha_verification" },
+    )
+  })
+
+  it("fails closed when proof issuance is unavailable", async () => {
+    mockIssueGoogleSignupProof.mockRejectedValue(
+      new Error("Google signup proof signing secret is not configured"),
+    )
+
+    await expect(beginGoogleSignup("google-token")).resolves.toEqual({
+      success: false,
+      error: "Google signup is temporarily unavailable. Please try again.",
+      errorCode: "proof_unavailable",
+    })
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_google_signup_captcha_failed",
+      expect.any(String),
+      {
+        reason: "Google signup proof signing secret is not configured",
+        stage: "proof_issuance",
+      },
+    )
+  })
+
+  it("returns a captcha error when reCAPTCHA verification fails", async () => {
+    mockVerifyRecaptcha.mockResolvedValue({
+      verified: false,
+      reason: "low_score",
+    })
+
+    await expect(beginGoogleSignup("google-token")).resolves.toEqual({
+      success: false,
+      error: "We couldn't verify you're human. Please try again.",
+      errorCode: "captcha_failed",
+    })
+    expect(mockIssueGoogleSignupProof).not.toHaveBeenCalled()
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_google_signup_captcha_failed",
+      expect.any(String),
+      {
+        reason: "low_score",
+        stage: "captcha_verification",
+      },
+    )
   })
 })

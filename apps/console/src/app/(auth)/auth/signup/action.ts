@@ -1,12 +1,17 @@
 "use server"
 
+import crypto from "node:crypto"
+
 import * as z from "zod"
 
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
+import { issueGoogleSignupProof } from "@/lib/auth/google-signup-proof"
 import { sendEmail } from "@/lib/email/send"
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
 import { WelcomeEmail } from "@/lib/email/templates/welcome"
+import { trackEvent } from "@/lib/posthog/actions"
+import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { verifyRecaptcha } from "@/lib/recaptcha/verify"
 import { createAdminClient } from "@/lib/supabase/admin"
 
@@ -15,6 +20,45 @@ const signUpSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters."),
   fullName: z.string().min(1, "Name is required.").max(200),
 })
+
+export const beginGoogleSignup = async (recaptchaToken?: string) => {
+  const distinctId = crypto.randomUUID()
+  const recaptcha = await verifyRecaptcha(recaptchaToken, "signup_google")
+  if (!recaptcha.verified) {
+    await trackEvent(AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_FAILED, distinctId, {
+      reason: recaptcha.reason,
+      stage: "captcha_verification",
+    })
+    console.warn("Google signup blocked by reCAPTCHA", {
+      reason: recaptcha.reason,
+    })
+    return {
+      success: false,
+      error: "We couldn't verify you're human. Please try again.",
+      errorCode: "captcha_failed" as const,
+    }
+  }
+
+  try {
+    await issueGoogleSignupProof()
+    await trackEvent(AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_VERIFIED, distinctId, {
+      stage: "captcha_verification",
+    })
+    console.info("Google signup CAPTCHA verified; pre-auth proof issued")
+    return { success: true }
+  } catch (error) {
+    await trackEvent(AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_FAILED, distinctId, {
+      reason: error instanceof Error ? error.message : "proof_issuance_failed",
+      stage: "proof_issuance",
+    })
+    console.error("Google signup proof issuance failed", error)
+    return {
+      success: false,
+      error: "Google signup is temporarily unavailable. Please try again.",
+      errorCode: "proof_unavailable" as const,
+    }
+  }
+}
 
 export const signUpWithEmail = async (
   email: string,

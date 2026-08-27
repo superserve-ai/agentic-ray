@@ -33,8 +33,14 @@ vi.mock("@/lib/admin/impersonation", () => ({
 }))
 
 // No cookie set: active-team resolution falls back to the first membership.
+let activeTeamCookie: string | undefined
 vi.mock("next/headers", () => ({
-  cookies: async () => ({ get: () => undefined }),
+  cookies: async () => ({
+    get: (name: string) =>
+      name === "ss-active-team" && activeTeamCookie !== undefined
+        ? { name, value: activeTeamCookie }
+        : undefined,
+  }),
 }))
 
 // The user's team lives in the usw cell — used by the cell-targeting tests.
@@ -42,6 +48,10 @@ vi.mock("@/lib/api/team-directory", () => ({
   listTeamMembershipsForUser: vi.fn(async () => [
     { teamId: "team-west", region: "usw" },
   ]),
+  listTeamMembershipsForUserDetailed: vi.fn(async () => ({
+    memberships: [],
+    degradedRegions: [],
+  })),
   invalidateMembershipDirectory: vi.fn(),
   findTeamById: vi.fn(async () => ({ region: "use" })),
 }))
@@ -55,6 +65,47 @@ vi.mock("@/lib/api/team-provisioning", () => ({
     name: "new@example.com",
     region: "use",
   })),
+}))
+const mockEnsureGoogleOnboardingMembership = vi.fn()
+const mockReadVerifiedGoogleOnboardingMembership = vi.fn()
+const mockClassifyGoogleMembershipState = vi.fn(
+  async (
+    userId: string,
+    directory: {
+      memberships: Array<{ teamId: string; region: string }>
+      degradedRegions: string[]
+    },
+  ) => {
+    const membership = directory.memberships[0]
+    if (membership) {
+      return { kind: "existing" as const, membership }
+    }
+    if (directory.degradedRegions.length > 0) {
+      const onboardingMembership =
+        await mockReadVerifiedGoogleOnboardingMembership(userId)
+      if (onboardingMembership) {
+        return { kind: "existing" as const, membership: onboardingMembership }
+      }
+      return {
+        kind: "indeterminate" as const,
+        degradedRegions: directory.degradedRegions,
+      }
+    }
+    return { kind: "first_time" as const }
+  },
+)
+vi.mock("@/lib/auth/google-onboarding", () => ({
+  classifyGoogleMembershipState: (
+    userId: string,
+    directory: {
+      memberships: Array<{ teamId: string; region: string }>
+      degradedRegions: string[]
+    },
+  ) => mockClassifyGoogleMembershipState(userId, directory),
+  ensureGoogleOnboardingMembership: (...args: unknown[]) =>
+    mockEnsureGoogleOnboardingMembership(...args),
+  readVerifiedGoogleOnboardingMembership: (...args: unknown[]) =>
+    mockReadVerifiedGoogleOnboardingMembership(...args),
 }))
 
 const uswApiKeyUpserts: Array<Record<string, unknown>> = []
@@ -96,7 +147,10 @@ vi.mock("@/lib/cells", () => ({
 
 import { ensureImpersonationKeyRow } from "@/lib/admin/impersonation-key"
 import { platformImpersonationReadScopes } from "@/lib/admin/permissions"
-import { listTeamMembershipsForUser } from "@/lib/api/team-directory"
+import {
+  listTeamMembershipsForUser,
+  listTeamMembershipsForUserDetailed,
+} from "@/lib/api/team-directory"
 import { provisionTeam } from "@/lib/api/team-provisioning"
 
 import {
@@ -223,6 +277,43 @@ describe("proxy-auth new-user provisioning", () => {
     process.env.CONSOLE_PROXY_SECRET =
       "test-secret-must-be-at-least-thirty-two-chars-long-abcdef"
     useApiKeyUpserts.length = 0
+    activeTeamCookie = undefined
+    vi.mocked(provisionTeam).mockClear()
+    mockEnsureGoogleOnboardingMembership
+      .mockReset()
+      .mockResolvedValue(undefined)
+    mockReadVerifiedGoogleOnboardingMembership
+      .mockReset()
+      .mockResolvedValue(null)
+    mockClassifyGoogleMembershipState.mockReset().mockImplementation(
+      async (
+        userId: string,
+        directory: {
+          memberships: Array<{ teamId: string; region: string }>
+          degradedRegions: string[]
+        },
+      ) => {
+        const membership = directory.memberships[0]
+        if (membership) {
+          return { kind: "existing" as const, membership }
+        }
+        if (directory.degradedRegions.length > 0) {
+          const onboardingMembership =
+            await mockReadVerifiedGoogleOnboardingMembership(userId)
+          if (onboardingMembership) {
+            return {
+              kind: "existing" as const,
+              membership: onboardingMembership,
+            }
+          }
+          return {
+            kind: "indeterminate" as const,
+            degradedRegions: directory.degradedRegions,
+          }
+        }
+        return { kind: "first_time" as const }
+      },
+    )
   })
 
   it("provisions a full RBAC team when the user has no memberships", async () => {
@@ -253,6 +344,61 @@ describe("proxy-auth new-user provisioning", () => {
         created_by: "brand-new",
       },
     ])
+  })
+
+  it("uses a detailed Google membership read when the initial lookup is empty", async () => {
+    vi.mocked(listTeamMembershipsForUser).mockResolvedValueOnce([])
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+      memberships: [{ teamId: "team-west", region: "usw" }],
+      degradedRegions: ["use"],
+    })
+
+    const key = await getAuthApiKeyForUser({
+      id: "google-user",
+      email: "google@example.com",
+      app_metadata: { provider: "google", providers: ["google"] },
+    } as never)
+
+    expect(key).toMatch(/^ss_live_/)
+    expect(provisionTeam).not.toHaveBeenCalled()
+  })
+
+  it("respects the selected active team when recovering a fresh Google lookup", async () => {
+    vi.mocked(listTeamMembershipsForUser).mockResolvedValueOnce([])
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+      memberships: [
+        { teamId: "team-east", region: "use" },
+        { teamId: "team-west", region: "usw" },
+      ],
+      degradedRegions: [],
+    })
+    activeTeamCookie = "usw:team-west"
+
+    const key = await getAuthApiKeyForUser({
+      id: "google-selected-user",
+      email: "google@example.com",
+      app_metadata: { provider: "google", providers: ["google"] },
+    } as never)
+
+    expect(key).toMatch(/^ss_live_/)
+    expect(provisionTeam).not.toHaveBeenCalled()
+  })
+
+  it("fails transiently when a degraded empty lookup cannot be recovered", async () => {
+    vi.mocked(listTeamMembershipsForUser).mockResolvedValueOnce([])
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+      memberships: [],
+      degradedRegions: ["use"],
+    })
+    await expect(
+      getAuthApiKeyForUser({
+        id: "google-indeterminate-user",
+        email: "google@example.com",
+        app_metadata: { provider: "google", providers: ["google"] },
+      } as never),
+    ).rejects.toThrow("Google membership lookup degraded; please try again")
+
+    expect(provisionTeam).not.toHaveBeenCalled()
   })
 })
 

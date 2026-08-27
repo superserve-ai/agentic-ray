@@ -18,10 +18,13 @@ import { getProxySecret, hashKey } from "@/lib/api/proxy-secret"
 import {
   invalidateMembershipDirectory,
   listTeamMembershipsForUser,
+  listTeamMembershipsForUserDetailed,
   findTeamById,
   type TeamMembership,
 } from "@/lib/api/team-directory"
 import { provisionTeam } from "@/lib/api/team-provisioning"
+import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
+import { isGoogleUser } from "@/lib/auth/google-signup-proof"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -104,6 +107,7 @@ async function ensureProfile(userId: string, email: string): Promise<void> {
 async function getTeamForUser(
   userId: string,
   email: string,
+  googleUser = false,
 ): Promise<TeamMembership> {
   const selection = await readTeamSelection()
   const cacheKey = `${userId}|${selection ? serializeTeamSelection(selection) : ""}`
@@ -112,11 +116,42 @@ async function getTeamForUser(
 
   await ensureProfile(userId, email)
 
-  const membership = pickActiveTeam(
-    await listTeamMembershipsForUser(userId),
-    selection,
-  )
+  let detailedLookup: {
+    memberships: TeamMembership[]
+    degradedRegions: string[]
+  } | null = null
+  let memberships = await listTeamMembershipsForUser(userId)
+  if (googleUser && memberships.length === 0) {
+    // A fresh, complete directory read is required before deciding this is a
+    // first-team Google onboarding attempt. If that read is degraded, a
+    // verified onboarding marker can recover the current membership, but the
+    // marker itself never counts as membership.
+    detailedLookup = await listTeamMembershipsForUserDetailed(userId, {
+      maxAgeMs: 0,
+    })
+    memberships = detailedLookup.memberships
+    const state = await classifyGoogleMembershipState(userId, detailedLookup)
+    if (state.kind === "existing") {
+      const activeMembership =
+        pickActiveTeam(detailedLookup.memberships, selection) ??
+        state.membership
+      if (googleUser) {
+      }
+      setFresh(teamCache, cacheKey, activeMembership)
+      return activeMembership
+    } else if (state.kind === "indeterminate") {
+      console.warn("Google onboarding blocked: membership lookup degraded", {
+        userId,
+        degradedRegions: state.degradedRegions,
+        stage: "proxy-auth",
+      })
+      throw new Error("Google membership lookup degraded; please try again")
+    }
+  }
+  const membership = pickActiveTeam(memberships, selection)
   if (membership) {
+    if (googleUser) {
+    }
     setFresh(teamCache, cacheKey, membership)
     return membership
   }
@@ -137,7 +172,11 @@ async function getTeamForUser(
 }
 
 export async function getTeamIdForUser(user: User): Promise<string> {
-  const { teamId } = await getTeamForUser(user.id, user.email ?? user.id)
+  const { teamId } = await getTeamForUser(
+    user.id,
+    user.email ?? user.id,
+    isGoogleUser(user),
+  )
   return teamId
 }
 
@@ -147,7 +186,11 @@ export async function getTeamIdForUser(user: User): Promise<string> {
  * whose database holds the proxy key row.
  */
 export async function getApiBaseUrlForUser(user: User): Promise<string> {
-  const { region } = await getTeamForUser(user.id, user.email ?? user.id)
+  const { region } = await getTeamForUser(
+    user.id,
+    user.email ?? user.id,
+    isGoogleUser(user),
+  )
   return cellFor(region).apiBaseUrl
 }
 
@@ -226,7 +269,11 @@ export async function getAuthApiKeyForUser(
     )
   }
 
-  const team = await getTeamForUser(user.id, user.email ?? user.id)
+  const team = await getTeamForUser(
+    user.id,
+    user.email ?? user.id,
+    isGoogleUser(user),
+  )
   const rawKey = deriveRawKey(user.id, team.teamId)
   await ensureProxyKeyRow(user.id, team, hashKey(rawKey))
   return rawKey

@@ -2,7 +2,13 @@ import { NextResponse } from "next/server"
 
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { sendWelcomeEmail } from "@/app/(auth)/auth/signup/action"
+import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
+import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
+import {
+  hasValidGoogleSignupProof,
+  isGoogleUser,
+} from "@/lib/auth/google-signup-proof"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createServerClient } from "@/lib/supabase/server"
@@ -15,7 +21,6 @@ function buildRedirectUrl(origin: string, path: string): string {
     process.env.VERCEL_ENV === "preview"
       ? origin
       : process.env.NEXT_PUBLIC_APP_URL || origin
-
   return new URL(path, base).toString()
 }
 
@@ -41,7 +46,6 @@ export async function GET(request: Request) {
 
   if (code || tokenHash) {
     const supabase = await createServerClient()
-
     let error = null
     if (code) {
       const result = await supabase.auth.exchangeCodeForSession(code)
@@ -86,13 +90,67 @@ export async function GET(request: Request) {
       } = await supabase.auth.getUser()
 
       if (user) {
-        const createdAt = new Date(user.created_at)
-        const now = new Date()
-        const isNewUser = now.getTime() - createdAt.getTime() < 30000
-
         const provider = code
           ? user.app_metadata?.provider || "google"
           : "email"
+        let isNewUser = false
+
+        if (code && isGoogleUser(user)) {
+          const directory = await classifyGoogleMembershipState(
+            user.id,
+            await listTeamMembershipsForUserDetailed(user.id, {
+              maxAgeMs: 0,
+            }),
+          )
+
+          if (directory.kind === "indeterminate") {
+            await trackEvent(AUTH_EVENTS.SIGN_IN_FAILED, user.id, {
+              provider,
+              email: user.email,
+              reason: "membership_lookup_degraded",
+            })
+            console.warn("Google OAuth membership lookup degraded", {
+              provider,
+              stage: "callback",
+              degradedRegions: directory.degradedRegions,
+            })
+            return NextResponse.redirect(
+              buildRedirectUrl(
+                origin,
+                "/auth/auth-code-error?reason=membership_lookup_degraded",
+              ),
+            )
+          }
+
+          isNewUser = directory.kind === "first_time"
+
+          if (isNewUser) {
+            const proofValid = await hasValidGoogleSignupProof()
+            if (!proofValid) {
+              await trackEvent(
+                AUTH_EVENTS.GOOGLE_SIGNUP_BYPASS_BLOCKED,
+                user.id,
+                {
+                  reason: "missing_or_invalid_proof",
+                  provider,
+                },
+              )
+              console.warn("Google OAuth onboarding blocked", {
+                reason: "missing_or_invalid_proof",
+              })
+              return NextResponse.redirect(
+                buildRedirectUrl(
+                  origin,
+                  "/auth/auth-code-error?reason=signup_verification_required",
+                ),
+              )
+            }
+            console.info("Google OAuth signup proof validated at callback")
+          }
+        } else {
+          const createdAt = new Date(user.created_at)
+          isNewUser = Date.now() - createdAt.getTime() < 30000
+        }
 
         if (isNewUser) {
           await notifySlackOfNewUser(
@@ -100,9 +158,11 @@ export async function GET(request: Request) {
             user.user_metadata?.full_name || null,
             user.app_metadata?.provider || null,
           )
-          sendWelcomeEmail(
-            user.email || "",
-            user.user_metadata?.full_name || "there",
+          Promise.resolve(
+            sendWelcomeEmail(
+              user.email || "",
+              user.user_metadata?.full_name || "there",
+            ),
           ).catch(() => {})
         }
 
@@ -119,9 +179,7 @@ export async function GET(request: Request) {
         }
       }
 
-      if (next.startsWith("https://")) {
-        return NextResponse.redirect(next)
-      }
+      if (next.startsWith("https://")) return NextResponse.redirect(next)
       return NextResponse.redirect(buildRedirectUrl(origin, next))
     }
   }

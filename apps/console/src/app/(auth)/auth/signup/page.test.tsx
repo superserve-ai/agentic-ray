@@ -68,8 +68,12 @@ vi.mock("@/lib/supabase/client", () => ({
 }))
 
 const mockSignUpWithEmail = vi.fn()
+const mockBeginGoogleSignup = vi.fn<
+  (token?: string) => Promise<{ success: boolean; error?: string }>
+>(() => Promise.resolve({ success: true }))
 vi.mock("./action", () => ({
   signUpWithEmail: (...args: unknown[]) => mockSignUpWithEmail(...args),
+  beginGoogleSignup: (token?: string) => mockBeginGoogleSignup(token),
 }))
 
 const mockSearchParams = new URLSearchParams()
@@ -117,6 +121,8 @@ describe("SignUpPage", () => {
 
   beforeEach(async () => {
     mockSignUpWithEmail.mockReset()
+    mockBeginGoogleSignup.mockReset()
+    mockBeginGoogleSignup.mockResolvedValue({ success: true })
     mockSignInWithOAuth.mockReset()
     mockCapture.mockReset()
     mockRouterPush.mockReset()
@@ -301,6 +307,7 @@ describe("SignUpPage", () => {
     )
 
     await waitFor(() => {
+      expect(mockBeginGoogleSignup).toHaveBeenCalledWith(undefined)
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
         options: { redirectTo: expect.stringContaining("/auth/callback") },
@@ -324,6 +331,8 @@ describe("SignUpPage with reCAPTCHA configured", () => {
 
   beforeEach(() => {
     mockSignUpWithEmail.mockReset()
+    mockBeginGoogleSignup.mockReset()
+    mockBeginGoogleSignup.mockResolvedValue({ success: true })
     process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = "test-site-key"
     vi.resetModules()
   })
@@ -360,6 +369,67 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       await screen.findByText(/content or ad blocker/i),
     ).toBeInTheDocument()
     expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+  })
+
+  it("does not start OAuth when server-side Google verification fails", async () => {
+    mockBeginGoogleSignup.mockResolvedValue({
+      success: false,
+      error: "We couldn't verify you're human. Please try again.",
+    })
+    ;(window as { grecaptcha?: unknown }).grecaptcha = {
+      enterprise: {
+        ready: (callback: () => void) => callback(),
+        execute: () => Promise.resolve("google-token"),
+      },
+    }
+    const { default: ConfiguredSignUpPage } = await import("./page")
+    render(<ConfiguredSignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", { name: /Continue with Google/ }),
+    )
+
+    expect(mockBeginGoogleSignup).toHaveBeenCalledWith("google-token")
+    expect(mockSignInWithOAuth).not.toHaveBeenCalled()
+    expect(await screen.findByText(/couldn't verify/i)).toBeInTheDocument()
+  })
+
+  it("requests signup_google reCAPTCHA before Google OAuth", async () => {
+    const execute = vi.fn().mockResolvedValue("google-token")
+    let resolveBeginSignup!: () => void
+    const beginSignupPromise = new Promise<{ success: boolean }>((resolve) => {
+      resolveBeginSignup = () => resolve({ success: true })
+    })
+    mockBeginGoogleSignup.mockReturnValue(beginSignupPromise)
+    ;(window as { grecaptcha?: unknown }).grecaptcha = {
+      enterprise: {
+        ready: (callback: () => void) => callback(),
+        execute,
+      },
+    }
+    const { default: ConfiguredSignUpPage } = await import("./page")
+    render(<ConfiguredSignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", { name: /Continue with Google/ }),
+    )
+
+    await waitFor(() => {
+      expect(execute).toHaveBeenCalledWith("test-site-key", {
+        action: "signup_google",
+      })
+      expect(mockBeginGoogleSignup).toHaveBeenCalledWith("google-token")
+    })
+    expect(mockSignInWithOAuth).not.toHaveBeenCalled()
+
+    resolveBeginSignup()
+
+    await waitFor(() => {
+      expect(mockSignInWithOAuth).toHaveBeenCalledWith({
+        provider: "google",
+        options: { redirectTo: expect.stringContaining("/auth/callback") },
+      })
+    })
   })
 
   it("submits with a token once reCAPTCHA succeeds", async () => {
