@@ -54,6 +54,13 @@ describe("verifyRecaptcha (unconfigured)", () => {
     expect(result).toEqual({ verified: true })
     expect(fetchSpy).not.toHaveBeenCalled()
   })
+
+  it("fails closed when reCAPTCHA is only partially configured", async () => {
+    process.env.RECAPTCHA_API_KEY = "test-api-key"
+    const result = await verifyRecaptcha(undefined, "signup")
+    expect(result).toEqual({ verified: false, reason: "configuration_error" })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
 })
 
 describe("verifyRecaptcha (configured)", () => {

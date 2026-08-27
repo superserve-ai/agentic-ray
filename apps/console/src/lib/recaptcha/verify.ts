@@ -26,9 +26,10 @@ const getScoreThreshold = (): number => {
   return parsed
 }
 
-// reCAPTCHA Enterprise. An unconfigured integration and transient availability
-// failures fail open; rejected requests and credential/configuration failures
-// fail closed so they cannot silently disable the abuse control.
+// reCAPTCHA Enterprise. A fully unconfigured integration and transient
+// availability failures fail open; partial configuration, rejected requests,
+// and credential/configuration failures fail closed so they cannot silently
+// disable the abuse control.
 export const verifyRecaptcha = async (
   // Server actions expose an RPC endpoint with no runtime type enforcement —
   // a caller can send any JSON, not just what the TS signature promises.
@@ -39,8 +40,12 @@ export const verifyRecaptcha = async (
   const projectId = process.env.RECAPTCHA_PROJECT_ID
   const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 
-  if (!apiKey || !projectId || !siteKey) {
+  const configuredValues = [apiKey, projectId, siteKey].filter(Boolean).length
+  if (configuredValues === 0) {
     return { verified: true }
+  }
+  if (configuredValues < 3) {
+    return { verified: false, reason: "configuration_error" }
   }
 
   if (typeof token !== "string" || !token) {
