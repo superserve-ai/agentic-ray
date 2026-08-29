@@ -119,9 +119,22 @@
         "vite": "^7.3.1",
       },
     },
+    "examples/lakefs": {
+      "name": "@superserve/lakefs-example",
+      "version": "0.1.0",
+      "dependencies": {
+        "@superserve/sdk": "workspace:*",
+      },
+      "devDependencies": {
+        "@superserve/typescript-config": "workspace:*",
+        "@types/node": "^25.5.2",
+        "typescript": "^5.7.0",
+        "vitest": "^4.0.0",
+      },
+    },
     "examples/loops": {
       "name": "@superserve/loops",
-      "version": "0.1.5",
+      "version": "0.1.8",
       "bin": {
         "superserve-loops": "install/cli.ts",
       },
@@ -162,7 +175,7 @@
     },
     "packages/mcp": {
       "name": "@superserve/mcp",
-      "version": "0.1.1",
+      "version": "0.1.3",
       "bin": {
         "superserve-mcp": "./dist/index.js",
         "superserve-mcp-http": "./dist/httpServer.js",
@@ -187,7 +200,7 @@
     },
     "packages/sdk": {
       "name": "@superserve/sdk",
-      "version": "0.7.8",
+      "version": "0.8.2",
       "devDependencies": {
         "@superserve/typescript-config": "workspace:*",
         "@types/node": "^25.5.2",
@@ -936,6 +949,8 @@
     "@superserve/cli": ["@superserve/cli@workspace:packages/cli"],
 
     "@superserve/console": ["@superserve/console@workspace:apps/console"],
+
+    "@superserve/lakefs-example": ["@superserve/lakefs-example@workspace:examples/lakefs"],
 
     "@superserve/loops": ["@superserve/loops@workspace:examples/loops"],
 

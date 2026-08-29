@@ -1,0 +1,26 @@
+{
+  "name": "@superserve/lakefs-example",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multiple agents working on branches of a shared, bring-your-own lakeFS dataset mounted across Superserve sandboxes",
+  "type": "module",
+  "scripts": {
+    "example": "bun run src/multi-agent.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:sandbox": "bun run tests/sandbox-lifecycle.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "bunx oxlint",
+    "format": "bunx oxfmt --write",
+    "format:check": "bunx oxfmt --check"
+  },
+  "dependencies": {
+    "@superserve/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@superserve/typescript-config": "workspace:*",
+    "@types/node": "^25.5.2",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.0"
+  }
+}

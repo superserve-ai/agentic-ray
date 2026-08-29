@@ -1,0 +1,345 @@
+import { randomUUID } from "node:crypto"
+import { readFile } from "node:fs/promises"
+
+import { NotFoundError, Sandbox, Secret, Template } from "@superserve/sdk"
+
+import {
+  positiveInteger,
+  requiredDownloadUrl,
+  requiredEndpoint,
+  requiredEnv,
+  requiredIdentifier,
+  requiredSha256,
+} from "./config"
+import {
+  EVEREST_MOUNT_TIMEOUT_MS,
+  EVEREST_UMOUNT_TIMEOUT_MS,
+  MOUNT_FLAGS,
+  everestBuildSteps,
+  shutdownSandboxes,
+} from "./everest"
+
+// Everest is proprietary and requires lakeFS Cloud or Enterprise. Obtain the
+// Linux x86_64 binary, or an authorized download URL for it, from lakeFS --
+// this example deliberately ships no URL or checksum of its own, so nothing
+// here redistributes lakeFS's artifact. Supply both: the checksum is
+// required so the build step verifies what it fetched rather than trusting
+// the download.
+const EVEREST_DOWNLOAD_URL = requiredDownloadUrl("EVEREST_DOWNLOAD_URL")
+const EVEREST_SHA256 = requiredSha256("EVEREST_SHA256")
+
+function assertCommandSucceeded(
+  result: Awaited<ReturnType<Sandbox["commands"]["run"]>>,
+  context: string,
+): void {
+  if (result.exitCode !== 0) {
+    throw new Error(`${context} failed: ${result.stderr || result.stdout}`)
+  }
+}
+
+/**
+ * Creates the secret once, then treats the current environment value as the
+ * source of truth on reruns. Refuse to rotate a same-named secret with a
+ * different host or auth type because another integration may own it.
+ */
+async function ensureApiSecret(name: string, hostname: string, value: string) {
+  try {
+    const existing = await Secret.get(name)
+    if (
+      existing.authType !== "basic" ||
+      existing.hosts.length !== 1 ||
+      existing.hosts[0] !== hostname
+    ) {
+      throw new Error(
+        `Superserve secret ${name} exists with auth=${existing.authType} ` +
+          `and hosts=${JSON.stringify(existing.hosts)}; expected basic auth ` +
+          `scoped only to ${hostname}. Recreate it or use a different name.`,
+      )
+    }
+    await existing.rotate(value)
+    console.log(`rotated existing Superserve secret ${name}`)
+  } catch (error) {
+    if (!(error instanceof NotFoundError)) throw error
+    await Secret.create({
+      name,
+      value,
+      hosts: [hostname],
+      auth: { type: "basic" },
+    })
+    console.log(`created Superserve secret ${name}`)
+  }
+}
+
+/**
+ * Idempotent: reuses the template if it already exists and is ready. The
+ * build step fetches Everest from the URL you supply and verifies it against
+ * the checksum you supply -- see EVEREST_DOWNLOAD_URL above. Mounting also
+ * requires the target lakeFS deployment to be Cloud or Enterprise; Everest
+ * checks that entitlement against the server at mount time, independently of
+ * the credentials used to authenticate.
+ */
+async function ensureTemplate(name: string): Promise<string> {
+  // Template.connect() takes a template ID, not a name, despite its
+  // `nameOrId` parameter -- the API rejects a non-UUID. Resolve the name
+  // through list() and hand the resolved ID to Sandbox.create.
+  const existing = (await Template.list({ namePrefix: name })).find(
+    (t) => t.name === name,
+  )
+  if (existing) {
+    if (existing.status === "failed") {
+      throw new Error(
+        `template ${name} previously failed to build; delete it and rerun`,
+      )
+    }
+    if (existing.status !== "ready") {
+      console.log(`waiting for existing template ${name} to finish building...`)
+      await (
+        await Template.connect(existing.id)
+      ).waitUntilReady({
+        onLog: (event) => console.log(`[template build] ${event.text}`),
+      })
+    } else {
+      console.log(`reusing existing template ${name}`)
+    }
+    return existing.id
+  }
+
+  console.log(`building template ${name}...`)
+  const built = await Template.create({
+    name,
+    from: "ubuntu:24.04",
+    steps: everestBuildSteps(EVEREST_DOWNLOAD_URL, EVEREST_SHA256),
+  })
+  await built.waitUntilReady({
+    onLog: (event) => console.log(`[template build] ${event.text}`),
+  })
+  console.log(`template ${name} ready`)
+  return built.id
+}
+
+/** Branch create/merge/delete go through lakeFS's native REST API -- Everest has no concept of its own. */
+async function createBranch(
+  sandbox: Sandbox,
+  endpoint: string,
+  repository: string,
+  branch: string,
+  source: string,
+): Promise<void> {
+  const result = await sandbox.commands.run(
+    `curl --fail-with-body --silent --show-error --user "$EVEREST_LAKEFS_CREDENTIALS_ACCESS_KEY_ID:$EVEREST_LAKEFS_CREDENTIALS_SECRET_ACCESS_KEY" ` +
+      `--header "Content-Type: application/json" --data '${JSON.stringify({ name: branch, source })}' ` +
+      `"${endpoint}/api/v1/repositories/${repository}/branches"`,
+  )
+  assertCommandSucceeded(result, `create branch ${branch}`)
+}
+
+async function deleteBranch(
+  sandbox: Sandbox,
+  endpoint: string,
+  repository: string,
+  branch: string,
+): Promise<void> {
+  const result = await sandbox.commands.run(
+    `curl --fail-with-body --silent --show-error --request DELETE --user "$EVEREST_LAKEFS_CREDENTIALS_ACCESS_KEY_ID:$EVEREST_LAKEFS_CREDENTIALS_SECRET_ACCESS_KEY" ` +
+      `"${endpoint}/api/v1/repositories/${repository}/branches/${branch}"`,
+  )
+  assertCommandSucceeded(result, `delete branch ${branch}`)
+}
+
+async function mergeBranch(
+  sandbox: Sandbox,
+  endpoint: string,
+  repository: string,
+  source: string,
+  destination: string,
+): Promise<string> {
+  const result = await sandbox.commands.run(
+    `curl --fail-with-body --silent --show-error --user "$EVEREST_LAKEFS_CREDENTIALS_ACCESS_KEY_ID:$EVEREST_LAKEFS_CREDENTIALS_SECRET_ACCESS_KEY" ` +
+      `--header "Content-Type: application/json" --data '${JSON.stringify({ message: `Merge ${source} into ${destination}` })}' ` +
+      `"${endpoint}/api/v1/repositories/${repository}/refs/${source}/merge/${destination}"`,
+  )
+  assertCommandSucceeded(result, `merge ${source} into ${destination}`)
+  return result.stdout.trim()
+}
+
+const agentCount = positiveInteger("LAKEFS_AGENT_COUNT", 2)
+const baseRef = "main"
+const mountPath = "/mnt/lakefs"
+const verifyMountPath = "/mnt/lakefs-verify"
+const outputPrefix = "results"
+const runId = randomUUID().slice(0, 8)
+const transactionBranch = `superserve-${runId}-transaction`
+const templateName = "lakefs-everest-demo"
+const secretName = "lakefs-secret"
+
+const endpoint = requiredEndpoint("LAKEFS_ENDPOINT")
+const repository = requiredIdentifier("LAKEFS_REPOSITORY")
+const accessKeyId = requiredEnv("LAKEFS_ACCESS_KEY_ID")
+// The only place the real lakeFS secret key enters this orchestrator
+// process. It's stored once as a host-scoped Superserve Secret. Everest and
+// the branch/merge calls share that binding, so the real value never enters a
+// sandbox.
+const realSecretAccessKey = requiredEnv("LAKEFS_SECRET_ACCESS_KEY")
+
+await ensureApiSecret(
+  secretName,
+  new URL(endpoint).hostname,
+  realSecretAccessKey,
+)
+const template = await ensureTemplate(templateName)
+
+const branches = Array.from(
+  { length: agentCount },
+  (_, index) => `superserve-${runId}-agent-${index + 1}`,
+)
+const sandboxes: Sandbox[] = []
+const worker = await readFile(new URL("../worker.py", import.meta.url), "utf8")
+let transactionBranchCreated = false
+
+try {
+  for (let index = 0; index < agentCount; index += 1) {
+    const sandbox = await Sandbox.create({
+      name: `lakefs-${runId}-agent-${index + 1}`,
+      fromTemplate: template,
+      envVars: {
+        EVEREST_LAKEFS_SERVER_ENDPOINT_URL: endpoint,
+        EVEREST_LAKEFS_CREDENTIALS_ACCESS_KEY_ID: accessKeyId,
+      },
+      secrets: {
+        EVEREST_LAKEFS_CREDENTIALS_SECRET_ACCESS_KEY: secretName,
+      },
+      metadata: { integration: "lakefs", run: runId },
+    })
+    sandboxes.push(sandbox)
+  }
+
+  await createBranch(
+    sandboxes[0],
+    endpoint,
+    repository,
+    transactionBranch,
+    baseRef,
+  )
+  transactionBranchCreated = true
+  console.log(`created transaction branch ${transactionBranch} from ${baseRef}`)
+
+  const results = await Promise.allSettled(
+    sandboxes.map(async (sandbox, index) => {
+      const branch = branches[index]
+
+      await createBranch(
+        sandbox,
+        endpoint,
+        repository,
+        branch,
+        transactionBranch,
+      )
+      await sandbox.commands.run(`mkdir -p ${mountPath}`)
+      const mount = await sandbox.commands.run(
+        `everest mount lakefs://${repository}/${branch}/ ${mountPath} ${MOUNT_FLAGS} --write-mode`,
+        { timeoutMs: EVEREST_MOUNT_TIMEOUT_MS },
+      )
+      assertCommandSucceeded(mount, `agent ${index + 1} mount`)
+
+      await sandbox.files.write("/tmp/lakefs-worker.py", worker)
+      const run = await sandbox.commands.run("python3 /tmp/lakefs-worker.py", {
+        env: {
+          AGENT_COUNT: String(agentCount),
+          AGENT_INDEX: String(index),
+        },
+        timeoutMs: 30 * 60_000,
+      })
+      assertCommandSucceeded(run, `agent ${index + 1} worker`)
+
+      const commit = await sandbox.commands.run(
+        `everest commit ${mountPath} -m "Superserve agent ${index + 1} dataset summary"`,
+        { timeoutMs: EVEREST_MOUNT_TIMEOUT_MS },
+      )
+      assertCommandSucceeded(commit, `agent ${index + 1} commit`)
+      console.log(`agent ${index + 1}: ${branch}\n${commit.stdout}`)
+    }),
+  )
+
+  const failure = results.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  )
+  if (failure) throw failure.reason
+
+  for (const branch of branches) {
+    const merge = await mergeBranch(
+      sandboxes[0],
+      endpoint,
+      repository,
+      branch,
+      transactionBranch,
+    )
+    console.log(`merged ${branch} into ${transactionBranch}\n${merge}`)
+  }
+
+  // Validate the complete batch before the one merge that publishes it to
+  // main. Consumers of main therefore see every result or none of them.
+  console.log("validating the transaction from a fresh read-only mount...")
+  await sandboxes[0].commands.run(`mkdir -p ${verifyMountPath}`)
+  const verifyMount = await sandboxes[0].commands.run(
+    `everest mount lakefs://${repository}/${transactionBranch}/ ${verifyMountPath} ${MOUNT_FLAGS}`,
+    { timeoutMs: EVEREST_MOUNT_TIMEOUT_MS },
+  )
+  assertCommandSucceeded(verifyMount, "read-back verification mount")
+  try {
+    for (let index = 0; index < agentCount; index += 1) {
+      const path = `${verifyMountPath}/${outputPrefix}/agent-${index + 1}.json`
+      const read = await sandboxes[0].commands.run(
+        `cat ${JSON.stringify(path)}`,
+      )
+      assertCommandSucceeded(read, `verify agent ${index + 1} result`)
+      const parsed = JSON.parse(read.stdout)
+      if (parsed.agent !== index + 1) {
+        throw new Error(
+          `verification failed: ${path} has agent=${parsed.agent}, expected ${index + 1}`,
+        )
+      }
+      console.log(`verified agent ${index + 1}: ${read.stdout.trim()}`)
+    }
+    console.log("read-back verification passed for all agents")
+  } finally {
+    // Verification is already done by this point, and the sandbox gets killed
+    // during cleanup regardless, so a stuck unmount here must not mask a
+    // verification failure or block publishing a batch that did verify.
+    await sandboxes[0].commands
+      .run(`everest umount ${verifyMountPath}`, {
+        timeoutMs: EVEREST_UMOUNT_TIMEOUT_MS,
+      })
+      .catch((error) =>
+        console.error(`failed to unmount ${verifyMountPath}:`, error),
+      )
+  }
+
+  const publish = await mergeBranch(
+    sandboxes[0],
+    endpoint,
+    repository,
+    transactionBranch,
+    baseRef,
+  )
+  console.log(
+    `atomically published ${transactionBranch} to ${baseRef}\n${publish}`,
+  )
+
+  console.log(
+    `completed run ${runId}; results are under ${outputPrefix}/ on ${baseRef}`,
+  )
+} finally {
+  if (transactionBranchCreated && sandboxes[0]) {
+    try {
+      await deleteBranch(sandboxes[0], endpoint, repository, transactionBranch)
+      console.log(`deleted transaction branch ${transactionBranch}`)
+    } catch (error) {
+      console.error(
+        `failed to delete transaction branch ${transactionBranch}:`,
+        error,
+      )
+    }
+  }
+
+  await shutdownSandboxes(sandboxes, mountPath)
+}
