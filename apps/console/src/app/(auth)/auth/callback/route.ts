@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server"
 
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
-import { sendWelcomeEmail } from "@/app/(auth)/auth/signup/action"
+import {
+  consumeFingerprintSignupEventId,
+  scheduleFingerprintObservation,
+  sendWelcomeEmail,
+} from "@/app/(auth)/auth/signup/action"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
@@ -146,6 +150,15 @@ export async function GET(request: Request) {
               )
             }
             console.info("Google OAuth signup proof validated at callback")
+          }
+
+          const fingerprintEventId = await consumeFingerprintSignupEventId()
+          if (isNewUser) {
+            scheduleFingerprintObservation(
+              fingerprintEventId,
+              "google",
+              user.id,
+            )
           }
         } else {
           const createdAt = new Date(user.created_at)

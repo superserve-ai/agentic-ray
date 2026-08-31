@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { Geist_Mono, Instrument_Sans } from "next/font/google"
 import { Suspense } from "react"
 
+import { FingerprintProvider } from "@/components/fingerprint-provider"
 import { PostHogPageView } from "@/components/posthog-pageview"
 import { PostHogProvider } from "@/components/posthog-provider"
 
@@ -65,7 +66,9 @@ export default function RootLayout({
           <Suspense fallback={null}>
             <PostHogPageView />
           </Suspense>
-          <ToastProvider>{children}</ToastProvider>
+          <FingerprintProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </FingerprintProvider>
         </body>
       </html>
     </PostHogProvider>

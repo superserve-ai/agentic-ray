@@ -28,8 +28,14 @@ vi.mock("@/app/(auth)/auth/signin/action", () => ({
 }))
 
 const mockSendWelcomeEmail = vi.fn()
+const mockConsumeFingerprintSignupEventId = vi.fn()
+const mockScheduleFingerprintObservation = vi.fn()
 vi.mock("@/app/(auth)/auth/signup/action", () => ({
   sendWelcomeEmail: (...args: unknown[]) => mockSendWelcomeEmail(...args),
+  consumeFingerprintSignupEventId: (...args: unknown[]) =>
+    mockConsumeFingerprintSignupEventId(...args),
+  scheduleFingerprintObservation: (...args: unknown[]) =>
+    mockScheduleFingerprintObservation(...args),
 }))
 
 const mockHasValidGoogleSignupProof = vi.fn()
@@ -118,6 +124,9 @@ describe("auth callback", () => {
     mockNotifySlackOfNewUser.mockResolvedValue(undefined)
     mockSendWelcomeEmail.mockReset()
     mockSendWelcomeEmail.mockResolvedValue(undefined)
+    mockConsumeFingerprintSignupEventId.mockReset()
+    mockConsumeFingerprintSignupEventId.mockResolvedValue(undefined)
+    mockScheduleFingerprintObservation.mockReset()
     mockListTeamMembershipsForUserDetailed
       .mockReset()
       .mockImplementation(async () => directoryState)
@@ -222,5 +231,22 @@ describe("auth callback", () => {
       email: "user@example.com",
       is_new_user: true,
     })
+  })
+
+  it("associates a first-time Google signup observation with the callback user", async () => {
+    googleMembershipState = { kind: "first_time" }
+    mockHasValidGoogleSignupProof.mockResolvedValue(true)
+    mockConsumeFingerprintSignupEventId.mockResolvedValue("event-1")
+
+    await GET(
+      new Request("https://console.superserve.ai/auth/callback?code=abc"),
+    )
+
+    expect(mockConsumeFingerprintSignupEventId).toHaveBeenCalled()
+    expect(mockScheduleFingerprintObservation).toHaveBeenCalledWith(
+      "event-1",
+      "google",
+      "u1",
+    )
   })
 })

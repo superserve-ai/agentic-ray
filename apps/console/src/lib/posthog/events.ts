@@ -9,6 +9,7 @@ export const AUTH_EVENTS = {
   GOOGLE_SIGNUP_CAPTCHA_FAILED: "auth_google_signup_captcha_failed",
   GOOGLE_SIGNUP_BYPASS_BLOCKED: "auth_google_signup_bypass_blocked",
   GOOGLE_SIGNUP_PROOF_CONSUMED: "auth_google_signup_proof_consumed",
+  FINGERPRINT_SIGNUP_OBSERVED: "auth_fingerprint_signup_observed",
   SIGN_OUT: "auth_sign_out",
   PASSWORD_RESET_REQUESTED: "auth_password_reset_requested",
   PASSWORD_RESET_COMPLETED: "auth_password_reset_completed",

@@ -12,6 +12,7 @@ import { Suspense, useEffect, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { ensureFingerprintSignupEventId } from "@/lib/fingerprint/client"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
@@ -33,10 +34,6 @@ declare global {
   }
 }
 
-// The script loads with strategy="afterInteractive", so a user who submits
-// immediately (e.g. autofill + fast Enter) can beat it. Poll briefly rather
-// than bailing on the first check, since verify.ts hard-rejects a configured
-// key with no token — bailing too early would false-positive real users.
 const waitForGrecaptcha = async (timeoutMs = 8000): Promise<boolean> => {
   if (window.grecaptcha) return true
   const start = Date.now()
@@ -49,13 +46,6 @@ const waitForGrecaptcha = async (timeoutMs = 8000): Promise<boolean> => {
 
 const RECAPTCHA_EXECUTE_TIMEOUT_MS = 8000
 
-// A missing site key means the token is never requested and the server
-// fails open (reCAPTCHA isn't configured). But if a site key IS configured
-// and this still returns undefined — script blocked, timed out, or execute()
-// failed — verify.ts hard-rejects the missing token rather than failing
-// open, since that's also exactly what a scripted signup bypassing the
-// browser widget looks like. handleSignUp below surfaces that case with an
-// actionable message instead of the generic server rejection.
 const getRecaptchaToken = async (
   action: string,
 ): Promise<string | undefined> => {
@@ -70,8 +60,6 @@ const getRecaptchaToken = async (
           .catch(reject)
       })
     })
-    // ready()/execute() have no built-in deadline — during a partial Google
-    // outage they can hang indefinitely and stall the signup form.
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(
         () => reject(new Error("recaptcha_execute_timeout")),
@@ -124,6 +112,7 @@ function SignUpContent() {
     }
     setIsLoading(true)
     try {
+      void ensureFingerprintSignupEventId()
       const recaptchaToken = await getRecaptchaToken("signup")
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
         setErrors({
@@ -162,6 +151,7 @@ function SignUpContent() {
     setIsGoogleLoading(true)
     setErrors({})
     try {
+      void ensureFingerprintSignupEventId()
       const recaptchaToken = await getRecaptchaToken("signup_google")
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
         setErrors({
@@ -206,7 +196,6 @@ function SignUpContent() {
       <DitherBackground />
       <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">
         <CornerBrackets size="lg" />
-
         <div className="mb-8 flex justify-center">
           <Link href="/">
             <Image
@@ -218,7 +207,6 @@ function SignUpContent() {
             />
           </Link>
         </div>
-
         {emailSent ? (
           <>
             <h1 className="text-center text-sm font-medium text-foreground">
@@ -244,8 +232,6 @@ function SignUpContent() {
             <h1 className="mb-6 text-center text-sm font-medium text-foreground">
               Create your Superserve account
             </h1>
-
-            {/* Google OAuth — first */}
             <Button
               type="button"
               variant="outline"
@@ -256,8 +242,6 @@ function SignUpContent() {
               {isGoogleLoading ? <Spinner /> : <GoogleIcon />}
               {isGoogleLoading ? "Signing up..." : "Continue with Google"}
             </Button>
-
-            {/* Divider */}
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-dashed border-border" />
@@ -266,8 +250,6 @@ function SignUpContent() {
                 <span className="bg-surface px-3 text-muted">or</span>
               </div>
             </div>
-
-            {/* Sign up form */}
             <form onSubmit={handleSignUp} className="space-y-3">
               <Input
                 type="text"
@@ -335,7 +317,6 @@ function SignUpContent() {
                 {isLoading ? "Creating account..." : "Sign Up"}
               </Button>
             </form>
-
             <p className="mt-5 text-center text-xs text-muted">
               Already have an account?{" "}
               <Link
@@ -345,7 +326,6 @@ function SignUpContent() {
                 Sign in
               </Link>
             </p>
-
             <p className="mt-6 text-center text-xs leading-relaxed text-muted/60">
               By continuing, you agree to our{" "}
               <a

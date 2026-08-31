@@ -47,11 +47,38 @@ vi.mock("@/lib/posthog/actions", () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
 }))
 
+const mockObserveFingerprintSignup = vi.fn()
+vi.mock("@/lib/fingerprint/observe", () => ({
+  observeFingerprintSignup: (...args: unknown[]) =>
+    mockObserveFingerprintSignup(...args),
+}))
+
 vi.mock("@/lib/posthog/events", () => ({
   AUTH_EVENTS: {
     GOOGLE_SIGNUP_CAPTCHA_FAILED: "auth_google_signup_captcha_failed",
     GOOGLE_SIGNUP_CAPTCHA_VERIFIED: "auth_google_signup_captcha_verified",
   },
+}))
+
+let fingerprintSignupEventId: string | undefined
+const mockFingerprintCookieDelete = vi.fn()
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) =>
+      fingerprintSignupEventId === undefined
+        ? undefined
+        : { name, value: fingerprintSignupEventId },
+    delete: (name: string) => {
+      if (name === "fingerprint_signup_event_id") {
+        fingerprintSignupEventId = undefined
+      }
+      mockFingerprintCookieDelete(name)
+    },
+  }),
+}))
+
+vi.mock("next/server", () => ({
+  after: (callback: () => void | Promise<void>) => callback(),
 }))
 
 import { beginGoogleSignup, signUpWithEmail } from "./action"
@@ -75,6 +102,9 @@ describe("signUpWithEmail", () => {
     mockVerifyRecaptcha.mockReset().mockResolvedValue({ verified: true })
     mockIssueGoogleSignupProof.mockReset().mockResolvedValue(undefined)
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
+    mockObserveFingerprintSignup.mockReset().mockResolvedValue(undefined)
+    mockFingerprintCookieDelete.mockReset()
+    fingerprintSignupEventId = undefined
     delete process.env.RECAPTCHA_API_KEY
     delete process.env.RECAPTCHA_PROJECT_ID
     delete process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
@@ -147,6 +177,44 @@ describe("signUpWithEmail", () => {
         subject: "Confirm your Superserve account",
       }),
     )
+  })
+
+  it("retains the fingerprint cookie across repeated attempts and schedules observe-only telemetry", async () => {
+    fingerprintSignupEventId = encodeURIComponent("event-123")
+    mockGenerateLink.mockResolvedValue({
+      data: {
+        user: { id: "user-1" },
+        properties: { hashed_token: "abc123" },
+      },
+      error: null,
+    })
+    mockSendEmail.mockResolvedValue({ success: true })
+
+    const result = await signUpWithEmail(
+      "user@test.com",
+      "password123",
+      "Test User",
+    )
+    const secondResult = await signUpWithEmail(
+      "user@test.com",
+      "password123",
+      "Test User",
+    )
+
+    expect(result).toEqual({ success: true })
+    expect(secondResult).toEqual({ success: true })
+    expect(mockFingerprintCookieDelete).not.toHaveBeenCalled()
+    expect(fingerprintSignupEventId).toBe("event-123")
+    expect(mockObserveFingerprintSignup).toHaveBeenNthCalledWith(1, {
+      eventId: "event-123",
+      signupMethod: "email",
+      userId: "user-1",
+    })
+    expect(mockObserveFingerprintSignup).toHaveBeenNthCalledWith(2, {
+      eventId: "event-123",
+      signupMethod: "email",
+      userId: "user-1",
+    })
   })
 
   it("returns error when email is already registered", async () => {
@@ -240,6 +308,9 @@ describe("beginGoogleSignup", () => {
     mockVerifyRecaptcha.mockReset().mockResolvedValue({ verified: true })
     mockIssueGoogleSignupProof.mockReset().mockResolvedValue(undefined)
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
+    mockObserveFingerprintSignup.mockReset().mockResolvedValue(undefined)
+    mockFingerprintCookieDelete.mockReset()
+    fingerprintSignupEventId = undefined
   })
 
   it("verifies signup_google before issuing a proof", async () => {
@@ -256,6 +327,17 @@ describe("beginGoogleSignup", () => {
       expect.any(String),
       { stage: "captcha_verification" },
     )
+  })
+
+  it("retains the fingerprint cookie for callback-side observation", async () => {
+    fingerprintSignupEventId = encodeURIComponent("event-456")
+
+    const result = await beginGoogleSignup("google-token")
+
+    expect(result).toEqual({ success: true })
+    expect(mockFingerprintCookieDelete).not.toHaveBeenCalled()
+    expect(fingerprintSignupEventId).toBe("event-456")
+    expect(mockObserveFingerprintSignup).not.toHaveBeenCalled()
   })
 
   it("fails closed when proof issuance is unavailable", async () => {

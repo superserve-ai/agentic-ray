@@ -67,6 +67,13 @@ vi.mock("@/lib/supabase/client", () => ({
   }),
 }))
 
+const mockEnsureFingerprintSignupEventId = vi.fn<
+  () => Promise<string | undefined>
+>(() => Promise.resolve(undefined))
+vi.mock("@/lib/fingerprint/client", () => ({
+  ensureFingerprintSignupEventId: () => mockEnsureFingerprintSignupEventId(),
+}))
+
 const mockSignUpWithEmail = vi.fn()
 const mockBeginGoogleSignup = vi.fn<
   (token?: string) => Promise<{ success: boolean; error?: string }>
@@ -124,6 +131,8 @@ describe("SignUpPage", () => {
     mockBeginGoogleSignup.mockReset()
     mockBeginGoogleSignup.mockResolvedValue({ success: true })
     mockSignInWithOAuth.mockReset()
+    mockEnsureFingerprintSignupEventId.mockReset()
+    mockEnsureFingerprintSignupEventId.mockResolvedValue(undefined)
     mockCapture.mockReset()
     mockRouterPush.mockReset()
     delete process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
@@ -226,6 +235,36 @@ describe("SignUpPage", () => {
     )
   })
 
+  it("does not wait for the fingerprint observation handoff before submitting email signup", async () => {
+    const fingerprintPromise = new Promise<string | undefined>(() => {})
+    mockEnsureFingerprintSignupEventId.mockReturnValueOnce(fingerprintPromise)
+    mockSignUpWithEmail.mockResolvedValue({ success: true })
+    render(<SignUpPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Full Name"),
+      "Test User",
+    )
+    await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
+    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(
+      screen.getByPlaceholderText("Confirm Password"),
+      "password123",
+    )
+    await user.click(screen.getByRole("button", { name: "Sign Up" }))
+
+    expect(mockEnsureFingerprintSignupEventId).toHaveBeenCalledTimes(1)
+
+    await waitFor(() => {
+      expect(mockSignUpWithEmail).toHaveBeenCalledWith(
+        "test@test.com",
+        "password123",
+        "Test User",
+        undefined,
+      )
+    })
+  })
+
   it("shows inline form error when signUpWithEmail returns an error", async () => {
     mockSignUpWithEmail.mockResolvedValue({
       success: false,
@@ -315,6 +354,27 @@ describe("SignUpPage", () => {
     })
   })
 
+  it("does not wait for the fingerprint observation handoff before starting Google signup", async () => {
+    const fingerprintPromise = new Promise<string | undefined>(() => {})
+    mockEnsureFingerprintSignupEventId.mockReturnValueOnce(fingerprintPromise)
+    mockBeginGoogleSignup.mockResolvedValue({ success: true })
+    render(<SignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", { name: /Continue with Google/ }),
+    )
+
+    expect(mockEnsureFingerprintSignupEventId).toHaveBeenCalledTimes(1)
+
+    await waitFor(() => {
+      expect(mockBeginGoogleSignup).toHaveBeenCalledWith(undefined)
+      expect(mockSignInWithOAuth).toHaveBeenCalledWith({
+        provider: "google",
+        options: { redirectTo: expect.stringContaining("/auth/callback") },
+      })
+    })
+  })
+
   it("has a link to sign in page", async () => {
     render(<SignUpPage />)
 
@@ -333,6 +393,8 @@ describe("SignUpPage with reCAPTCHA configured", () => {
     mockSignUpWithEmail.mockReset()
     mockBeginGoogleSignup.mockReset()
     mockBeginGoogleSignup.mockResolvedValue({ success: true })
+    mockEnsureFingerprintSignupEventId.mockReset()
+    mockEnsureFingerprintSignupEventId.mockResolvedValue(undefined)
     process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = "test-site-key"
     vi.resetModules()
   })
