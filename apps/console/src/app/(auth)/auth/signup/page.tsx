@@ -16,11 +16,16 @@ import { ensureFingerprintSignupEventId } from "@/lib/fingerprint/client"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
-import { beginGoogleSignup, signUpWithEmail } from "./action"
+import {
+  beginGoogleSignup,
+  isCloudflareSignupObservationEnabled,
+  signUpWithEmail,
+} from "./action"
 
 const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 const TRUSTED_REDIRECT_PATTERN =
   /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY
 
 declare global {
   interface Window {
@@ -33,7 +38,65 @@ declare global {
         ) => Promise<string>
       }
     }
+    turnstile?: {
+      render: (element: HTMLElement, options: Record<string, unknown>) => string
+      remove: (widgetId: string) => void
+    }
   }
+}
+
+const TURNSTILE_LOAD_TIMEOUT_MS = 1500
+const TURNSTILE_TOKEN_TIMEOUT_MS = 3000
+
+const getTurnstileToken = async (): Promise<string | undefined> => {
+  if (!TURNSTILE_SITE_KEY) return undefined
+  const start = Date.now()
+  while (!window.turnstile && Date.now() - start < TURNSTILE_LOAD_TIMEOUT_MS)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  if (!window.turnstile) return undefined
+  return new Promise((resolve) => {
+    const container = document.createElement("div")
+    container.style.position = "fixed"
+    container.style.bottom = "16px"
+    container.style.right = "16px"
+    container.style.zIndex = "50"
+    document.body.appendChild(container)
+    let widgetId = ""
+    const cleanup = () => {
+      if (widgetId) window.turnstile?.remove(widgetId)
+      container.remove()
+    }
+    const deadline = setTimeout(() => {
+      cleanup()
+      resolve(undefined)
+    }, TURNSTILE_TOKEN_TIMEOUT_MS)
+    try {
+      widgetId = window.turnstile!.render(container, {
+        sitekey: TURNSTILE_SITE_KEY,
+        size: "compact",
+        appearance: "interaction-only",
+        callback: (token: string) => {
+          clearTimeout(deadline)
+          cleanup()
+          resolve(token)
+        },
+        "error-callback": () => {
+          clearTimeout(deadline)
+          cleanup()
+          resolve(undefined)
+        },
+        "timeout-callback": () => {
+          clearTimeout(deadline)
+          cleanup()
+          resolve(undefined)
+        },
+      })
+    } catch {
+      clearTimeout(deadline)
+      cleanup()
+      resolve(undefined)
+    }
+  })
 }
 
 const waitForGrecaptcha = async (timeoutMs = 8000): Promise<boolean> => {
@@ -123,18 +186,25 @@ function SignUpContent() {
     try {
       void ensureFingerprintSignupEventId()
       const recaptchaToken = await getRecaptchaToken("signup")
+      const turnstileEnabled = await isCloudflareSignupObservationEnabled()
+      const turnstileToken = turnstileEnabled
+        ? await getTurnstileToken()
+        : undefined
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
         setErrors({
           form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
         })
         return
       }
-      const result = await signUpWithEmail(
-        email,
-        password,
-        fullName,
-        recaptchaToken,
-      )
+      const result = turnstileToken
+        ? await signUpWithEmail(
+            email,
+            password,
+            fullName,
+            recaptchaToken,
+            turnstileToken,
+          )
+        : await signUpWithEmail(email, password, fullName, recaptchaToken)
       if (!result.success) {
         posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
           method: "email",
@@ -162,6 +232,10 @@ function SignUpContent() {
     try {
       void ensureFingerprintSignupEventId()
       const recaptchaToken = await getRecaptchaToken("signup_google")
+      const turnstileEnabled = await isCloudflareSignupObservationEnabled()
+      const turnstileToken = turnstileEnabled
+        ? await getTurnstileToken()
+        : undefined
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
         setErrors({
           form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
@@ -169,7 +243,9 @@ function SignUpContent() {
         return
       }
 
-      const proof = await beginGoogleSignup(recaptchaToken)
+      const proof = turnstileToken
+        ? await beginGoogleSignup(recaptchaToken, turnstileToken)
+        : await beginGoogleSignup(recaptchaToken)
       if (!proof.success) {
         setErrors({ form: proof.error || "Google signup verification failed." })
         return
@@ -177,6 +253,7 @@ function SignUpContent() {
 
       const supabase = createBrowserClient()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
+      callbackUrl.searchParams.set("signup_attempt_id", proof.signupAttemptId)
       if (nextUrl && nextUrl !== "/") {
         callbackUrl.searchParams.set("next", nextUrl)
       }
@@ -199,6 +276,12 @@ function SignUpContent() {
       {RECAPTCHA_SITE_KEY && (
         <Script
           src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
+          strategy="afterInteractive"
+        />
+      )}
+      {TURNSTILE_SITE_KEY && (
+        <Script
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
           strategy="afterInteractive"
         />
       )}

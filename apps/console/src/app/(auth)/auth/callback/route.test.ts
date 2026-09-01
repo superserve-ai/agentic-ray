@@ -39,7 +39,9 @@ vi.mock("@/app/(auth)/auth/signup/action", () => ({
 }))
 
 const mockHasValidGoogleSignupProof = vi.fn()
+const mockHasValidLegacyGoogleSignupProof = vi.fn()
 const mockConsumeGoogleSignupProof = vi.fn()
+const mockMarkGoogleSignupAttempt = vi.fn()
 const mockEnsureGoogleOnboardingMembership = vi.fn()
 const mockListTeamMembershipsForUserDetailed = vi.fn(
   async (_userId: string, _opts?: { maxAgeMs?: number }) => directoryState,
@@ -61,8 +63,12 @@ vi.mock("@/lib/api/team-directory", () => ({
 vi.mock("@/lib/auth/google-signup-proof", () => ({
   hasValidGoogleSignupProof: (...args: unknown[]) =>
     mockHasValidGoogleSignupProof(...args),
+  hasValidLegacyGoogleSignupProof: (...args: unknown[]) =>
+    mockHasValidLegacyGoogleSignupProof(...args),
   consumeGoogleSignupProof: (...args: unknown[]) =>
     mockConsumeGoogleSignupProof(...args),
+  markGoogleSignupAttempt: (...args: unknown[]) =>
+    mockMarkGoogleSignupAttempt(...args),
   isGoogleUser: (user: {
     app_metadata?: { provider?: string; providers?: string[] }
   }) =>
@@ -88,6 +94,7 @@ vi.mock("@/lib/posthog/actions", () => ({
 vi.mock("@/lib/posthog/events", () => ({
   AUTH_EVENTS: {
     GOOGLE_SIGNUP_BYPASS_BLOCKED: "auth_google_signup_bypass_blocked",
+    SIGNUP_ATTEMPT_ASSOCIATED: "auth_signup_attempt_associated",
     SIGN_IN_FAILED: "sign_in_failed",
     SIGN_UP_COMPLETED: "sign_up_completed",
     SIGN_IN_COMPLETED: "sign_in_completed",
@@ -134,6 +141,9 @@ describe("auth callback", () => {
     mockHasValidGoogleSignupProof
       .mockReset()
       .mockImplementation(async () => proofAvailable)
+    mockHasValidLegacyGoogleSignupProof
+      .mockReset()
+      .mockImplementation(async () => proofAvailable)
     mockConsumeGoogleSignupProof.mockReset()
     mockEnsureGoogleOnboardingMembership
       .mockReset()
@@ -162,28 +172,16 @@ describe("auth callback", () => {
     expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
   })
 
-  it("routes a first-time Google user without a valid proof to Complete signup", async () => {
+  it("accepts an in-flight legacy Google callback without an attempt ID", async () => {
     googleMembershipState = { kind: "first_time" }
-    mockHasValidGoogleSignupProof.mockResolvedValue(false)
+    mockHasValidLegacyGoogleSignupProof.mockResolvedValue(true)
 
     const response = await GET(
-      new Request(
-        "https://console.superserve.ai/auth/callback?code=abc&next=https%3A%2F%2Fapp.superserve.ai%2Fdevice%2Fabc",
-      ),
+      new Request("https://console.superserve.ai/auth/callback?code=abc"),
     )
 
-    expect(mockHasValidGoogleSignupProof).toHaveBeenCalled()
-    expect(response.headers.get("location")).toContain(
-      "/auth/signup?complete_google=1&next=https%3A%2F%2Fapp.superserve.ai%2Fdevice%2Fabc",
-    )
-    expect(mockTrackEvent).toHaveBeenCalledWith(
-      "auth_google_signup_bypass_blocked",
-      "u1",
-      {
-        reason: "missing_or_invalid_proof",
-        provider: "google",
-      },
-    )
+    expect(mockHasValidLegacyGoogleSignupProof).toHaveBeenCalledWith()
+    expect(response.headers.get("location")).toContain("/sandboxes")
     expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
   })
 
@@ -213,10 +211,12 @@ describe("auth callback", () => {
     mockHasValidGoogleSignupProof.mockResolvedValue(true)
 
     const response = await GET(
-      new Request("https://console.superserve.ai/auth/callback?code=abc"),
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+      ),
     )
 
-    expect(mockHasValidGoogleSignupProof).toHaveBeenCalled()
+    expect(mockHasValidGoogleSignupProof).toHaveBeenCalledWith("attempt-1")
     expect(response.headers.get("location")).toContain("/sandboxes")
     expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
       "user@example.com",
@@ -241,7 +241,9 @@ describe("auth callback", () => {
     mockConsumeFingerprintSignupEventId.mockResolvedValue("event-1")
 
     await GET(
-      new Request("https://console.superserve.ai/auth/callback?code=abc"),
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+      ),
     )
 
     expect(mockConsumeFingerprintSignupEventId).toHaveBeenCalled()
@@ -249,6 +251,17 @@ describe("auth callback", () => {
       "event-1",
       "google",
       "u1",
+      "attempt-1",
+    )
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_signup_attempt_associated",
+      "u1",
+      {
+        signup_attempt_id: "attempt-1",
+        superserve_user_id: "u1",
+        signup_method: "google",
+        observed_at: expect.any(String),
+      },
     )
   })
 })

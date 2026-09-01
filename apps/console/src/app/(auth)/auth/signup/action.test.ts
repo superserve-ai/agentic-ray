@@ -42,6 +42,12 @@ vi.mock("@/lib/auth/google-signup-proof", () => ({
   issueGoogleSignupProof: () => mockIssueGoogleSignupProof(),
 }))
 
+const mockObserveCloudflareSignup = vi.fn()
+vi.mock("@/lib/cloudflare/signup-observe", () => ({
+  observeCloudflareSignup: (...args: unknown[]) =>
+    mockObserveCloudflareSignup(...args),
+}))
+
 const mockTrackEvent = vi.fn()
 vi.mock("@/lib/posthog/actions", () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
@@ -57,6 +63,8 @@ vi.mock("@/lib/posthog/events", () => ({
   AUTH_EVENTS: {
     GOOGLE_SIGNUP_CAPTCHA_FAILED: "auth_google_signup_captcha_failed",
     GOOGLE_SIGNUP_CAPTCHA_VERIFIED: "auth_google_signup_captcha_verified",
+    SIGNUP_ATTEMPT_ASSOCIATED: "auth_signup_attempt_associated",
+    SIGNUP_RECAPTCHA_OBSERVED: "auth_signup_recaptcha_observed",
   },
 }))
 
@@ -101,6 +109,7 @@ describe("signUpWithEmail", () => {
     mockSlack.mockReset().mockResolvedValue(undefined)
     mockVerifyRecaptcha.mockReset().mockResolvedValue({ verified: true })
     mockIssueGoogleSignupProof.mockReset().mockResolvedValue(undefined)
+    mockObserveCloudflareSignup.mockReset().mockResolvedValue(undefined)
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
     mockObserveFingerprintSignup.mockReset().mockResolvedValue(undefined)
     mockFingerprintCookieDelete.mockReset()
@@ -209,12 +218,37 @@ describe("signUpWithEmail", () => {
       eventId: "event-123",
       signupMethod: "email",
       userId: "user-1",
+      signupAttemptId: expect.any(String),
     })
     expect(mockObserveFingerprintSignup).toHaveBeenNthCalledWith(2, {
       eventId: "event-123",
       signupMethod: "email",
       userId: "user-1",
+      signupAttemptId: expect.any(String),
     })
+    expect(mockObserveCloudflareSignup).toHaveBeenCalledTimes(2)
+    const cloudflareCalls = mockObserveCloudflareSignup.mock.calls.map(
+      ([args]) =>
+        args as {
+          signupAttemptId: string
+          signupMethod: "email" | "google"
+          userId?: string | null
+          teamId?: string | null
+        },
+    )
+    expect(cloudflareCalls[0]).toMatchObject({
+      signupMethod: "email",
+      userId: undefined,
+      teamId: undefined,
+    })
+    expect(cloudflareCalls[1]).toMatchObject({
+      signupMethod: "email",
+      userId: undefined,
+      teamId: undefined,
+    })
+    expect(cloudflareCalls[0].signupAttemptId).not.toBe(
+      cloudflareCalls[1].signupAttemptId,
+    )
   })
 
   it("returns error when email is already registered", async () => {
@@ -316,7 +350,10 @@ describe("beginGoogleSignup", () => {
   it("verifies signup_google before issuing a proof", async () => {
     const result = await beginGoogleSignup("google-token")
 
-    expect(result).toEqual({ success: true })
+    expect(result).toEqual({
+      success: true,
+      signupAttemptId: expect.any(String),
+    })
     expect(mockVerifyRecaptcha).toHaveBeenCalledWith(
       "google-token",
       "signup_google",
@@ -334,7 +371,10 @@ describe("beginGoogleSignup", () => {
 
     const result = await beginGoogleSignup("google-token")
 
-    expect(result).toEqual({ success: true })
+    expect(result).toEqual({
+      success: true,
+      signupAttemptId: expect.any(String),
+    })
     expect(mockFingerprintCookieDelete).not.toHaveBeenCalled()
     expect(fingerprintSignupEventId).toBe("event-456")
     expect(mockObserveFingerprintSignup).not.toHaveBeenCalled()

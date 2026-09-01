@@ -11,7 +11,9 @@ import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
 import {
   hasValidGoogleSignupProof,
+  hasValidLegacyGoogleSignupProof,
   isGoogleUser,
+  markGoogleSignupAttempt,
 } from "@/lib/auth/google-signup-proof"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
@@ -94,6 +96,8 @@ export async function GET(request: Request) {
       } = await supabase.auth.getUser()
 
       if (user) {
+        const signupAttemptId =
+          searchParams.get("signup_attempt_id") || undefined
         const provider = code
           ? user.app_metadata?.provider || "google"
           : "email"
@@ -129,7 +133,12 @@ export async function GET(request: Request) {
           isNewUser = directory.kind === "first_time"
 
           if (isNewUser) {
-            const proofValid = await hasValidGoogleSignupProof()
+            // Accept a legacy unscoped proof for OAuth flows that started
+            // before this rollout; new flows must carry and match the signed
+            // attempt ID for exact cross-provider correlation.
+            const proofValid = signupAttemptId
+              ? await hasValidGoogleSignupProof(signupAttemptId)
+              : await hasValidLegacyGoogleSignupProof()
             if (!proofValid) {
               await trackEvent(
                 AUTH_EVENTS.GOOGLE_SIGNUP_BYPASS_BLOCKED,
@@ -153,6 +162,7 @@ export async function GET(request: Request) {
               )
             }
             console.info("Google OAuth signup proof validated at callback")
+            if (signupAttemptId) await markGoogleSignupAttempt(signupAttemptId)
           }
 
           const fingerprintEventId = await consumeFingerprintSignupEventId()
@@ -161,7 +171,16 @@ export async function GET(request: Request) {
               fingerprintEventId,
               "google",
               user.id,
+              signupAttemptId,
             )
+            if (signupAttemptId) {
+              await trackEvent(AUTH_EVENTS.SIGNUP_ATTEMPT_ASSOCIATED, user.id, {
+                signup_attempt_id: signupAttemptId,
+                superserve_user_id: user.id,
+                signup_method: "google",
+                observed_at: new Date().toISOString(),
+              })
+            }
           }
         } else {
           const createdAt = new Date(user.created_at)

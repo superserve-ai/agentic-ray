@@ -10,6 +10,7 @@ type CookieSet = {
 
 let cookieValue: string | undefined
 const cookieSets: CookieSet[] = []
+let cookieEntries: Array<{ name: string; value: string }> = []
 
 const mockTrackEvent = vi.fn()
 vi.mock("@/lib/posthog/actions", () => ({
@@ -24,14 +25,28 @@ vi.mock("@/lib/posthog/events", () => ({
 
 vi.mock("next/headers", () => ({
   cookies: async () => ({
-    get: (name: string) =>
-      cookieValue === undefined ? undefined : { name, value: cookieValue },
+    get: (name: string) => {
+      const entry = cookieEntries.find((cookie) => cookie.name === name)
+      if (entry) return entry
+      return name === "__Host-superserve-google-signup" &&
+        cookieValue !== undefined
+        ? { name, value: cookieValue }
+        : undefined
+    },
+    getAll: () => cookieEntries,
     set: (name: string, value: string, options: Record<string, unknown>) => {
       cookieValue = value
+      cookieEntries = [
+        ...cookieEntries.filter((cookie) => cookie.name !== name),
+        { name, value },
+      ]
       cookieSets.push({ name, value, options })
     },
-    delete: () => {
+    delete: (name?: string) => {
       cookieValue = undefined
+      cookieEntries = name
+        ? cookieEntries.filter((cookie) => cookie.name !== name)
+        : []
     },
   }),
 }))
@@ -50,12 +65,15 @@ import {
   consumeGoogleSignupProof,
   issueGoogleSignupProof,
   requireGoogleSignupProof,
+  markGoogleSignupAttempt,
+  hasValidLegacyGoogleSignupProof,
 } from "./google-signup-proof"
 
 describe("google-signup-proof", () => {
   beforeEach(() => {
     cookieValue = undefined
     cookieSets.length = 0
+    cookieEntries = []
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
     process.env.GOOGLE_SIGNUP_PROOF_SECRET = "g".repeat(32)
   })
@@ -80,6 +98,41 @@ describe("google-signup-proof", () => {
     })
     expect(cookieSets[0].value).toContain(".")
     expect(await hasValidGoogleSignupProof()).toBe(true)
+  })
+
+  it("matches the signed attempt ID when validating callback correlation", async () => {
+    await issueGoogleSignupProof("attempt-1")
+
+    expect(await hasValidGoogleSignupProof("attempt-1")).toBe(true)
+    expect(await hasValidGoogleSignupProof()).toBe(true)
+    expect(await hasValidGoogleSignupProof("attempt-2")).toBe(false)
+    expect(await hasValidGoogleSignupProof("")).toBe(false)
+
+    cookieEntries = []
+    await issueGoogleSignupProof()
+    expect(await hasValidGoogleSignupProof("attempt-1")).toBe(false)
+  })
+
+  it("does not treat a scoped proof as a legacy callback proof", async () => {
+    await issueGoogleSignupProof("attempt-1")
+    cookieValue = undefined
+    expect(await hasValidLegacyGoogleSignupProof()).toBe(false)
+  })
+
+  it("validates an active attempt-scoped proof for provisioning without an ID", async () => {
+    await issueGoogleSignupProof("attempt-1")
+
+    expect(await hasValidGoogleSignupProof()).toBe(true)
+  })
+
+  it("binds provisioning to the callback-selected concurrent attempt", async () => {
+    await issueGoogleSignupProof("attempt-b")
+    await issueGoogleSignupProof("attempt-a")
+    await markGoogleSignupAttempt("attempt-a")
+
+    expect(await requireGoogleSignupProof()).toBe("attempt-a")
+    await consumeGoogleSignupProof("user-123", "attempt-a")
+    expect(await hasValidGoogleSignupProof("attempt-b")).toBe(true)
   })
 
   it("tracks proof consumption when the cookie is cleared", async () => {
@@ -107,6 +160,30 @@ describe("google-signup-proof", () => {
     expect(cookieValue).toBeUndefined()
   })
 
+  it("consumes only the completed attempt proof", async () => {
+    await issueGoogleSignupProof("attempt-a")
+    await issueGoogleSignupProof("attempt-b")
+
+    await consumeGoogleSignupProof("user-123", "attempt-a")
+
+    expect(cookieEntries.map(({ name }) => name)).toEqual([
+      "__Host-superserve-google-signup-attempt-b",
+    ])
+    expect(await hasValidGoogleSignupProof("attempt-b")).toBe(true)
+  })
+
+  it("preserves concurrent attempt proofs for legacy consumers without an ID", async () => {
+    await issueGoogleSignupProof("attempt-a")
+    await issueGoogleSignupProof("attempt-b")
+
+    await consumeGoogleSignupProof("user-123")
+
+    expect(cookieEntries).toHaveLength(1)
+    expect(cookieEntries[0].name).toBe(
+      "__Host-superserve-google-signup-attempt-b",
+    )
+  })
+
   it("treats an expired proof as invalid", async () => {
     await issueGoogleSignupProof()
     expect(await hasValidGoogleSignupProof()).toBe(true)
@@ -128,6 +205,9 @@ describe("google-signup-proof", () => {
     const [payload, signature] = cookieValue!.split(".")
     const replacement = signature[0] === "A" ? "B" : "A"
     cookieValue = `${payload}.${replacement}${signature.slice(1)}`
+    cookieEntries = [
+      { name: "__Host-superserve-google-signup", value: cookieValue },
+    ]
 
     expect(await hasValidGoogleSignupProof()).toBe(false)
   })
