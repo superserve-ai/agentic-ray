@@ -49,9 +49,10 @@ finally:
 
 ## Deep Agents Code
 
-Installing the package also registers a `superserve` sandbox provider for the `deepagents-code` (`dcode`) terminal agent:
+Installing `langchain-superserve` also registers a `superserve` sandbox provider for [Deep Agents Code](https://docs.langchain.com/deepagents-code) (`dcode`), the terminal coding agent built on the Deep Agents SDK:
 
 ```bash
+curl -LsSf https://langch.in/dcode | bash
 dcode --install langchain-superserve --package
 export SUPERSERVE_API_KEY=ss_live_...
 dcode --sandbox superserve
