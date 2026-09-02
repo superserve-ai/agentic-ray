@@ -11,6 +11,7 @@ icon: "/logos/integrations/langchain.png"
 
 ```bash
 pip install langchain-superserve
+export ANTHROPIC_API_KEY=sk-ant-...
 export SUPERSERVE_API_KEY=ss_live_...
 ```
 
@@ -26,15 +27,14 @@ from superserve import Sandbox
 from langchain_superserve import SuperserveSandbox
 
 sandbox = Sandbox.create(name="my-agent", from_template="superserve/python-3.11")
-backend = SuperserveSandbox(sandbox=sandbox)
-
-agent = create_deep_agent(
-    model="anthropic:claude-sonnet-5",
-    backend=backend,
-    system_prompt="You are a coding assistant with a sandboxed shell.",
-)
 
 try:
+    backend = SuperserveSandbox(sandbox=sandbox)
+    agent = create_deep_agent(
+        model="anthropic:claude-sonnet-5",
+        backend=backend,
+        system_prompt="You are a coding assistant with a sandboxed shell.",
+    )
     result = agent.invoke(
         {"messages": "List the files in /tmp and tell me how many there are."}
     )
