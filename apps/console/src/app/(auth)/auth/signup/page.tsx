@@ -19,6 +19,8 @@ import { createBrowserClient } from "@/lib/supabase/client"
 import { beginGoogleSignup, signUpWithEmail } from "./action"
 
 const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+const TRUSTED_REDIRECT_PATTERN =
+  /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
 
 declare global {
   interface Window {
@@ -72,6 +74,13 @@ const getRecaptchaToken = async (
   }
 }
 
+function sanitizeNext(raw: string | null): string {
+  const next = raw ?? "/"
+  if (next.startsWith("/") && !next.startsWith("//")) return next
+  if (TRUSTED_REDIRECT_PATTERN.test(next)) return next
+  return "/"
+}
+
 function SignUpContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
@@ -86,8 +95,8 @@ function SignUpContent() {
   const posthog = usePostHog()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const rawNext = searchParams.get("next") || "/"
-  const nextUrl = rawNext.startsWith("/") ? rawNext : "/"
+  const nextUrl = sanitizeNext(searchParams.get("next"))
+  const isCompleteGoogleSignup = searchParams.get("complete_google") === "1"
 
   useEffect(() => {
     if (searchParams.get("error") === "link_expired") {
@@ -226,6 +235,31 @@ function SignUpContent() {
                 Sign in
               </Link>
             </p>
+          </>
+        ) : isCompleteGoogleSignup ? (
+          <>
+            <h1 className="mb-4 text-center text-sm font-medium text-foreground">
+              Complete signup
+            </h1>
+            <p className="mb-6 text-center text-xs leading-relaxed text-muted">
+              Google sign-in succeeded. Complete signup to finish verification
+              and provision your Superserve account.
+            </p>
+            {errors.form && (
+              <p className="mb-4 text-xs text-destructive">{errors.form}</p>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleGoogleSignIn}
+              disabled={isGoogleLoading || isLoading}
+              className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
+            >
+              {isGoogleLoading ? <Spinner /> : <GoogleIcon />}
+              {isGoogleLoading
+                ? "Completing signup..."
+                : "Complete signup with Google"}
+            </Button>
           </>
         ) : (
           <>

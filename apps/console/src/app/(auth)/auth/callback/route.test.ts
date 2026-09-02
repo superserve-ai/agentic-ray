@@ -162,17 +162,19 @@ describe("auth callback", () => {
     expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
   })
 
-  it("blocks a first-time Google user without a valid proof", async () => {
+  it("routes a first-time Google user without a valid proof to Complete signup", async () => {
     googleMembershipState = { kind: "first_time" }
     mockHasValidGoogleSignupProof.mockResolvedValue(false)
 
     const response = await GET(
-      new Request("https://console.superserve.ai/auth/callback?code=abc"),
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&next=https%3A%2F%2Fapp.superserve.ai%2Fdevice%2Fabc",
+      ),
     )
 
     expect(mockHasValidGoogleSignupProof).toHaveBeenCalled()
     expect(response.headers.get("location")).toContain(
-      "/auth/auth-code-error?reason=signup_verification_required",
+      "/auth/signup?complete_google=1&next=https%3A%2F%2Fapp.superserve.ai%2Fdevice%2Fabc",
     )
     expect(mockTrackEvent).toHaveBeenCalledWith(
       "auth_google_signup_bypass_blocked",

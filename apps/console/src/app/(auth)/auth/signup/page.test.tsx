@@ -83,7 +83,7 @@ vi.mock("./action", () => ({
   beginGoogleSignup: (token?: string) => mockBeginGoogleSignup(token),
 }))
 
-const mockSearchParams = new URLSearchParams()
+let mockSearchParams = new URLSearchParams()
 const mockRouterPush = vi.fn()
 vi.mock("next/navigation", () => ({
   useSearchParams: () => mockSearchParams,
@@ -135,6 +135,7 @@ describe("SignUpPage", () => {
     mockEnsureFingerprintSignupEventId.mockResolvedValue(undefined)
     mockCapture.mockReset()
     mockRouterPush.mockReset()
+    mockSearchParams = new URLSearchParams()
     delete process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
     vi.resetModules()
     ;({ default: SignUpPage } = await import("./page"))
@@ -158,6 +159,23 @@ describe("SignUpPage", () => {
     expect(
       screen.getByRole("button", { name: /Continue with Google/ }),
     ).toBeInTheDocument()
+  })
+
+  it("renders Complete signup mode without the account-creation form", async () => {
+    mockSearchParams = new URLSearchParams("complete_google=1")
+    const { default: RecoverySignUpPage } = await import("./page")
+    render(<RecoverySignUpPage />)
+
+    expect(await screen.findByText("Complete signup")).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /Complete signup with Google/ }),
+    ).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText("Full Name")).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText("Email")).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText("Password")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Sign Up" }),
+    ).not.toBeInTheDocument()
   })
 
   it("shows inline errors when submitting with empty fields", async () => {
@@ -395,6 +413,7 @@ describe("SignUpPage with reCAPTCHA configured", () => {
     mockBeginGoogleSignup.mockResolvedValue({ success: true })
     mockEnsureFingerprintSignupEventId.mockReset()
     mockEnsureFingerprintSignupEventId.mockResolvedValue(undefined)
+    mockSearchParams = new URLSearchParams()
     process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = "test-site-key"
     vi.resetModules()
   })
@@ -490,6 +509,43 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
         options: { redirectTo: expect.stringContaining("/auth/callback") },
+      })
+    })
+  })
+
+  it("preserves next when completing signup with Google", async () => {
+    mockSearchParams = new URLSearchParams(
+      "complete_google=1&next=https%3A%2F%2Fapp.superserve.ai%2Fdevice%2Fabc",
+    )
+    const execute = vi.fn().mockResolvedValue("google-token")
+    mockBeginGoogleSignup.mockResolvedValue({ success: true })
+    ;(window as { grecaptcha?: unknown }).grecaptcha = {
+      enterprise: {
+        ready: (callback: () => void) => callback(),
+        execute,
+      },
+    }
+    const { default: ConfiguredSignUpPage } = await import("./page")
+    render(<ConfiguredSignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Complete signup with Google/,
+      }),
+    )
+
+    await waitFor(() => {
+      expect(execute).toHaveBeenCalledWith("test-site-key", {
+        action: "signup_google",
+      })
+      expect(mockBeginGoogleSignup).toHaveBeenCalledWith("google-token")
+      expect(mockSignInWithOAuth).toHaveBeenCalledWith({
+        provider: "google",
+        options: {
+          redirectTo: expect.stringContaining(
+            "next=https%3A%2F%2Fapp.superserve.ai%2Fdevice%2Fabc",
+          ),
+        },
       })
     })
   })

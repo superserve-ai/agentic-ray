@@ -142,10 +142,13 @@ export async function GET(request: Request) {
               console.warn("Google OAuth onboarding blocked", {
                 reason: "missing_or_invalid_proof",
               })
+              const recoveryUrl = new URL("/auth/signup", origin)
+              recoveryUrl.searchParams.set("complete_google", "1")
+              if (next !== "/") recoveryUrl.searchParams.set("next", next)
               return NextResponse.redirect(
                 buildRedirectUrl(
                   origin,
-                  "/auth/auth-code-error?reason=signup_verification_required",
+                  `${recoveryUrl.pathname}${recoveryUrl.search}`,
                 ),
               )
             }
