@@ -1,0 +1,69 @@
+---
+title: "LangChain"
+sidebarTitle: LangChain
+description: Run Deep Agents, LangGraph, and LangChain agents in isolated Superserve sandboxes with langchain-superserve.
+icon: "/logos/integrations/langchain.png"
+---
+
+`langchain-superserve` adapts a Superserve sandbox to the Deep Agents sandbox protocol. Because Deep Agents compiles to a LangGraph graph, the same backend works across LangChain, LangGraph, and Deep Agents — agent shell commands and file operations run inside an isolated Firecracker microVM instead of on your machine.
+
+## Setup
+
+```bash
+pip install langchain-superserve
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+Requires Python 3.11+. See [API keys](/api-key) to create a Superserve API key.
+
+## Deep Agents SDK
+
+Launch a sandbox from a python-equipped template, wrap it in `SuperserveSandbox`, and pass it as the `backend` to `create_deep_agent(...)`:
+
+```python
+from superserve import Sandbox
+from langchain_superserve import SuperserveSandbox
+
+# Launch from a python-equipped template so the agent's file tools work.
+sandbox = Sandbox.create(name="my-agent", from_template="superserve/python-3.11")
+backend = SuperserveSandbox(sandbox=sandbox)
+
+try:
+    result = backend.execute("echo hello")
+    print(result.output)
+finally:
+    sandbox.kill()
+```
+
+Pass the connected `backend` to `create_deep_agent(...)` to run the agent's shell and file operations inside the sandbox.
+
+<Note>
+  `SuperserveSandbox` synthesizes `ls`/`read`/`edit`/`glob` with in-sandbox `python3`, so launch from a python-equipped image — `superserve/python-3.11`, `superserve/python-ml`, or `superserve/code-interpreter`. `execute`, `grep`, and file upload/download work on any image, including the minimal `superserve/base`.
+</Note>
+
+## Deep Agents Code
+
+Installing the package also registers a `superserve` sandbox provider for the `deepagents-code` (`dcode`) terminal agent:
+
+```bash
+dcode --install langchain-superserve --package
+export SUPERSERVE_API_KEY=ss_live_...
+dcode --sandbox superserve
+```
+
+The provider defaults to the `superserve/python-3.11` template; override it with the `SUPERSERVE_TEMPLATE` environment variable.
+
+## Superserve extras
+
+Beyond the standard Deep Agents backend, Superserve sandboxes support `pause()`/`resume()` for idle cost savings and proxy-brokered [secret binding](/secrets/binding) (`Sandbox.create(secrets=...)`) so real credentials never enter the sandbox. Manage these through the Superserve SDK on the sandbox you pass to `SuperserveSandbox`.
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="langchain-superserve on GitHub" icon="github" href="https://github.com/superserve-ai/langchain-superserve">
+    Browse the source, tests, and release notes.
+  </Card>
+  <Card title="langchain-superserve on PyPI" icon="box" href="https://pypi.org/project/langchain-superserve/">
+    Install the package and check released versions.
+  </Card>
+</CardGroup>

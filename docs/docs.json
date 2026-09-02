@@ -237,15 +237,6 @@
         "icon": "utensils",
         "groups": [
           {
-            "group": "Recipes",
-            "pages": ["cookbook/pr-loop"]
-          },
-          {
-            "group": "MCP",
-            "tag": "NEW",
-            "pages": ["integrations/mcp"]
-          },
-          {
             "group": "Coding Agents",
             "pages": [
               "integrations/coding-agents/claude",
@@ -270,8 +261,13 @@
             "pages": [
               "integrations/agent-harnesses/agno",
               "integrations/agent-harnesses/claude-agent-sdk",
+              "integrations/agent-harnesses/langchain",
               "integrations/agent-harnesses/openai-agents-sdk"
             ]
+          },
+          {
+            "group": "MCP Sandboxes",
+            "pages": ["integrations/mcp"]
           }
         ]
       }
