@@ -1,0 +1,172 @@
+---
+title: "Computer use"
+sidebarTitle: Computer use
+description: "Build a GUI desktop sandbox an agent can see and click, using existing Superserve primitives."
+icon: "desktop"
+---
+
+**Computer use** is the pattern behind agents that operate a GUI instead of a
+terminal or API: the agent takes a screenshot, decides on an action (click,
+type, scroll), sends it to the desktop, and repeats. It's how you automate
+software that only exposes a screen — legacy apps, visual QA, a browser flow
+that resists scripting.
+
+Today, building one on Superserve is a **bring-your-own-stack** pattern: a
+template that boots a real desktop and streams it over VNC, plus the existing
+[templates](/templates/overview) and [preview URL](/sandbox/preview-urls)
+primitives to reach it from a browser. There's no dedicated `desktop` API yet
+— see [Limitations](#limitations-today) below for what's on the roadmap.
+
+## How it works
+
+1. **Template** — an image with a lightweight desktop environment (e.g. XFCE),
+   a VNC server (`x11vnc`), and a web bridge (`noVNC` / `websockify`) that
+   turns the VNC stream into a URL a browser can load.
+2. **`startCmd`** launches the whole stack in the background at build time, so
+   the snapshot captures it running — every sandbox booted from the template
+   comes up with a live desktop already listening on the noVNC port.
+3. **Preview URL** — you [publish that port](/sandbox/preview-urls) and embed
+   the resulting URL in an `<iframe>`, or point an agent's screenshot loop at
+   it (screenshot the canvas, decide, send input, repeat).
+
+## Build the template
+
+<Note>
+  Superserve plans to ship a first-party desktop-enabled system template
+  (placeholder name used below: `superserve/desktop`) — confirm the actual
+  template name/id here once it lands. Until then, build your own with a
+  `BuildSpec` as shown.
+</Note>
+
+<CodeGroup>
+
+```typescript TypeScript
+import { Template } from "@superserve/sdk"
+
+const template = await Template.create({
+  name: "my-desktop-env",
+  vcpu: 2,
+  memoryMib: 2048,
+  from: "ubuntu:22.04",
+  steps: [
+    {
+      run: "apt-get update && apt-get install -y xfce4 xfce4-terminal x11vnc xvfb novnc websockify firefox-esr",
+    },
+  ],
+  // Launches Xvfb, XFCE, x11vnc, and the noVNC web bridge in the
+  // background so the snapshot captures the whole stack already running.
+  startCmd:
+    "Xvfb :0 -screen 0 1280x800x24 & " +
+    "startxfce4 & " +
+    "x11vnc -display :0 -forever -nopw & " +
+    "websockify --web=/usr/share/novnc 6080 localhost:5900",
+  // Wait for the noVNC web port to come up before snapshotting.
+  readyCmd: "curl -f http://localhost:6080",
+})
+
+await template.waitUntilReady()
+```
+
+```python Python
+from superserve import Template
+from superserve import RunStep
+
+template = Template.create(
+    name="my-desktop-env",
+    vcpu=2,
+    memory_mib=2048,
+    from_="ubuntu:22.04",
+    steps=[
+        RunStep(
+            run="apt-get update && apt-get install -y xfce4 xfce4-terminal x11vnc xvfb novnc websockify firefox-esr"
+        ),
+    ],
+    # Launches Xvfb, XFCE, x11vnc, and the noVNC web bridge in the
+    # background so the snapshot captures the whole stack already running.
+    start_cmd=(
+        "Xvfb :0 -screen 0 1280x800x24 & "
+        "startxfce4 & "
+        "x11vnc -display :0 -forever -nopw & "
+        "websockify --web=/usr/share/novnc 6080 localhost:5900"
+    ),
+    # Wait for the noVNC web port to come up before snapshotting.
+    ready_cmd="curl -f http://localhost:6080",
+)
+
+template.wait_until_ready()
+```
+
+</CodeGroup>
+
+See [BuildSpec reference](/templates/build-spec) for the full `steps` syntax
+and [Create a template](/templates/create) for streaming build logs.
+
+## Boot a sandbox and reach the desktop
+
+Because the desktop is already running in the snapshot, `Sandbox.create`
+brings up a live, interactive GUI immediately — no extra startup step. A
+desktop stream is an interactive, unauthenticated-by-default surface, so
+default the sandbox to `private` preview access and hand out short-lived
+signed URLs rather than a public link:
+
+<CodeGroup>
+
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "computer-use-1",
+  fromTemplate: "superserve/desktop", // TODO: confirm once the desktop template ships
+  previewAccess: "private",
+})
+
+await sandbox.publishPreviewPort(6080, { access: "private" })
+
+// Short-lived, browser-safe URL — embed directly in an <iframe>.
+const streamUrl = await sandbox.getSignedPreviewUrl(6080, {
+  expiresInSeconds: 300,
+})
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.create(
+    name="computer-use-1",
+    from_template="superserve/desktop",  # TODO: confirm once the desktop template ships
+    preview_access="private",
+)
+
+sandbox.publish_preview_port(6080, access="private")
+
+# Short-lived, browser-safe URL -- embed directly in an <iframe>.
+stream_url = sandbox.get_signed_preview_url(6080, expires_in_seconds=300)
+```
+
+</CodeGroup>
+
+Embed `streamUrl` in an `<iframe>` for a human operator, or drive the loop
+programmatically: take a screenshot of the rendered canvas, feed it to an
+agent to decide the next click or keystroke, and send that input back through
+the same session. See [Preview URLs](/sandbox/preview-urls) for token
+rotation and revocation.
+
+## Limitations today
+
+<Warning>
+  - **No hardware-accelerated rendering.** Sandboxes render the desktop in
+    software, so expect modest frame rates — fine for form-filling and visual
+    QA, not for anything latency-sensitive or graphics-heavy.
+  - **This is a build-it-yourself pattern.** There's no native SDK surface for
+    this yet — no `sandbox.desktop.screenshot()`, no input-injection helpers,
+    no bundled MCP tool for driving a desktop from Claude. All of that is on
+    the roadmap; this page covers what you can ship today with existing
+    primitives.
+</Warning>
+
+## Related
+
+- [Templates overview](/templates/overview)
+- [BuildSpec reference](/templates/build-spec)
+- [Preview URLs](/sandbox/preview-urls)
+- [Create a template](/templates/create)
