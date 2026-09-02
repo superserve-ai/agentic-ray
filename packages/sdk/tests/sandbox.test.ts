@@ -282,6 +282,31 @@ describe("Sandbox statics", () => {
     expect(url).toContain("metadata.tier=gold")
   })
 
+  it("Sandbox.list appends status, limit, and offset to URL", async () => {
+    const mock = vi.fn(async () => jsonResponse([]))
+    vi.stubGlobal("fetch", mock)
+
+    await Sandbox.list({
+      ...commonOpts,
+      status: "active",
+      limit: 100,
+      offset: 200,
+    })
+    const [url] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain("status=active")
+    expect(url).toContain("limit=100")
+    expect(url).toContain("offset=200")
+  })
+
+  it("Sandbox.list sends no query string without filters", async () => {
+    const mock = vi.fn(async () => jsonResponse([]))
+    vi.stubGlobal("fetch", mock)
+
+    await Sandbox.list(commonOpts)
+    const [url] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).not.toContain("?")
+  })
+
   it("Sandbox.killById swallows 404", async () => {
     vi.stubGlobal(
       "fetch",

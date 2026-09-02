@@ -10,6 +10,11 @@ const useBillingSummary = vi.fn()
 const useBillingUsage = vi.fn()
 const useSandboxesPage = vi.fn()
 const useUser = vi.fn()
+const useTeams = vi.fn()
+const useDashboardTeamContext = vi.fn()
+const useCustomerBillingPeriods = vi.fn()
+const useCustomerBillingUsage = vi.fn()
+const useCustomerBillingExportPreview = vi.fn()
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -26,6 +31,19 @@ vi.mock("@/hooks/use-sandboxes", () => ({
   useSandboxesPage: (...args: unknown[]) => useSandboxesPage(...args),
 }))
 
+vi.mock("@/hooks/use-teams", () => ({
+  useTeams: () => useTeams(),
+}))
+
+vi.mock("@/hooks/use-customer-billing", () => ({
+  useCustomerBillingPeriods: (...args: unknown[]) =>
+    useCustomerBillingPeriods(...args),
+  useCustomerBillingUsage: (...args: unknown[]) =>
+    useCustomerBillingUsage(...args),
+  useCustomerBillingExportPreview: (...args: unknown[]) =>
+    useCustomerBillingExportPreview(...args),
+}))
+
 vi.mock("@/hooks/use-billing-summary", () => ({
   useBillingSummary: (...args: unknown[]) => useBillingSummary(...args),
 }))
@@ -33,6 +51,20 @@ vi.mock("@/hooks/use-billing-summary", () => ({
 vi.mock("@/hooks/use-user", () => ({
   useUser: () => useUser(),
 }))
+
+vi.mock("@/components/query-provider", () => ({
+  useDashboardTeamContext: () => useDashboardTeamContext(),
+  useQueryScope: () => "self",
+}))
+
+vi.mock("@superserve/ui", async () => {
+  const actual =
+    await vi.importActual<typeof import("@superserve/ui")>("@superserve/ui")
+  return {
+    ...actual,
+    useToast: () => ({ addToast: vi.fn() }),
+  }
+})
 
 function renderPage() {
   const queryClient = new QueryClient({
@@ -53,6 +85,70 @@ describe("PlanUsagePage", () => {
     useUser.mockReturnValue({
       user: { id: "user-1" },
       loading: false,
+    })
+    useDashboardTeamContext.mockReturnValue(null)
+    useTeams.mockReturnValue({
+      data: {
+        teams: [{ id: "team-1", name: "Pilot Team", region: "use" }],
+        activeTeamId: "team-1",
+        activeRegion: "use",
+      },
+      isPending: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+    useCustomerBillingPeriods.mockReturnValue({
+      data: {
+        periods: [
+          {
+            period_id: "2026-06-01T00:00:00.000Z,2026-07-01T00:00:00.000Z",
+            period_start: "2026-06-01T00:00:00.000Z",
+            period_end: "2026-07-01T00:00:00.000Z",
+            status: "active",
+            stripe_customer_id: "cus_test",
+            stripe_subscription_status: "active",
+            finalized_at: "2026-06-30T00:00:00.000Z",
+            exported_at: "2026-06-30T00:05:00.000Z",
+          },
+        ],
+      },
+      isPending: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+    useCustomerBillingExportPreview.mockReset()
+    useCustomerBillingExportPreview.mockReturnValue({
+      data: {
+        mode: "live",
+        period_id: "2026-06-01T00:00:00.000Z,2026-07-01T00:00:00.000Z",
+        team_id: "team-1",
+        status: "active",
+        items: [],
+        attempts: [],
+      },
+      isPending: false,
+      isFetching: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+    useCustomerBillingUsage.mockReturnValue({
+      data: {
+        period_id: "2026-06-01T00:00:00.000Z,2026-07-01T00:00:00.000Z",
+        team_id: "team-1",
+        status: "active",
+        period_start: "2026-06-01T00:00:00.000Z",
+        period_end: "2026-07-01T00:00:00.000Z",
+        vcpu_seconds: 120,
+        memory_mib_seconds: 2048,
+        storage_mib_seconds: 4096,
+        cpu_vcpu_hours: 0.0333,
+        memory_gib_hours: 0.5555,
+        storage_gib_hours: 1.1111,
+        updated_at: "2026-06-30T12:05:00.000Z",
+      },
+      isPending: false,
+      error: null,
+      refetch: vi.fn(),
     })
     useSandboxesPage.mockImplementation(({ status }: { status?: string }) => {
       const totals: Record<string, number> = {
@@ -87,6 +183,14 @@ describe("PlanUsagePage", () => {
     })
     useBillingSummary.mockReturnValue({
       data: {
+        billing_mode: "live",
+        checkout_available: true,
+        portal_available: true,
+        payment_setup_required: false,
+        permissions: {
+          can_view: true,
+          can_manage: true,
+        },
         current_charges_usd: 123.45,
         credits_applied_usd: 23.45,
         credits_remaining_usd: 76.55,
@@ -96,6 +200,44 @@ describe("PlanUsagePage", () => {
           memory: 40,
           storage: 23.45,
         },
+        resources: [
+          {
+            resource_key: "vcpu",
+            resource: "cpu",
+            display_name: "CPU",
+            sort_order: 10,
+            unit: "second",
+            display_unit: "vCPU-hours",
+            usage: 120,
+            tracked: true,
+            billable: true,
+            charge_usd: 60,
+          },
+          {
+            resource_key: "memory_gib",
+            resource: "memory",
+            display_name: "Memory",
+            sort_order: 20,
+            unit: "second",
+            display_unit: "GiB-hours",
+            usage: 2_048_000,
+            tracked: true,
+            billable: true,
+            charge_usd: 40,
+          },
+          {
+            resource_key: "storage_gib",
+            resource: "storage",
+            display_name: "Storage",
+            sort_order: 30,
+            unit: "second",
+            display_unit: "GiB-hours",
+            usage: 4_096_000,
+            tracked: true,
+            billable: false,
+            charge_usd: 0,
+          },
+        ],
         billing_period: {
           start: "2026-06-01T00:00:00.000Z",
           end: "2026-07-01T00:00:00.000Z",
@@ -171,9 +313,17 @@ describe("PlanUsagePage", () => {
     expect(
       screen.queryByTestId("sandbox-state-section"),
     ).not.toBeInTheDocument()
-    expect(screen.getByText("Billing Period")).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId("customer-billing-section")).getByText(
+        "Billing Period",
+      ),
+    ).toBeInTheDocument()
     expect(screen.getByText("Pay-as-you-go • USD")).toBeInTheDocument()
-    expect(screen.getByText("Credits remaining: $76.55")).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId("customer-billing-section")).getByText(
+        "Credits remaining: $76.55",
+      ),
+    ).toBeInTheDocument()
     expect(screen.getByText("Running")).toBeInTheDocument()
     expect(screen.getByText("Paused")).toBeInTheDocument()
   })
@@ -264,5 +414,31 @@ describe("PlanUsagePage", () => {
     expect(screen.getByTestId("compute-section")).toBeInTheDocument()
     expect(screen.getByTestId("storage-section")).toBeInTheDocument()
     expect(screen.queryByText("CPU Usage")).not.toBeInTheDocument()
+  })
+
+  it("shows customer billing for impersonated teams outside the member directory", () => {
+    useDashboardTeamContext.mockReturnValue({
+      teamId: "impersonated-team",
+      region: "use",
+      name: "Impersonated Team",
+    })
+    useTeams.mockReturnValue({
+      data: {
+        teams: [],
+        activeTeamId: "team-1",
+        activeRegion: "use",
+      },
+      isPending: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    renderPage()
+
+    expect(screen.getByTestId("customer-billing-section")).toBeInTheDocument()
+    expect(useCustomerBillingPeriods).toHaveBeenCalledWith(
+      "impersonated-team",
+      "use:impersonated-team",
+    )
   })
 })

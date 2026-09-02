@@ -5,16 +5,81 @@ import { Button, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
+import Script from "next/script"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { ensureFingerprintSignupEventId } from "@/lib/fingerprint/client"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
-import { signUpWithEmail } from "./action"
+import { beginGoogleSignup, signUpWithEmail } from "./action"
+
+const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+const TRUSTED_REDIRECT_PATTERN =
+  /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
+
+declare global {
+  interface Window {
+    grecaptcha?: {
+      enterprise: {
+        ready: (callback: () => void) => void
+        execute: (
+          siteKey: string,
+          options: { action: string },
+        ) => Promise<string>
+      }
+    }
+  }
+}
+
+const waitForGrecaptcha = async (timeoutMs = 8000): Promise<boolean> => {
+  if (window.grecaptcha) return true
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    if (window.grecaptcha) return true
+  }
+  return false
+}
+
+const RECAPTCHA_EXECUTE_TIMEOUT_MS = 8000
+
+const getRecaptchaToken = async (
+  action: string,
+): Promise<string | undefined> => {
+  if (!RECAPTCHA_SITE_KEY) return undefined
+  if (!(await waitForGrecaptcha())) return undefined
+  try {
+    const tokenPromise = new Promise<string>((resolve, reject) => {
+      window.grecaptcha!.enterprise.ready(() => {
+        window
+          .grecaptcha!.enterprise.execute(RECAPTCHA_SITE_KEY, { action })
+          .then(resolve)
+          .catch(reject)
+      })
+    })
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error("recaptcha_execute_timeout")),
+        RECAPTCHA_EXECUTE_TIMEOUT_MS,
+      ),
+    )
+    return await Promise.race([tokenPromise, timeoutPromise])
+  } catch {
+    return undefined
+  }
+}
+
+function sanitizeNext(raw: string | null): string {
+  const next = raw ?? "/"
+  if (next.startsWith("/") && !next.startsWith("//")) return next
+  if (TRUSTED_REDIRECT_PATTERN.test(next)) return next
+  return "/"
+}
 
 function SignUpContent() {
   const [isLoading, setIsLoading] = useState(false)
@@ -30,8 +95,8 @@ function SignUpContent() {
   const posthog = usePostHog()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const rawNext = searchParams.get("next") || "/"
-  const nextUrl = rawNext.startsWith("/") ? rawNext : "/"
+  const nextUrl = sanitizeNext(searchParams.get("next"))
+  const isCompleteGoogleSignup = searchParams.get("complete_google") === "1"
 
   useEffect(() => {
     if (searchParams.get("error") === "link_expired") {
@@ -56,7 +121,20 @@ function SignUpContent() {
     }
     setIsLoading(true)
     try {
-      const result = await signUpWithEmail(email, password, fullName)
+      void ensureFingerprintSignupEventId()
+      const recaptchaToken = await getRecaptchaToken("signup")
+      if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+        setErrors({
+          form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
+        })
+        return
+      }
+      const result = await signUpWithEmail(
+        email,
+        password,
+        fullName,
+        recaptchaToken,
+      )
       if (!result.success) {
         posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
           method: "email",
@@ -82,6 +160,21 @@ function SignUpContent() {
     setIsGoogleLoading(true)
     setErrors({})
     try {
+      void ensureFingerprintSignupEventId()
+      const recaptchaToken = await getRecaptchaToken("signup_google")
+      if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+        setErrors({
+          form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
+        })
+        return
+      }
+
+      const proof = await beginGoogleSignup(recaptchaToken)
+      if (!proof.success) {
+        setErrors({ form: proof.error || "Google signup verification failed." })
+        return
+      }
+
       const supabase = createBrowserClient()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
       if (nextUrl && nextUrl !== "/") {
@@ -103,10 +196,15 @@ function SignUpContent() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
+      {RECAPTCHA_SITE_KEY && (
+        <Script
+          src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
+          strategy="afterInteractive"
+        />
+      )}
       <DitherBackground />
       <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">
         <CornerBrackets size="lg" />
-
         <div className="mb-8 flex justify-center">
           <Link href="/">
             <Image
@@ -118,7 +216,6 @@ function SignUpContent() {
             />
           </Link>
         </div>
-
         {emailSent ? (
           <>
             <h1 className="text-center text-sm font-medium text-foreground">
@@ -139,13 +236,36 @@ function SignUpContent() {
               </Link>
             </p>
           </>
+        ) : isCompleteGoogleSignup ? (
+          <>
+            <h1 className="mb-4 text-center text-sm font-medium text-foreground">
+              Complete signup
+            </h1>
+            <p className="mb-6 text-center text-xs leading-relaxed text-muted">
+              Google sign-in succeeded. Complete signup to finish verification
+              and provision your Superserve account.
+            </p>
+            {errors.form && (
+              <p className="mb-4 text-xs text-destructive">{errors.form}</p>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleGoogleSignIn}
+              disabled={isGoogleLoading || isLoading}
+              className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
+            >
+              {isGoogleLoading ? <Spinner /> : <GoogleIcon />}
+              {isGoogleLoading
+                ? "Completing signup..."
+                : "Complete signup with Google"}
+            </Button>
+          </>
         ) : (
           <>
             <h1 className="mb-6 text-center text-sm font-medium text-foreground">
               Create your Superserve account
             </h1>
-
-            {/* Google OAuth — first */}
             <Button
               type="button"
               variant="outline"
@@ -156,8 +276,6 @@ function SignUpContent() {
               {isGoogleLoading ? <Spinner /> : <GoogleIcon />}
               {isGoogleLoading ? "Signing up..." : "Continue with Google"}
             </Button>
-
-            {/* Divider */}
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-dashed border-border" />
@@ -166,8 +284,6 @@ function SignUpContent() {
                 <span className="bg-surface px-3 text-muted">or</span>
               </div>
             </div>
-
-            {/* Sign up form */}
             <form onSubmit={handleSignUp} className="space-y-3">
               <Input
                 type="text"
@@ -235,7 +351,6 @@ function SignUpContent() {
                 {isLoading ? "Creating account..." : "Sign Up"}
               </Button>
             </form>
-
             <p className="mt-5 text-center text-xs text-muted">
               Already have an account?{" "}
               <Link
@@ -245,7 +360,6 @@ function SignUpContent() {
                 Sign in
               </Link>
             </p>
-
             <p className="mt-6 text-center text-xs leading-relaxed text-muted/60">
               By continuing, you agree to our{" "}
               <a

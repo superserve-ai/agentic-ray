@@ -5,7 +5,7 @@
  */
 
 import type { BuildStep, NetworkConfig } from "@superserve/sdk"
-import { z } from "zod"
+import * as z from "zod"
 
 import type { SandboxClient } from "../client.js"
 import {

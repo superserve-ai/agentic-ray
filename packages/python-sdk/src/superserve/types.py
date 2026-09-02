@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, Optional, Union
+from urllib.parse import urlencode
 
 from pydantic import BaseModel, Field
 
@@ -12,10 +13,13 @@ from .errors import SandboxError
 
 
 class SandboxStatus(str, Enum):
+    STARTING = "starting"
     ACTIVE = "active"
+    PAUSING = "pausing"
     PAUSED = "paused"
     RESUMING = "resuming"
     FAILED = "failed"
+    DELETED = "deleted"
 
 
 class PreviewAccess(str, Enum):
@@ -124,6 +128,24 @@ def build_update_body(
     if preview_access is not None:
         body["preview_access"] = preview_access
     return body
+
+
+def list_query(
+    metadata: Optional[dict[str, str]],
+    status: Optional[str],
+    limit: Optional[int],
+    offset: Optional[int],
+) -> str:
+    """Build the query string for the list-sandboxes endpoint ("" when empty)."""
+    params: dict[str, str] = {f"metadata.{k}": v for k, v in (metadata or {}).items()}
+    if status is not None:
+        # A (str, Enum) member urlencodes as "SandboxStatus.ACTIVE"; send its value.
+        params["status"] = status.value if isinstance(status, Enum) else status
+    if limit is not None:
+        params["limit"] = str(limit)
+    if offset is not None:
+        params["offset"] = str(offset)
+    return urlencode(params)
 
 
 def _parse_iso8601(value: str) -> datetime:

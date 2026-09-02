@@ -1,7 +1,7 @@
 /** `sandbox_files_read`, `sandbox_files_write`, `sandbox_files_list`. */
 
 import { ValidationError } from "@superserve/sdk"
-import { z } from "zod"
+import * as z from "zod"
 
 import type { SandboxClient } from "../client.js"
 import {

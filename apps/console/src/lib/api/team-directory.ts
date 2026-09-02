@@ -71,30 +71,72 @@ export async function listTeamMembershipsForUserDetailed(
   opts?: { maxAgeMs?: number },
 ): Promise<MembershipDirectory> {
   const maxAgeMs = opts?.maxAgeMs ?? DIRECTORY_CACHE_TTL_MS
+  const cached = directoryCache.get(userId)
   // Strict inequality so maxAgeMs 0 can never hit cache, even for a read in
   // the same millisecond as the fill.
-  const cached = directoryCache.get(userId)
-  if (cached && Date.now() - cached.fetchedAt < maxAgeMs) {
+  if (cached && maxAgeMs > 0 && Date.now() - cached.fetchedAt < maxAgeMs) {
     return cached.promise
   }
 
   const fetchedAt = Date.now()
+  const cacheEntry =
+    cached ??
+    ({
+      promise: Promise.resolve({
+        memberships: [] as TeamMembership[],
+        degradedRegions: [] as string[],
+      }),
+      fetchedAt,
+      inFlight: 0,
+      lastResult: undefined,
+    } as {
+      promise: Promise<MembershipDirectory>
+      fetchedAt: number
+      inFlight?: number
+      lastResult?: MembershipDirectory
+    })
+  cacheEntry.fetchedAt = fetchedAt
+  const hadConcurrentFetch = (cacheEntry.inFlight ?? 0) > 0
+  cacheEntry.inFlight = (cacheEntry.inFlight ?? 0) + 1
+
   const promise = acrossCells(async (region) => {
     const admin = cellFor(region).createAdminClient()
     return membershipTeamIdsInCell(admin, userId).then((teamIds) =>
       teamIds.map((teamId) => ({ teamId, region })),
     )
-  }).then(({ items, degradedRegions }) => ({
-    memberships: items,
-    degradedRegions,
-  }))
+  }).then(({ items, degradedRegions }) => {
+    const result: MembershipDirectory = {
+      memberships: items,
+      degradedRegions,
+    }
+
+    // When overlapping forced-fresh reads race, a degraded empty response
+    // must not replace a concurrent healthy empty response. Otherwise callers
+    // can observe different answers for the same read burst.
+    if (
+      hadConcurrentFetch &&
+      items.length === 0 &&
+      degradedRegions.length > 0 &&
+      cacheEntry.lastResult &&
+      cacheEntry.lastResult.memberships.length === 0 &&
+      cacheEntry.lastResult.degradedRegions.length === 0
+    ) {
+      return cacheEntry.lastResult
+    }
+    cacheEntry.lastResult = result
+    return result
+  })
+  const trackedPromise = promise.finally(() => {
+    cacheEntry.inFlight = Math.max(0, (cacheEntry.inFlight ?? 1) - 1)
+  })
 
   // The in-flight promise is cached too, so the burst of parallel server
   // actions after a page load or team switch collapses into one fan-out.
   // Failures are evicted rather than cached.
-  directoryCache.set(userId, { promise, fetchedAt })
-  promise.catch(() => {
-    if (directoryCache.get(userId)?.promise === promise) {
+  cacheEntry.promise = trackedPromise
+  directoryCache.set(userId, cacheEntry)
+  trackedPromise.catch(() => {
+    if (directoryCache.get(userId)?.promise === trackedPromise) {
       directoryCache.delete(userId)
     }
   })
@@ -109,7 +151,12 @@ export async function listTeamMembershipsForUserDetailed(
 const DIRECTORY_CACHE_TTL_MS = 60_000
 const directoryCache = new Map<
   string,
-  { promise: Promise<MembershipDirectory>; fetchedAt: number }
+  {
+    promise: Promise<MembershipDirectory>
+    fetchedAt: number
+    inFlight?: number
+    lastResult?: MembershipDirectory
+  }
 >()
 
 /** Evict a user's cached membership directory (e.g. after creating a team). */

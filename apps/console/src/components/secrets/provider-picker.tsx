@@ -117,6 +117,11 @@ export function ProviderPicker({
         render={
           <button
             type="button"
+            aria-label={
+              selected
+                ? `Selected provider: ${selected.display}`
+                : "Select a provider"
+            }
             className={cn(
               "flex h-9 w-full items-center justify-between border border-input bg-background px-3 text-sm",
               "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none",

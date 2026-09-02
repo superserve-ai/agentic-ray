@@ -101,17 +101,23 @@ sandbox = Sandbox.connect("7a3f2b8c-1234-...")
 
 ### `Sandbox.list`
 
-List sandboxes on the authenticated team. `metadata` filters combine with AND.
+List sandboxes on the authenticated team. `metadata` returns only sandboxes
+matching every key-value pair you pass; `status` filters to one lifecycle
+state; `limit`/`offset` page through the list.
 
 <CodeGroup>
 ```typescript TypeScript
 const all = await Sandbox.list()
 const prod = await Sandbox.list({ metadata: { env: "prod" } })
+const running = await Sandbox.list({ status: "active" })
+const page = await Sandbox.list({ limit: 100, offset: 100 })
 ```
 
 ```python Python
 all_boxes = Sandbox.list()
 prod = Sandbox.list(metadata={"env": "prod"})
+running = Sandbox.list(status="active")
+page = Sandbox.list(limit=100, offset=100)
 ```
 
 </CodeGroup>
@@ -161,12 +167,12 @@ Fetch the current server-side state. Returns a fresh [`SandboxInfo`](#sandboxinf
 <CodeGroup>
 ```typescript TypeScript
 const info = await sandbox.getInfo()
-console.log(info.status)  // "active" | "paused" | "resuming" | "failed"
+console.log(info.status)  // e.g. "active" — see SandboxStatus
 ```
 
 ```python Python
 info = sandbox.get_info()
-print(info.status.value)  # "active" | "paused" | "resuming" | "failed"
+print(info.status.value)  # e.g. "active" — see SandboxStatus
 ```
 
 </CodeGroup>
@@ -362,25 +368,38 @@ for e in page.events:
 
 <CodeGroup>
 ```typescript TypeScript
-type SandboxStatus = "active" | "paused" | "resuming" | "failed"
+type SandboxStatus =
+  | "starting"
+  | "active"
+  | "pausing"
+  | "paused"
+  | "resuming"
+  | "failed"
+  | "deleted"
 ```
 
 ```python Python
 from enum import Enum
 
 class SandboxStatus(str, Enum):
+    STARTING = "starting"
     ACTIVE = "active"
+    PAUSING = "pausing"
     PAUSED = "paused"
     RESUMING = "resuming"
     FAILED = "failed"
+    DELETED = "deleted"
 ```
 
 </CodeGroup>
 
+- `starting` - a new sandbox is booting
 - `active` - running and ready to accept commands
+- `pausing` - a pause is in progress
 - `paused` - stopped with state saved to disk
-- `resuming` - transient, briefly visible while a paused sandbox is being restored to `active` (retry shortly)
+- `resuming` - a paused sandbox is being restored
 - `failed` - the sandbox couldn't boot or resume; the entry remains until you delete it
+- `deleted` - removed; deleted sandboxes do not appear in list results
 
 Deletion removes the sandbox entirely - subsequent API calls return `404`.
 

@@ -288,7 +288,7 @@ export default function SettingsPage() {
                   variant="outline"
                   render={<Link href="/plan-usage" />}
                 >
-                  View Usage
+                  Billing & Usage
                 </Button>
               </div>
             </div>

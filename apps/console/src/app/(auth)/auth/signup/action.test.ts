@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mock dependencies before importing the action
 const mockGenerateLink = vi.fn()
@@ -32,13 +32,89 @@ vi.mock("@/app/(auth)/auth/signin/action", () => ({
   notifySlackOfNewUser: (...args: unknown[]) => mockSlack(...args),
 }))
 
-import { signUpWithEmail } from "./action"
+const mockVerifyRecaptcha = vi.fn()
+vi.mock("@/lib/recaptcha/verify", () => ({
+  verifyRecaptcha: (...args: unknown[]) => mockVerifyRecaptcha(...args),
+}))
+
+const mockIssueGoogleSignupProof = vi.fn()
+vi.mock("@/lib/auth/google-signup-proof", () => ({
+  issueGoogleSignupProof: () => mockIssueGoogleSignupProof(),
+}))
+
+const mockTrackEvent = vi.fn()
+vi.mock("@/lib/posthog/actions", () => ({
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+}))
+
+const mockObserveFingerprintSignup = vi.fn()
+vi.mock("@/lib/fingerprint/observe", () => ({
+  observeFingerprintSignup: (...args: unknown[]) =>
+    mockObserveFingerprintSignup(...args),
+}))
+
+vi.mock("@/lib/posthog/events", () => ({
+  AUTH_EVENTS: {
+    GOOGLE_SIGNUP_CAPTCHA_FAILED: "auth_google_signup_captcha_failed",
+    GOOGLE_SIGNUP_CAPTCHA_VERIFIED: "auth_google_signup_captcha_verified",
+  },
+}))
+
+let fingerprintSignupEventId: string | undefined
+const mockFingerprintCookieDelete = vi.fn()
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) =>
+      fingerprintSignupEventId === undefined
+        ? undefined
+        : { name, value: fingerprintSignupEventId },
+    delete: (name: string) => {
+      if (name === "fingerprint_signup_event_id") {
+        fingerprintSignupEventId = undefined
+      }
+      mockFingerprintCookieDelete(name)
+    },
+  }),
+}))
+
+vi.mock("next/server", () => ({
+  after: (callback: () => void | Promise<void>) => callback(),
+}))
+
+import { beginGoogleSignup, signUpWithEmail } from "./action"
+
+// verifyRecaptcha reads these at call time (not module load), so these
+// tests — which assert unconfigured (fail-open) behavior and never pass a
+// token — need them explicitly cleared rather than relying on the ambient
+// environment. A dev/CI env with reCAPTCHA configured would otherwise
+// reject every one of these as a missing token.
+const ORIGINAL_RECAPTCHA_ENV = {
+  RECAPTCHA_API_KEY: process.env.RECAPTCHA_API_KEY,
+  RECAPTCHA_PROJECT_ID: process.env.RECAPTCHA_PROJECT_ID,
+  NEXT_PUBLIC_RECAPTCHA_SITE_KEY: process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY,
+}
 
 describe("signUpWithEmail", () => {
   beforeEach(() => {
     mockGenerateLink.mockReset()
     mockSendEmail.mockReset()
     mockSlack.mockReset().mockResolvedValue(undefined)
+    mockVerifyRecaptcha.mockReset().mockResolvedValue({ verified: true })
+    mockIssueGoogleSignupProof.mockReset().mockResolvedValue(undefined)
+    mockTrackEvent.mockReset().mockResolvedValue(undefined)
+    mockObserveFingerprintSignup.mockReset().mockResolvedValue(undefined)
+    mockFingerprintCookieDelete.mockReset()
+    fingerprintSignupEventId = undefined
+    delete process.env.RECAPTCHA_API_KEY
+    delete process.env.RECAPTCHA_PROJECT_ID
+    delete process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+  })
+
+  afterEach(() => {
+    for (const [name, value] of Object.entries(ORIGINAL_RECAPTCHA_ENV)) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
   })
 
   it("returns error for invalid email", async () => {
@@ -101,6 +177,44 @@ describe("signUpWithEmail", () => {
         subject: "Confirm your Superserve account",
       }),
     )
+  })
+
+  it("retains the fingerprint cookie across repeated attempts and schedules observe-only telemetry", async () => {
+    fingerprintSignupEventId = encodeURIComponent("event-123")
+    mockGenerateLink.mockResolvedValue({
+      data: {
+        user: { id: "user-1" },
+        properties: { hashed_token: "abc123" },
+      },
+      error: null,
+    })
+    mockSendEmail.mockResolvedValue({ success: true })
+
+    const result = await signUpWithEmail(
+      "user@test.com",
+      "password123",
+      "Test User",
+    )
+    const secondResult = await signUpWithEmail(
+      "user@test.com",
+      "password123",
+      "Test User",
+    )
+
+    expect(result).toEqual({ success: true })
+    expect(secondResult).toEqual({ success: true })
+    expect(mockFingerprintCookieDelete).not.toHaveBeenCalled()
+    expect(fingerprintSignupEventId).toBe("event-123")
+    expect(mockObserveFingerprintSignup).toHaveBeenNthCalledWith(1, {
+      eventId: "event-123",
+      signupMethod: "email",
+      userId: "user-1",
+    })
+    expect(mockObserveFingerprintSignup).toHaveBeenNthCalledWith(2, {
+      eventId: "event-123",
+      signupMethod: "email",
+      userId: "user-1",
+    })
   })
 
   it("returns error when email is already registered", async () => {
@@ -186,5 +300,85 @@ describe("signUpWithEmail", () => {
     // Slack is called fire-and-forget via .catch(), give it a tick
     await new Promise((r) => setTimeout(r, 0))
     expect(mockSlack).toHaveBeenCalled()
+  })
+})
+
+describe("beginGoogleSignup", () => {
+  beforeEach(() => {
+    mockVerifyRecaptcha.mockReset().mockResolvedValue({ verified: true })
+    mockIssueGoogleSignupProof.mockReset().mockResolvedValue(undefined)
+    mockTrackEvent.mockReset().mockResolvedValue(undefined)
+    mockObserveFingerprintSignup.mockReset().mockResolvedValue(undefined)
+    mockFingerprintCookieDelete.mockReset()
+    fingerprintSignupEventId = undefined
+  })
+
+  it("verifies signup_google before issuing a proof", async () => {
+    const result = await beginGoogleSignup("google-token")
+
+    expect(result).toEqual({ success: true })
+    expect(mockVerifyRecaptcha).toHaveBeenCalledWith(
+      "google-token",
+      "signup_google",
+    )
+    expect(mockIssueGoogleSignupProof).toHaveBeenCalled()
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_google_signup_captcha_verified",
+      expect.any(String),
+      { stage: "captcha_verification" },
+    )
+  })
+
+  it("retains the fingerprint cookie for callback-side observation", async () => {
+    fingerprintSignupEventId = encodeURIComponent("event-456")
+
+    const result = await beginGoogleSignup("google-token")
+
+    expect(result).toEqual({ success: true })
+    expect(mockFingerprintCookieDelete).not.toHaveBeenCalled()
+    expect(fingerprintSignupEventId).toBe("event-456")
+    expect(mockObserveFingerprintSignup).not.toHaveBeenCalled()
+  })
+
+  it("fails closed when proof issuance is unavailable", async () => {
+    mockIssueGoogleSignupProof.mockRejectedValue(
+      new Error("Google signup proof signing secret is not configured"),
+    )
+
+    await expect(beginGoogleSignup("google-token")).resolves.toEqual({
+      success: false,
+      error: "Google signup is temporarily unavailable. Please try again.",
+      errorCode: "proof_unavailable",
+    })
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_google_signup_captcha_failed",
+      expect.any(String),
+      {
+        reason: "Google signup proof signing secret is not configured",
+        stage: "proof_issuance",
+      },
+    )
+  })
+
+  it("returns a captcha error when reCAPTCHA verification fails", async () => {
+    mockVerifyRecaptcha.mockResolvedValue({
+      verified: false,
+      reason: "low_score",
+    })
+
+    await expect(beginGoogleSignup("google-token")).resolves.toEqual({
+      success: false,
+      error: "We couldn't verify you're human. Please try again.",
+      errorCode: "captcha_failed",
+    })
+    expect(mockIssueGoogleSignupProof).not.toHaveBeenCalled()
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_google_signup_captcha_failed",
+      expect.any(String),
+      {
+        reason: "low_score",
+        stage: "captcha_verification",
+      },
+    )
   })
 })

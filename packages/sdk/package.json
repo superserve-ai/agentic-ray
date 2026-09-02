@@ -1,6 +1,6 @@
 {
   "name": "@superserve/sdk",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "TypeScript SDK for the Superserve sandbox API",
   "keywords": [
     "firecracker",

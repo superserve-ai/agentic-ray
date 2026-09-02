@@ -61,6 +61,35 @@ function cellClient(
   return { from }
 }
 
+function queuedMembershipCellClient(
+  outcomes: Array<
+    | { kind: "resolve"; data: Array<{ team_id: string }> }
+    | { kind: "reject"; message: string }
+  >,
+) {
+  const queue = [...outcomes]
+  const from = vi.fn((table: string) => {
+    if (table !== "team_memberships" && table !== "team_member") {
+      throw new Error(`unexpected table ${table}`)
+    }
+
+    const next = queue.shift()
+    if (!next) throw new Error(`unexpected ${table} call`)
+
+    return {
+      select: () => ({
+        eq: async () => {
+          if (next.kind === "reject") {
+            return Promise.reject(new Error(next.message))
+          }
+          return { data: next.data, error: null }
+        },
+      }),
+    }
+  })
+  return { from }
+}
+
 vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
   configuredRegions: () => regions,
@@ -70,7 +99,6 @@ vi.mock("@/lib/cells", () => ({
     createAdminClient: () => cellClients[region],
   }),
 }))
-
 import {
   clearMembershipDirectoryCache,
   findTeamById,
@@ -187,6 +215,21 @@ describe("cell failure isolation", () => {
     errSpy.mockRestore()
   })
 
+  it("keeps a degraded empty read empty instead of fabricating membership state", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    regions = ["use", "usw"]
+    cellClients.use = cellClient([])
+    cellClients.usw = failingClient("usw pooler unreachable")
+
+    const { memberships, degradedRegions } =
+      await listTeamMembershipsForUserDetailed("u1", { maxAgeMs: 0 })
+
+    expect(memberships).toEqual([])
+    expect(degradedRegions).toEqual(["usw"])
+    expect(errSpy).toHaveBeenCalledOnce()
+    errSpy.mockRestore()
+  })
+
   it("still throws when the default cell fails", async () => {
     cellClients.use = failingClient("primary down")
     cellClients.usw = cellClient([{ team_id: "team-9" }])
@@ -243,6 +286,94 @@ describe("degradation visibility", () => {
     const { degradedRegions } = await listTeamMembershipsForUserDetailed("u1")
 
     expect(degradedRegions).toEqual([])
+  })
+
+  it("fails closed when a degraded read comes back empty", async () => {
+    cellClients.use = cellClient([])
+    cellClients.usw = cellClient([{ team_id: "team-west" }])
+
+    await expect(listTeamMembershipsForUserDetailed("u1")).resolves.toEqual({
+      memberships: [{ teamId: "team-west", region: "usw" }],
+      degradedRegions: [],
+    })
+
+    cellClients.use = cellClient([])
+    cellClients.usw = {
+      from: vi.fn(() => ({
+        select: () => ({
+          eq: async () => ({ data: null, error: { message: "usw down" } }),
+        }),
+      })),
+    } as unknown as ReturnType<typeof cellClient>
+
+    await expect(
+      listTeamMembershipsForUserDetailed("u1", { maxAgeMs: 0 }),
+    ).resolves.toEqual({
+      memberships: [],
+      degradedRegions: ["usw"],
+    })
+  })
+
+  it("drops the last known good snapshot after a later healthy empty read", async () => {
+    cellClients.use = cellClient([])
+    cellClients.usw = cellClient([{ team_id: "team-west" }])
+
+    await expect(listTeamMembershipsForUserDetailed("u1")).resolves.toEqual({
+      memberships: [{ teamId: "team-west", region: "usw" }],
+      degradedRegions: [],
+    })
+
+    cellClients.use = cellClient([])
+    cellClients.usw = cellClient([])
+
+    await expect(
+      listTeamMembershipsForUserDetailed("u1", { maxAgeMs: 0 }),
+    ).resolves.toEqual({
+      memberships: [],
+      degradedRegions: [],
+    })
+
+    cellClients.use = cellClient([])
+    cellClients.usw = {
+      from: vi.fn(() => ({
+        select: () => ({
+          eq: async () => ({ data: null, error: { message: "usw down" } }),
+        }),
+      })),
+    } as unknown as ReturnType<typeof cellClient>
+
+    await expect(
+      listTeamMembershipsForUserDetailed("u1", { maxAgeMs: 0 }),
+    ).resolves.toEqual({
+      memberships: [],
+      degradedRegions: ["usw"],
+    })
+  })
+
+  it("does not resurrect a cleared snapshot when forced-fresh reads overlap", async () => {
+    regions = ["use", "usw"]
+    cellClients.use = cellClient([{ team_id: "team-west" }])
+    cellClients.usw = cellClient([])
+
+    await listTeamMembershipsForUserDetailed("u1")
+
+    cellClients.use = cellClient([])
+    cellClients.usw = queuedMembershipCellClient([
+      { kind: "resolve", data: [] },
+      { kind: "resolve", data: [] },
+      { kind: "reject", message: "usw down" },
+      { kind: "resolve", data: [] },
+    ])
+
+    const [first, second] = await Promise.all([
+      listTeamMembershipsForUserDetailed("u1", { maxAgeMs: 0 }),
+      listTeamMembershipsForUserDetailed("u1", { maxAgeMs: 0 }),
+    ])
+
+    expect(first).toEqual({ memberships: [], degradedRegions: [] })
+    expect(second).toEqual(first)
+    expect(cellClients.use.from).toHaveBeenCalledTimes(4)
+    expect(cellClients.usw.from).toHaveBeenCalledTimes(4)
   })
 })
 

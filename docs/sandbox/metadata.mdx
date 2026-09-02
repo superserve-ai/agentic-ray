@@ -50,7 +50,7 @@ sandbox.update(metadata={"env": "staging", "owner": "agent-7"})
 
 ## Filter sandboxes by metadata
 
-`Sandbox.list()` accepts a `metadata` filter. Multiple keys combine with AND - a sandbox must match every key-value pair to be returned.
+`Sandbox.list()` accepts a `metadata` filter that returns only sandboxes matching every key-value pair you pass.
 
 <CodeGroup>
 ```typescript TypeScript

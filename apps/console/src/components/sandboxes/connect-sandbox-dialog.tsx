@@ -134,7 +134,7 @@ export function ConnectSandboxDialog({
         </DialogHeader>
 
         {/* Language Tabs */}
-        <nav
+        <div
           className="mx-6 flex items-center gap-1 border-b border-dashed border-border py-2"
           onMouseLeave={() => setHoveredTab(null)}
         >
@@ -186,7 +186,7 @@ export function ConnectSandboxDialog({
               </button>
             )
           })}
-        </nav>
+        </div>
 
         <div className="max-h-[60vh] space-y-5 overflow-y-auto p-6">
           {/* API Key */}

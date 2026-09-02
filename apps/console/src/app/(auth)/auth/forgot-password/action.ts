@@ -1,6 +1,6 @@
 "use server"
 
-import { z } from "zod"
+import * as z from "zod"
 
 import { sendEmail } from "@/lib/email/send"
 import { PasswordResetEmail } from "@/lib/email/templates/password-reset"

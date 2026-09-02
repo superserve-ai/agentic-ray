@@ -16,6 +16,7 @@
     "email:dev": "email dev --dir src/lib/email/templates --port 3002"
   },
   "dependencies": {
+    "@fingerprint/react": "^3.1.0",
     "@phosphor-icons/react": "^2.1.7",
     "@react-email/components": "^1.0.7",
     "@supabase/ssr": "^0.10.0",

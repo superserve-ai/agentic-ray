@@ -171,7 +171,7 @@ export default function GetStartedPage() {
             </p>
 
             {/* Language Toggle */}
-            <nav
+            <div
               className="flex items-center gap-1 py-2"
               onMouseLeave={() => setHoveredTab(null)}
             >
@@ -223,7 +223,7 @@ export default function GetStartedPage() {
                   </button>
                 )
               })}
-            </nav>
+            </div>
           </div>
 
           <div className="mt-10 space-y-10">

@@ -321,6 +321,36 @@ class TestList:
             Sandbox.list(metadata={"env": "prod"})
             assert "metadata.env=prod" in str(route.calls.last.request.url)
 
+    def test_status_enum_serializes_as_value(self) -> None:
+        with respx.mock() as router:
+            route = router.get(url__regex=rf"{API}/sandboxes.*").mock(
+                return_value=httpx.Response(200, json=[])
+            )
+            Sandbox.list(status=SandboxStatus.ACTIVE)
+            assert "status=active" in str(route.calls.last.request.url)
+
+    def test_passes_status_and_pagination(self) -> None:
+        with respx.mock() as router:
+            route = router.get(url__regex=rf"{API}/sandboxes.*").mock(
+                return_value=httpx.Response(200, json=[])
+            )
+            Sandbox.list(
+                metadata={"env": "prod"}, status="active", limit=100, offset=200
+            )
+            url = str(route.calls.last.request.url)
+            assert "metadata.env=prod" in url
+            assert "status=active" in url
+            assert "limit=100" in url
+            assert "offset=200" in url
+
+    def test_no_query_string_without_filters(self) -> None:
+        with respx.mock() as router:
+            route = router.get(f"{API}/sandboxes").mock(
+                return_value=httpx.Response(200, json=[])
+            )
+            Sandbox.list()
+            assert route.calls.last.request.url.query == b""
+
 
 class TestKillById:
     def test_success(self) -> None:

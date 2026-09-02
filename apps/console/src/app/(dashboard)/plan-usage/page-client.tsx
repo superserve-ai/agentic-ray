@@ -11,14 +11,20 @@ import {
   BillingSummary,
   billingErrorMessage,
 } from "@/components/billing-summary"
+import { CustomerBillingSection } from "@/components/customer-billing-section"
 import { DateRangeFilter, type DateRange } from "@/components/date-range-filter"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
+import {
+  useDashboardTeamContext,
+  useQueryScope,
+} from "@/components/query-provider"
 import { TableSkeleton } from "@/components/table-skeleton"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { useBillingUsage } from "@/hooks/use-billing-usage"
 import { useSandboxesPage } from "@/hooks/use-sandboxes"
+import { useTeams } from "@/hooks/use-teams"
 import { useUser } from "@/hooks/use-user"
 import type { BillingUsageHourly } from "@/lib/api/billing-actions"
 
@@ -70,9 +76,39 @@ function toDateRange(period?: {
 export function PlanUsagePageClient() {
   const router = useRouter()
   const pathname = usePathname()
+  const queryScope = useQueryScope()
   const { user, loading: userLoading } = useUser()
+  const teamsQuery = useTeams()
+  const dashboardTeam = useDashboardTeamContext()
   const summaryQuery = useBillingSummary(!userLoading && !!user)
   const summary = summaryQuery.data
+  const activeTeam = useMemo(() => {
+    const teams = teamsQuery.data?.teams ?? []
+    if (queryScope !== "self") {
+      return teams.find((team) => team.id === queryScope) ?? null
+    }
+
+    return (
+      teams.find(
+        (team) =>
+          team.id === teamsQuery.data?.activeTeamId &&
+          team.region === teamsQuery.data?.activeRegion,
+      ) ?? null
+    )
+  }, [queryScope, teamsQuery.data])
+  const billingTeam = useMemo(() => {
+    if (dashboardTeam) {
+      return dashboardTeam
+    }
+    if (activeTeam) {
+      return {
+        teamId: activeTeam.id,
+        region: activeTeam.region,
+        name: activeTeam.name,
+      }
+    }
+    return null
+  }, [activeTeam, dashboardTeam])
   const billingPeriod = useMemo(
     () => toDateRange(summary?.billing_period),
     [summary?.billing_period],
@@ -205,6 +241,15 @@ export function PlanUsagePageClient() {
             ) : summary ? (
               <BillingSummary summary={summary} />
             ) : null}
+
+            {billingTeam && (
+              <CustomerBillingSection
+                teamId={billingTeam.teamId}
+                teamRegion={billingTeam.region}
+                teamName={billingTeam.name}
+                summary={summary ?? null}
+              />
+            )}
 
             <div className="border-t border-border/80 pt-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -444,7 +489,6 @@ function CombinedComputeTrendPanel({
         className="mt-3 h-56 w-full overflow-visible"
         viewBox={`0 0 ${width} ${height}`}
         aria-label={`Combined compute ${bucket.label} line graph`}
-        role="img"
       >
         <title>{`Combined compute ${bucket.label} line graph`}</title>
         {leftTicks.map((tick) => {
@@ -647,7 +691,6 @@ function UsageTrendPanel({
         className="h-48 w-full overflow-visible"
         viewBox={`0 0 ${width} ${height}`}
         aria-label={`Storage ${bucket.label} line graph`}
-        role="img"
       >
         <title>{`Storage ${bucket.label} line graph`}</title>
         {yTicks.map((tick) => {

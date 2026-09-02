@@ -17,6 +17,7 @@ from .files import AsyncFiles, AsyncFilesDeps
 from .types import (
     UNSET,
     build_update_body,
+    list_query,
     NetworkConfig,
     NetworkLogPage,
     NetworkVerdict,
@@ -200,17 +201,23 @@ class AsyncSandbox:
         cls,
         *,
         metadata: dict[str, str] | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> builtins.list[SandboxInfo]:
-        """List all sandboxes belonging to the authenticated team."""
+        """List sandboxes belonging to the authenticated team.
+
+        Optional filters: ``metadata`` (AND semantics), ``status``, and
+        ``limit``/``offset`` paging. Without ``limit`` the full list is
+        returned.
+        """
         config = resolve_config(api_key=api_key, base_url=base_url)
         url = f"{config.base_url}/sandboxes"
-        if metadata:
-            from urllib.parse import urlencode
-
-            params = {f"metadata.{k}": v for k, v in metadata.items()}
-            url += f"?{urlencode(params)}"
+        query = list_query(metadata, status, limit, offset)
+        if query:
+            url += f"?{query}"
 
         raw = await async_api_request("GET", url, headers={"X-API-Key": config.api_key})
         return [to_sandbox_info(item) for item in raw]

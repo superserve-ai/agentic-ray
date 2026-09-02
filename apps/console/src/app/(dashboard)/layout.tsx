@@ -17,7 +17,18 @@ export default async function DashboardLayout({
   const queryScope = impersonationContext?.teamId ?? "self"
 
   return (
-    <QueryProvider cacheScope={queryScope}>
+    <QueryProvider
+      cacheScope={queryScope}
+      teamContext={
+        impersonationContext
+          ? {
+              teamId: impersonationContext.teamId,
+              region: impersonationContext.region,
+              name: impersonationContext.teamName,
+            }
+          : null
+      }
+    >
       <DashboardShell
         banner={<ImpersonationBanner context={impersonationContext} />}
       >
