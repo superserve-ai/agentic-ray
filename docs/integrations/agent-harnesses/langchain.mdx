@@ -18,24 +18,30 @@ Requires Python 3.11+. See [API keys](/api-key) to create a Superserve API key.
 
 ## Deep Agents SDK
 
-Launch a sandbox from a python-equipped template, wrap it in `SuperserveSandbox`, and pass it as the `backend` to `create_deep_agent(...)`:
+Launch a sandbox from a python-equipped template, wrap it in `SuperserveSandbox`, and pass it as the `backend` to `create_deep_agent(...)` — the agent's shell and file operations then run inside the sandbox:
 
 ```python
+from deepagents import create_deep_agent
 from superserve import Sandbox
 from langchain_superserve import SuperserveSandbox
 
-# Launch from a python-equipped template so the agent's file tools work.
 sandbox = Sandbox.create(name="my-agent", from_template="superserve/python-3.11")
 backend = SuperserveSandbox(sandbox=sandbox)
 
+agent = create_deep_agent(
+    model="anthropic:claude-sonnet-5",
+    backend=backend,
+    system_prompt="You are a coding assistant with a sandboxed shell.",
+)
+
 try:
-    result = backend.execute("echo hello")
-    print(result.output)
+    result = agent.invoke(
+        {"messages": "List the files in /tmp and tell me how many there are."}
+    )
+    print(result["messages"][-1].content)
 finally:
     sandbox.kill()
 ```
-
-Pass the connected `backend` to `create_deep_agent(...)` to run the agent's shell and file operations inside the sandbox.
 
 <Note>
   `SuperserveSandbox` synthesizes `ls`/`read`/`edit`/`glob` with in-sandbox `python3`, so launch from a python-equipped image — `superserve/python-3.11`, `superserve/python-ml`, or `superserve/code-interpreter`. `execute`, `grep`, and file upload/download work on any image, including the minimal `superserve/base`.
