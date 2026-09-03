@@ -289,6 +289,8 @@ export class Sandbox {
         url: `${config.baseUrl}/sandboxes/${sandboxId}`,
         headers: { "X-API-Key": config.apiKey },
         signal: options.signal,
+        // Don't drop a mid-transition sandbox on bulk delete (see retryConflict).
+        retryConflict: true,
       })
     } catch (err) {
       if (!(err instanceof NotFoundError)) throw err
@@ -370,6 +372,8 @@ export class Sandbox {
         method: "DELETE",
         url: `${this._config.baseUrl}/sandboxes/${this.id}`,
         headers: { "X-API-Key": this._config.apiKey },
+        // Don't drop a mid-transition sandbox on bulk delete (see retryConflict).
+        retryConflict: true,
       })
     } catch (err) {
       if (!(err instanceof NotFoundError)) throw err

@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
+  ConflictError,
   NotFoundError,
+  RateLimitError,
   SandboxError,
   ServerError,
   TimeoutError,
@@ -140,6 +142,82 @@ describe("http.request", () => {
         body: { a: 1 },
       }),
     ).rejects.toBeInstanceOf(ServerError)
+    expect(mock).toHaveBeenCalledTimes(1)
+  })
+
+  it("retries DELETE on 409 with retryConflict, then succeeds", async () => {
+    let call = 0
+    const mock = installFetch(async () => {
+      call++
+      if (call === 1) {
+        return jsonResponse(
+          { error: { code: "conflict", message: "mid-transition" } },
+          { status: 409 },
+        )
+      }
+      return emptyResponse(204)
+    })
+    const out = await request<void>({
+      method: "DELETE",
+      url: "https://example.com/sandboxes/abc",
+      retryConflict: true,
+    })
+    expect(out).toBeUndefined()
+    expect(mock).toHaveBeenCalledTimes(2)
+  })
+
+  it("settles promptly when aborted during a conflict backoff", async () => {
+    installFetch(async () =>
+      jsonResponse(
+        { error: { code: "conflict", message: "mid-transition" } },
+        { status: 409 },
+      ),
+    )
+    const controller = new AbortController()
+    const started = Date.now()
+    const pending = request<void>({
+      method: "DELETE",
+      url: "https://example.com/sandboxes/abc",
+      retryConflict: true,
+      signal: controller.signal,
+    })
+    // Let the first 409 land and the backoff sleep begin, then cancel.
+    await new Promise((r) => setTimeout(r, 50))
+    controller.abort()
+    await expect(pending).rejects.toThrow()
+    // Must settle on the abort, not after sleeping out the remaining backoff.
+    expect(Date.now() - started).toBeLessThan(1_000)
+  })
+
+  it("retryConflict does not extend the budget for non-409 failures", async () => {
+    // A rate-limited delete keeps the default 3-attempt bound; only an actual
+    // 409 unlocks the longer conflict budget.
+    const mock = installFetch(
+      async () =>
+        new Response("{}", { status: 429, headers: { "Retry-After": "0" } }),
+    )
+    await expect(
+      request({
+        method: "DELETE",
+        url: "https://example.com/sandboxes/abc",
+        retryConflict: true,
+      }),
+    ).rejects.toBeInstanceOf(RateLimitError)
+    expect(mock).toHaveBeenCalledTimes(3)
+  })
+
+  it("does NOT retry 409 on DELETE without retryConflict", async () => {
+    // A terminal 409 (e.g. deleting a template with active sandboxes) must fail
+    // fast, not spin the conflict-retry budget.
+    const mock = installFetch(async () =>
+      jsonResponse(
+        { error: { code: "conflict", message: "has active sandboxes" } },
+        { status: 409 },
+      ),
+    )
+    await expect(
+      request({ method: "DELETE", url: "https://example.com/templates/abc" }),
+    ).rejects.toBeInstanceOf(ConflictError)
     expect(mock).toHaveBeenCalledTimes(1)
   })
 
