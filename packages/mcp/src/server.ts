@@ -12,6 +12,7 @@ import {
   SERVER_VERSION,
 } from "./constants.js"
 import { McpServer } from "./lib/sdk.js"
+import { registerComputerTool } from "./tools/computer.js"
 import { registerExecTool } from "./tools/exec.js"
 import { registerFileTools } from "./tools/files.js"
 import { registerLifecycleTools } from "./tools/lifecycle.js"
@@ -31,6 +32,7 @@ export function createServer(client: SandboxClient): McpServer {
 
   registerLifecycleTools(server, client)
   registerExecTool(server, client)
+  registerComputerTool(server, client)
   registerFileTools(server, client)
   registerSecretTools(server, client)
 

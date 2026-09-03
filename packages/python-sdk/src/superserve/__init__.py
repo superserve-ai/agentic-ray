@@ -10,6 +10,7 @@ from .async_sandbox import AsyncSandbox
 from .async_secrets import AsyncSecret
 from .async_template import AsyncTemplate
 from .command_session import AsyncCommandSession
+from .desktop import DESKTOP_STREAM_PORT, AsyncDesktop, Desktop, Screenshot
 from .errors import (
     AuthenticationError,
     BuildError,
@@ -63,6 +64,10 @@ __version__ = "0.8.3"
 
 __all__ = [
     "AsyncCommandSession",
+    "AsyncDesktop",
+    "Desktop",
+    "DESKTOP_STREAM_PORT",
+    "Screenshot",
     "AsyncProvider",
     "AsyncSandbox",
     "AsyncSecret",

@@ -12,6 +12,7 @@ import httpx
 from ._config import ResolvedConfig, preview_url, resolve_config
 from ._http import async_api_request
 from .commands import AsyncCommands, AsyncCommandsDeps
+from .desktop import DESKTOP_STREAM_PORT, AsyncDesktop, AsyncDesktopDeps
 from .errors import NotFoundError, SandboxError
 from .files import AsyncFiles, AsyncFilesDeps
 from .types import (
@@ -75,6 +76,21 @@ class AsyncSandbox:
                 sandbox_host=config.sandbox_host,
                 get_access_token=lambda: self._access_token,
                 refresh_activate=self._refresh_activate,
+            ),
+            client=self._http_client,
+        )
+
+        async def _publish_stream_port() -> None:
+            await self.publish_preview_port(DESKTOP_STREAM_PORT)
+
+        self.desktop = AsyncDesktop(
+            AsyncDesktopDeps(
+                sandbox_id=self.id,
+                sandbox_host=config.sandbox_host,
+                get_access_token=lambda: self._access_token,
+                refresh_activate=self._refresh_activate,
+                publish_stream_port=_publish_stream_port,
+                stream_base_url=lambda: self.get_preview_url(DESKTOP_STREAM_PORT),
             ),
             client=self._http_client,
         )

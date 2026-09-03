@@ -110,27 +110,28 @@ It serves the MCP endpoint at `/` (POST) and a `GET /health` liveness probe. Con
 
 ## Tools
 
-| Tool                         | Description                                                                            |
-| ---------------------------- | -------------------------------------------------------------------------------------- |
-| `sandbox_create`             | Create a sandbox; returns its `id`. Accepts `secrets` bindings and egress rules.       |
-| `sandbox_update`             | Change a sandbox's metadata or egress (`allow_out`/`deny_out`) rules after creation.   |
-| `sandbox_list`               | List sandboxes (active and paused), filterable by metadata.                            |
-| `sandbox_info`               | Get a sandbox's status, resources, metadata, network rules, and secret bindings.       |
-| `sandbox_exec`               | Run a shell command; returns stdout, stderr, exit code. Auto-resumes a paused sandbox. |
-| `sandbox_files_read`         | Read a file (UTF-8 text or base64). Rejects files over 1 MiB.                          |
-| `sandbox_files_write`        | Create or overwrite a file (inline content capped at 8 MiB).                           |
-| `sandbox_files_list`         | List a directory.                                                                      |
-| `sandbox_files_download_dir` | Download a directory as a base64 ZIP (symlinks skipped). Capped at 10 MiB.             |
-| `sandbox_pause`              | Pause a sandbox (state preserved).                                                     |
-| `sandbox_resume`             | Resume a paused sandbox (usually unnecessary — exec auto-resumes).                     |
-| `sandbox_kill`               | Delete a sandbox.                                                                      |
-| `sandbox_preview_url`        | Publish a port and return a public or private signed preview URL.                      |
-| `sandbox_network_log`        | Audit a sandbox's outbound connections.                                                |
-| `sandbox_template_list`      | List the templates (prebuilt base images) your team can create sandboxes from.         |
-| `sandbox_template_create`    | Build a custom template (vCPU/memory/disk shape, preinstalled software). Async.        |
-| `secret_list`                | List bindable team secrets (metadata only — never values).                             |
-| `sandbox_attach_secret`      | Bind a stored secret to a sandbox under an env var.                                    |
-| `sandbox_detach_secret`      | Remove a secret binding from a sandbox.                                                |
+| Tool                         | Description                                                                                                                         |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `sandbox_create`             | Create a sandbox; returns its `id`. Accepts `secrets` bindings and egress rules.                                                    |
+| `sandbox_update`             | Change a sandbox's metadata or egress (`allow_out`/`deny_out`) rules after creation.                                                |
+| `sandbox_list`               | List sandboxes (active and paused), filterable by metadata.                                                                         |
+| `sandbox_info`               | Get a sandbox's status, resources, metadata, network rules, and secret bindings.                                                    |
+| `sandbox_exec`               | Run a shell command; returns stdout, stderr, exit code. Auto-resumes a paused sandbox.                                              |
+| `sandbox_computer`           | Drive a GUI desktop sandbox: screenshot, mouse, keyboard, scroll, resize, live viewer URL. Input actions return a fresh screenshot. |
+| `sandbox_files_read`         | Read a file (UTF-8 text or base64). Rejects files over 1 MiB.                                                                       |
+| `sandbox_files_write`        | Create or overwrite a file (inline content capped at 8 MiB).                                                                        |
+| `sandbox_files_list`         | List a directory.                                                                                                                   |
+| `sandbox_files_download_dir` | Download a directory as a base64 ZIP (symlinks skipped). Capped at 10 MiB.                                                          |
+| `sandbox_pause`              | Pause a sandbox (state preserved).                                                                                                  |
+| `sandbox_resume`             | Resume a paused sandbox (usually unnecessary — exec auto-resumes).                                                                  |
+| `sandbox_kill`               | Delete a sandbox.                                                                                                                   |
+| `sandbox_preview_url`        | Publish a port and return a public or private signed preview URL.                                                                   |
+| `sandbox_network_log`        | Audit a sandbox's outbound connections.                                                                                             |
+| `sandbox_template_list`      | List the templates (prebuilt base images) your team can create sandboxes from.                                                      |
+| `sandbox_template_create`    | Build a custom template (vCPU/memory/disk shape, preinstalled software). Async.                                                     |
+| `secret_list`                | List bindable team secrets (metadata only — never values).                                                                          |
+| `sandbox_attach_secret`      | Bind a stored secret to a sandbox under an env var.                                                                                 |
+| `sandbox_detach_secret`      | Remove a secret binding from a sandbox.                                                                                             |
 
 All tools take a `sandbox_id` except `sandbox_create`, `sandbox_list`, `sandbox_template_list`, `sandbox_template_create`, and `secret_list`. Secret _creation_ is intentionally not exposed (the raw value belongs on the SDK/console, not an agent transcript); the server only binds existing secrets.
 
