@@ -1,0 +1,13 @@
+[project]
+name = "superserve-cursor-cloud-agents"
+version = "0.1.0"
+description = "Reference implementation for running Cursor Self-Hosted Machines on Superserve."
+requires-python = ">=3.12"
+dependencies = ["superserve>=0.8.3", "python-dotenv"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["build_template", "monitor", "spawn", "worker"]
