@@ -1,15 +1,15 @@
 ---
 title: "Run Cursor Self-Hosted Machines on Superserve"
 sidebarTitle: Cursor Cloud Agents
-description: "Get the control of Cursor Self-Hosted Machines without running a fleet. Every Cloud Agent gets its own Superserve sandbox, built from your image, deleted or paused when it's done."
+description: "Get the control of Cursor Self-Hosted Machines without having to manage a fleet of machines. Every Cloud Agent gets its own Superserve sandbox, built from your image, deleted or paused when it's done."
 icon: "/logos/integrations/cursor.svg"
 ---
 
 [Cursor Cloud Agents](https://cursor.com/docs/cloud-agent) take a task from Cursor, Slack, GitHub, or Linear and come back with a pull request. By default they run on VMs in Cursor's cloud. [Self-Hosted Machines](https://cursor.com/docs/cloud-agent/self-hosted) lets you move the part that touches your code, the checkout, the file edits, and the shell commands, onto machines you control. Cursor keeps running the agent loop, the model calls, and the Cloud Agent experience your team already uses.
 
-That control is the point. You decide which image the agent runs on, what it can reach, and what happens to the workspace when it's done. The catch, and Cursor's own docs are candid about it, is that a Team Pool means running a fleet: keeping enough workers online, patching images, resetting machines between runs, scaling for bursts, and cleaning up after every session.
+That control is the point. You decide which image the agent runs on, what it can reach, and what happens to the workspace when it's done. The catch, and Cursor's own docs are candid about it, is that a Team Pool means managing a fleet of machines: keeping enough workers online, patching images, resetting machines between runs, scaling for bursts, and cleaning up after every session.
 
-Superserve gives you the control without the fleet. Point Cursor's worker controller at the spawn hook in this guide, and every Cloud Agent that lands in your pool gets its own sandbox: created for that request, booted from a template you built, limited to the hosts you allow, and deleted the moment the worker exits. Follow-ups don't have to start cold either. A sandbox can pause between turns at no compute cost and resume in under 50ms with the checkout and caches intact, which is the hibernation model Cursor designed pools around. Nothing runs before a request arrives, and nothing lingers after.
+Superserve gives you the control without having to manage a fleet of machines. Point Cursor's worker controller at the spawn hook in this guide, and every Cloud Agent that lands in your pool gets its own sandbox: created for that request, booted from a template you built, limited to the hosts you allow, and deleted the moment the worker exits. Follow-ups don't have to start cold either. A sandbox can pause between turns at no compute cost and resume in under 50ms with the checkout and caches intact, which is the hibernation model Cursor designed pools around. Nothing runs before a request arrives, and nothing lingers after.
 
 This is for you if:
 
