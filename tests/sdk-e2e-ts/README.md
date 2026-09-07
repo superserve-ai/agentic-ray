@@ -19,8 +19,12 @@ tests/sdk-e2e-ts/
 └── tests/
     ├── system.test.ts        # client.system.health()
     ├── sandboxes.test.ts     # create, get, list, patch, pause, resume, delete
-    └── exec.test.ts          # command (sync + failing), commandStream (SSE)
+    ├── exec.test.ts          # command (sync + failing), commandStream (SSE)
+    ├── network.test.ts       # strict allowlists, bare-IP rules, network log, update-while-paused
+    └── cursor-worker.test.ts # the Cursor Self-Hosted Machines guide's template + worker helpers
 ```
+
+`cursor-worker.test.ts` builds the guide's `cursor-worker` template on a team the first time it runs (about a minute) and reuses it afterwards. It needs no Cursor credentials: it exercises the template, the detached worker supervisor, the real worker binary's failure path, and the hibernate lookup, not a live Cursor pool.
 
 Each test file owns its own sandbox via `beforeAll` / `afterAll` — the sandbox is created once per file, reused across tests in that file, and deleted in `afterAll` so cleanup runs even on failure. Sandbox names include a unique `RUN_ID` so orphans from crashed runs are identifiable for manual cleanup.
 
@@ -69,18 +73,18 @@ Every `describe` block is guarded with `describe.skipIf(!hasCredentials())`. Wit
 
 ## Coverage
 
-| Resource    | Method                | Covered |
-|-------------|-----------------------|---------|
-| `system`    | `health()`            | ✓       |
-| `sandboxes` | `createSandbox()`     | ✓       |
-| `sandboxes` | `getSandbox()`        | ✓       |
-| `sandboxes` | `listSandboxes()`     | ✓       |
-| `sandboxes` | `patchSandbox()`      | ✓       |
-| `sandboxes` | `pauseSandbox()`      | ✓       |
-| `sandboxes` | `resumeSandbox()`     | ✓       |
-| `sandboxes` | `deleteSandbox()`     | ✓ (via `afterAll`) |
-| `exec`      | `command()`           | ✓       |
-| `exec`      | `commandStream()`     | ✓       |
+| Resource    | Method            | Covered            |
+| ----------- | ----------------- | ------------------ |
+| `system`    | `health()`        | ✓                  |
+| `sandboxes` | `createSandbox()` | ✓                  |
+| `sandboxes` | `getSandbox()`    | ✓                  |
+| `sandboxes` | `listSandboxes()` | ✓                  |
+| `sandboxes` | `patchSandbox()`  | ✓                  |
+| `sandboxes` | `pauseSandbox()`  | ✓                  |
+| `sandboxes` | `resumeSandbox()` | ✓                  |
+| `sandboxes` | `deleteSandbox()` | ✓ (via `afterAll`) |
+| `exec`      | `command()`       | ✓                  |
+| `exec`      | `commandStream()` | ✓                  |
 
 The TS SDK does not currently expose a `files` resource — the backend's `openapi.yaml` doesn't include file upload/download endpoints. When those land, add a `tests/files.test.ts` following the same pattern.
 
@@ -108,8 +112,8 @@ name: SDK E2E (staging)
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # daily at 06:00 UTC
-  workflow_dispatch:      # manual trigger
+    - cron: "0 6 * * *" # daily at 06:00 UTC
+  workflow_dispatch: # manual trigger
 
 jobs:
   e2e:

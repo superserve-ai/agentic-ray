@@ -170,7 +170,7 @@ export async function launchWorker(sandbox, { pool, env, command }) {
   if (Number.isNaN(pid)) {
     return {
       ok: false,
-      state: { state: "no_pidfile" },
+      state: { state: "no_pidfile", pid: null, exit_code: null },
       log: await readLog(sandbox),
     }
   }
