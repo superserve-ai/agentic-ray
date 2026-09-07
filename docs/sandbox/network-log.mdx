@@ -46,7 +46,7 @@ Every `connection` row has a verdict:
 | Verdict | Meaning |
 |---|---|
 | `allowed` | Connected — `bytesSent` / `bytesRecv` are populated |
-| `blocked` | Denied by one of your [network rules](/sandbox/networking), or because sandboxes are limited to the public internet — private and internal addresses are always blocked. `matchRule` names the rule that stopped it |
+| `blocked` | Denied by one of your [network rules](/sandbox/networking). `matchRule` names the rule that stopped it |
 | `failed` | Allowed by policy, but the connection couldn't be established |
 
 `matchRule` names the rule behind a `blocked` connection — a useful signal for catching when a sandbox tried to reach somewhere you didn't expect.
@@ -111,7 +111,7 @@ while True:
 
 The log records what the **sandbox** sent. It does **not** record work a third party does on the sandbox's behalf — if an agent calls an LLM that itself runs a web search server-side, you'll see the one request to the LLM, not the searches it ran on its own infrastructure. Those packets never left your sandbox.
 
-It covers HTTP and HTTPS egress. DNS resolution and raw non-HTTP sockets aren't in this log.
+It covers HTTP and HTTPS egress on ports 80 and 443. DNS resolution, raw non-HTTP sockets, other ports, and the platform's own drops of private, link-local, and loopback addresses happen below this log and aren't recorded in it.
 
 <Tip>
 Pair the network log (what was reached) with [network rules](/sandbox/networking) (what's allowed) and [secrets](/secrets/overview) (credentials attached to outbound requests) for end-to-end control and visibility over a sandbox's network.
