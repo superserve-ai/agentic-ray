@@ -1,8 +1,8 @@
 # Cursor Self-Hosted Machines on Superserve
 
-Run [Cursor Cloud Agents](https://cursor.com/docs/cloud-agent) on [Superserve sandboxes](https://superserve.ai) — a Self-Hosted Machines team pool where every request gets its own isolated Superserve sandbox, booted from a template with the Cursor CLI preinstalled.
+Run [Cursor Cloud Agents](https://cursor.com/docs/cloud-agent) on [Superserve sandboxes](https://superserve.ai) through a Self-Hosted Machines team pool.
 
-Self-Hosted Machines is for teams that need to own the execution environment: a custom image, egress rules, a private registry, or an audit trail of what an agent reached. Superserve gives you that control without a worker fleet — each sandbox exists only for the length of a request, boots from your template, follows your network rules, and can be paused between turns instead of deleted.
+Self-Hosted Machines lets you move a Cloud Agent's checkout, edits, and shell commands onto machines you control, but a Team Pool means running a fleet. Superserve gives you the control without the fleet: every request gets its own sandbox, booted from your template, limited to the hosts you allow, paused between follow-ups, and deleted when the worker exits.
 
 Cursor runs the agent loop. Superserve runs the worker. A spawn hook and a monitor wire them together.
 

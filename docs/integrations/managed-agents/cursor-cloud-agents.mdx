@@ -1,24 +1,23 @@
 ---
 title: "Run Cursor Self-Hosted Machines on Superserve"
 sidebarTitle: Cursor Cloud Agents
-description: "Keep control of where Cursor Cloud Agents execute - the image, the network, the credentials - without running a worker fleet. One Superserve sandbox per request."
+description: "Get the control of Cursor Self-Hosted Machines without running a fleet. Every Cloud Agent gets its own Superserve sandbox, built from your image, deleted or paused when it's done."
 icon: "/logos/integrations/cursor.svg"
 ---
 
-[Cursor Cloud Agents](https://cursor.com/docs/cloud-agent) are Cursor's background agents: you hand one a task from Cursor, Slack, GitHub, or Linear, and it works the repo and opens a PR. By default the agent's tool calls run on VMs Cursor manages. [Self-Hosted Machines](https://cursor.com/docs/cloud-agent/self-hosted) moves just that part - the checkout, file edits, and shell commands - onto a worker you control. Cursor keeps the agent loop, model calls, and the Cloud Agent UI.
+[Cursor Cloud Agents](https://cursor.com/docs/cloud-agent) take a task from Cursor, Slack, GitHub, or Linear and come back with a pull request. By default they run on VMs in Cursor's cloud. [Self-Hosted Machines](https://cursor.com/docs/cloud-agent/self-hosted) lets you move the part that touches your code, the checkout, the file edits, and the shell commands, onto machines you control. Cursor keeps running the agent loop, the model calls, and the Cloud Agent experience your team already uses.
 
-Teams reach for Self-Hosted Machines when they need to own the execution environment: a private package registry, services only reachable from their network, a custom image, or a requirement to know exactly which machine an agent's commands ran on and what it reached. The usual price is a worker fleet to size, patch, and keep on call.
+That control is the point. You decide which image the agent runs on, what it can reach, and what happens to the workspace when it's done. The catch, and Cursor's own docs are candid about it, is that a Team Pool means running a fleet: keeping enough workers online, patching images, resetting machines between runs, scaling for bursts, and cleaning up after every session.
 
-This guide runs each worker in a Superserve sandbox instead. You get the control that Self-Hosted Machines is for, on infrastructure that exists only for the length of a request.
+Superserve gives you the control without the fleet. Point Cursor's worker controller at the spawn hook in this guide, and every Cloud Agent that lands in your pool gets its own sandbox: created for that request, booted from a template you built, limited to the hosts you allow, and deleted the moment the worker exits. Follow-ups don't have to start cold either. A sandbox can pause between turns at no compute cost and resume in under 50ms with the checkout and caches intact, which is the hibernation model Cursor designed pools around. Nothing runs before a request arrives, and nothing lingers after.
 
-## Why Superserve
+This is for you if:
 
-- **A fresh sandbox per request.** Each Cloud Agent runs in its own isolated Superserve sandbox, created when the request is claimed and deleted when the worker exits. No shared hosts, no state left behind for the next agent to find.
-- **Your image, your toolchains.** Workers boot from a [template](/templates/overview) you build: runtimes, package mirrors, internal CA certificates, whatever your repos need. Nothing is installed at claim time.
-- **Egress you define, and a record of what was reached.** Set per-sandbox [network rules](/sandbox/networking) so a worker can reach Cursor, your git host, and nothing else. The [network log](/sandbox/network-log) records every connection a worker made, allowed or blocked.
-- **Credentials stay where they belong.** Your Superserve key never enters a sandbox. The worker's Cursor key is scoped to its process. Repo access uses per-run tokens Cursor mints, so there is no long-lived git credential anywhere in the setup.
-- **Pause between turns.** A follow-up an hour later should not start from an empty checkout. `pause()` checkpoints the whole sandbox at zero compute cost; `resume()` brings it back in under 50ms with the workspace intact.
-- **Nothing to keep warm.** Capacity scales from zero. No machines run before a request arrives and none linger after.
+- Security or procurement asked where agent commands run, and you'd rather answer with an image, an egress allowlist, and a per-connection log than with a fleet you operate.
+- Your environment doesn't fit a Cloud Agent build: a custom base image, a heavy toolchain, or a large checkout you want to keep warm across follow-ups.
+- Agents write a real share of your pull requests now, and idle machines have become the cost problem.
+
+If Cursor-hosted Cloud Agents already meet your requirements, stay there. Cursor recommends them for most teams, and so do we. This guide is for the teams that need a pool.
 
 ## How it works
 
@@ -66,31 +65,30 @@ Build a template with the Cursor CLI, `git`, and a `/workspace` directory. Sandb
 import { Template } from "@superserve/sdk"
 
 const template = await Template.create({
-name: "cursor-worker",
-from: "ubuntu:24.04",
-vcpu: 2,
-memoryMib: 2048,
-diskMib: 8192,
-steps: [
-{
-run:
-"apt-get update && apt-get install -y --no-install-recommends " +
-"ca-certificates curl git jq procps unzip && rm -rf /var/lib/apt/lists/*",
-},
-{ run: "curl -fsS https://cursor.com/install | HOME=/root bash" },
-{ run: "ln -sf /root/.local/bin/agent /usr/local/bin/agent && agent --version" },
-{ run: "mkdir -p /workspace /var/lib/cursor-worker" },
-{ workdir: "/workspace" },
-],
+  name: "cursor-worker",
+  from: "ubuntu:24.04",
+  vcpu: 2,
+  memoryMib: 2048,
+  diskMib: 8192,
+  steps: [
+    {
+      run:
+        "apt-get update && apt-get install -y --no-install-recommends " +
+        "ca-certificates curl git jq procps unzip && rm -rf /var/lib/apt/lists/*",
+    },
+    { run: "curl -fsS https://cursor.com/install | HOME=/root bash" },
+    { run: "ln -sf /root/.local/bin/agent /usr/local/bin/agent && agent --version" },
+    { run: "mkdir -p /workspace /var/lib/cursor-worker" },
+    { workdir: "/workspace" },
+  ],
 })
 
 await template.waitUntilReady({
-onLog: (ev) => {
-if (ev.stream !== "system") process.stdout.write(ev.text)
-},
+  onLog: (ev) => {
+    if (ev.stream !== "system") process.stdout.write(ev.text)
+  },
 })
-
-````
+```
 
 ```python Python
 from superserve import RunStep, Template, WorkdirStep
@@ -116,16 +114,15 @@ template = Template.create(
 template.wait_until_ready(
     on_log=lambda ev: print(ev.text, end="") if ev.stream.value != "system" else None
 )
-````
-
+```
 </CodeGroup>
 
 Run this once. The template persists in your Superserve account and every worker boots from it. The `agent --version` step fails the build immediately if the CLI download or install broke, rather than at the first claim.
 
 <Tip>
-  Add the runtimes, package caches, and internal CA certificates your repos need
-  to the build steps. The snapshot captures the full filesystem, so workers
-  inherit everything with no install cost at claim time.
+  Add the runtimes, package caches, and internal CA certificates your repos
+  need to the build steps. The snapshot captures the full filesystem, so
+  workers inherit everything with no install cost at claim time.
 </Tip>
 
 ## Run the controller
@@ -148,7 +145,6 @@ uv venv && uv pip install -e .
 cp .env.example .env
 .venv/bin/python build_template.py
 ```
-
 </CodeGroup>
 
 The controller ships with the Cursor CLI. Install it on the same host:
@@ -168,10 +164,8 @@ set -a && . ./.env && set +a
 agent worker controller --spawn "$(pwd)/spawn.mjs" --pool superserve
 
 # terminal 2: the monitor
-
 node monitor.mjs
-
-````
+```
 
 ```bash Python
 # terminal 1: the controller
@@ -180,8 +174,7 @@ agent worker controller --spawn "$(pwd)/spawn.sh" --pool superserve
 
 # terminal 2: the monitor
 .venv/bin/python monitor.py
-````
-
+```
 </CodeGroup>
 
 `--pool` registers the pool with Cursor, so `superserve` appears in the pool picker as soon as the controller connects. Any name works except `default`, which does not allow `--clone-git-repos`.
@@ -205,16 +198,15 @@ const sandbox = await Sandbox.create({
 })
 
 // launch.sh detaches and runs:
-// agent worker --pool <pool> --clone-git-repos start
+//   agent worker --pool <pool> --clone-git-repos start
 await sandbox.commands.run("bash /var/lib/cursor-worker/launch.sh", {
-env: {
-CURSOR_API_KEY: process.env.CURSOR_API_KEY,
-CURSOR_AGENT_WORKER_ID: workerId,
-CURSOR_WORKER_IDLE_RELEASE_TIMEOUT: "600",
-},
+  env: {
+    CURSOR_API_KEY: process.env.CURSOR_API_KEY,
+    CURSOR_AGENT_WORKER_ID: workerId,
+    CURSOR_WORKER_IDLE_RELEASE_TIMEOUT: "600",
+  },
 })
-
-````
+```
 
 ```python Python
 sandbox = Sandbox.create(
@@ -239,8 +231,7 @@ sandbox.commands.run(
         "CURSOR_WORKER_IDLE_RELEASE_TIMEOUT": "600",
     },
 )
-````
-
+```
 </CodeGroup>
 
 What the hook does on each claim:
@@ -316,28 +307,29 @@ To restrict egress, set `CURSOR_WORKER_ALLOW_OUT` to a comma-separated list of h
 No inbound ports are required. The worker connects out to Cursor, and Superserve reaches the sandbox through its own control plane.
 
 <Note>
-  Git access comes from tokens Cursor mints per run. There is no personal access
-  token in `.env`, in the template, or in the sandbox. Use a dedicated service
-  account per pool so a compromised worker can only claim that pool's work.
+  Git access comes from tokens Cursor mints per run. There is no personal
+  access token in `.env`, in the template, or in the sandbox. Use a dedicated
+  service account per pool so a compromised worker can only claim that pool's
+  work.
 </Note>
 
 ## Configuration
 
 The scripts read these from `.env`:
 
-| Setting                              | Default           | What it controls                                                                                                                |
-| ------------------------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `SUPERSERVE_API_KEY`                 | required          | Sandbox creation, resume, and deletion                                                                                          |
-| `CURSOR_API_KEY`                     | required          | Service-account key for the controller, handed to each worker                                                                   |
+| Setting                              | Default           | What it controls                                                                                                               |
+| ------------------------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `SUPERSERVE_API_KEY`                 | required          | Sandbox creation, resume, and deletion                                                                                         |
+| `CURSOR_API_KEY`                     | required          | Service-account key for the controller, handed to each worker                                                                  |
 | `CURSOR_POOL`                        | set by controller | Pool name. The spawn hook receives it per claim; the monitor reads it from `.env` to scope its sweeps and wake-ups to that pool |
-| `CURSOR_WORKER_TEMPLATE`             | `cursor-worker`   | Template each sandbox boots from                                                                                                |
-| `CURSOR_WORKER_IDLE_RELEASE_TIMEOUT` | `600`             | Seconds a worker waits for follow-ups before exiting                                                                            |
-| `CURSOR_WORKER_CLONE_GIT_REPOS`      | `true`            | Start the worker with `--clone-git-repos`. Turn off for any-repo workers that handle their own checkout                         |
-| `CURSOR_WORKER_HIBERNATE`            | `false`           | Pause sandboxes on worker exit instead of deleting them                                                                         |
-| `SANDBOX_AUTO_DELETE_SECONDS`        | `86400`           | How long a sandbox may stay paused before it is deleted                                                                         |
-| `CURSOR_WORKER_ALLOW_OUT`            | unset             | Comma-separated egress allowlist. Unset keeps the open default                                                                  |
-| `MONITOR_POLL_SECONDS`               | `15`              | Monitor sweep interval                                                                                                          |
-| `MONITOR_GRACE_SECONDS`              | `120`             | Minimum sandbox age before the monitor may recycle it, so fresh spawns are left alone                                           |
+| `CURSOR_WORKER_TEMPLATE`             | `cursor-worker`   | Template each sandbox boots from                                                                                               |
+| `CURSOR_WORKER_IDLE_RELEASE_TIMEOUT` | `600`             | Seconds a worker waits for follow-ups before exiting                                                                           |
+| `CURSOR_WORKER_CLONE_GIT_REPOS`      | `true`            | Start the worker with `--clone-git-repos`. Turn off for any-repo workers that handle their own checkout                        |
+| `CURSOR_WORKER_HIBERNATE`            | `false`           | Pause sandboxes on worker exit instead of deleting them                                                                        |
+| `SANDBOX_AUTO_DELETE_SECONDS`        | `86400`           | How long a sandbox may stay paused before it is deleted                                                                        |
+| `CURSOR_WORKER_ALLOW_OUT`            | unset             | Comma-separated egress allowlist. Unset keeps the open default                                                                 |
+| `MONITOR_POLL_SECONDS`               | `15`              | Monitor sweep interval                                                                                                         |
+| `MONITOR_GRACE_SECONDS`              | `120`             | Minimum sandbox age before the monitor may recycle it, so fresh spawns are left alone                                          |
 
 The controller sets `CURSOR_AGENT_WORKER_ID`, `CURSOR_REQUEST_ID`, and `CURSOR_WORKER_NAME` on each spawn. Leave them out of `.env`.
 
@@ -364,28 +356,16 @@ The controller sets `CURSOR_AGENT_WORKER_ID`, `CURSOR_REQUEST_ID`, and `CURSOR_W
 ## Resources
 
 <CardGroup cols={2}>
-  <Card
-    title="Reference implementation"
-    icon="github"
-    href="https://github.com/superserve-ai/superserve/tree/main/guides/managed-agents/cursor-cloud-agents"
-  >
+  <Card title="Reference implementation" icon="github" href="https://github.com/superserve-ai/superserve/tree/main/guides/managed-agents/cursor-cloud-agents">
     Template builder, spawn hook, and monitor in TypeScript and Python.
   </Card>
-  <Card
-    title="Cursor Team Pools"
-    icon="book"
-    href="https://cursor.com/docs/cloud-agent/self-hosted/pool"
-  >
+  <Card title="Cursor Team Pools" icon="book" href="https://cursor.com/docs/cloud-agent/self-hosted/pool">
     Pools, the worker controller, hibernation, and the pending-request API.
   </Card>
   <Card title="Templates" icon="layer-group" href="/templates/overview">
     Build reusable images with your toolchains baked in.
   </Card>
-  <Card
-    title="Pause, resume, and delete"
-    icon="pause"
-    href="/sandbox/lifecycle"
-  >
+  <Card title="Pause, resume, and delete" icon="pause" href="/sandbox/lifecycle">
     Checkpoint a sandbox between turns and restore it on demand.
   </Card>
 </CardGroup>
