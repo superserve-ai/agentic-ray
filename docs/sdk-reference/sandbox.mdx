@@ -43,7 +43,11 @@ const sandbox = await Sandbox.create({
   timeoutSeconds: 3600,
   metadata: { env: "prod" },
   envVars: { OPENAI_API_KEY: "sk-..." },
-  network: { allowOut: ["api.openai.com"], denyOut: ["0.0.0.0/0"] },
+  network: {
+    // deny everything except OpenAI and the sandbox's DNS resolvers
+    allowOut: ["api.openai.com", "1.1.1.1/32", "8.8.8.8/32"],
+    denyOut: ["0.0.0.0/0"],
+  },
   previewAccess: "private",
 })
 ```
@@ -57,7 +61,8 @@ sandbox = Sandbox.create(
     metadata={"env": "prod"},
     env_vars={"OPENAI_API_KEY": "sk-..."},
     network=NetworkConfig(
-        allow_out=["api.openai.com"],
+        # deny everything except OpenAI and the sandbox's DNS resolvers
+        allow_out=["api.openai.com", "1.1.1.1/32", "8.8.8.8/32"],
         deny_out=["0.0.0.0/0"],
     ),
     preview_access="private",
@@ -322,7 +327,7 @@ sandbox.detach_secret("ANTHROPIC_API_KEY")
 
 ### `getNetworkLog` / `get_network_log`
 
-The sandbox's network log — every outbound connection and secret-bearing request, newest first. Returns a `NetworkLogPage`. See the [Network log](/sandbox/network-log) guide for the full model.
+The sandbox's network log — every outbound HTTP and HTTPS connection (ports 80 and 443) and every secret-bearing request, newest first. Returns a `NetworkLogPage`. See the [Network log](/sandbox/network-log) guide for the full model.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -450,8 +455,8 @@ class SandboxInfo(BaseModel):
 <CodeGroup>
 ```typescript TypeScript
 interface NetworkConfig {
-  allowOut?: string[]  // CIDRs or domain patterns
-  denyOut?: string[]   // CIDRs only - use "0.0.0.0/0" to deny all
+  allowOut?: string[]  // IPs, CIDRs, or domain patterns (a bare IP reads back as /32)
+  denyOut?: string[]   // IPs and CIDRs only - use "0.0.0.0/0" to deny all
 }
 ```
 
@@ -459,8 +464,8 @@ interface NetworkConfig {
 from pydantic import BaseModel
 
 class NetworkConfig(BaseModel):
-    allow_out: list[str] | None = None  # CIDRs or domain patterns
-    deny_out: list[str] | None = None   # CIDRs only
+    allow_out: list[str] | None = None  # IPs, CIDRs, or domain patterns (a bare IP reads back as /32)
+    deny_out: list[str] | None = None   # IPs and CIDRs only - use "0.0.0.0/0" to deny all
 ```
 
 </CodeGroup>

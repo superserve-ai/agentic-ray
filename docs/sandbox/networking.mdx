@@ -7,7 +7,7 @@ description: Lock down sandbox egress to specific CIDRs or domains with allow an
 By default, a sandbox can reach any public IP on the internet. The platform always blocks egress to private, link-local, and loopback ranges regardless of your allow rules. Use `network` rules to narrow the allowlist further.
 
 <Tip>
-Rules control what a sandbox **may** reach. To see what it **actually** reached — every connection, allowed or blocked — use the [network log](/sandbox/network-log).
+Rules control what a sandbox **may** reach. To see what it **actually** reached over HTTP and HTTPS — every such connection, allowed or blocked — use the [network log](/sandbox/network-log).
 </Tip>
 
 ## Allow specific destinations
@@ -19,7 +19,10 @@ Rules control what a sandbox **may** reach. To see what it **actually** reached 
 const sandbox = await Sandbox.create({
   name: "restricted",
   network: {
-    allowOut: ["api.openai.com", "*.github.com", "140.82.112.0/20"],
+    allowOut: [
+      "1.1.1.1/32", "8.8.8.8/32", // the sandbox's DNS resolvers
+      "api.openai.com", "*.github.com", "140.82.112.0/20",
+    ],
     denyOut: ["0.0.0.0/0"],
   },
 })
@@ -31,31 +34,38 @@ from superserve import Sandbox, NetworkConfig
 sandbox = Sandbox.create(
     name="restricted",
     network=NetworkConfig(
-        allow_out=["api.openai.com", "*.github.com", "140.82.112.0/20"],
+        allow_out=[
+            "1.1.1.1/32", "8.8.8.8/32",  # the sandbox's DNS resolvers
+            "api.openai.com", "*.github.com", "140.82.112.0/20",
+        ],
         deny_out=["0.0.0.0/0"],
     ),
 )
 ```
 </CodeGroup>
 
+<Warning>
+A deny-all rule also blocks DNS. Sandboxes resolve names through `1.1.1.1` and `8.8.8.8`, so a strict allowlist must let the sandbox reach at least one of them or nothing resolves - not even the domains you allowed. The examples allow both so a resolver outage doesn't take DNS down with it. Domain rules are matched on the connection, not on the lookup, so allowing `api.openai.com` does not by itself let the sandbox look it up.
+</Warning>
+
 ## Rule format
 
 | Field | Accepts | Notes |
 |---|---|---|
-| `allowOut` / `allow_out` | CIDRs + domains | Domains support wildcards (`*.example.com`). A wildcard matches subdomains at any depth but not the bare domain — `*.example.com` does not match `example.com`; list both if you need the apex. |
-| `denyOut` / `deny_out` | CIDRs only | Use `0.0.0.0/0` to deny the entire internet and rely on `allowOut` for exceptions. |
+| `allowOut` / `allow_out` | IPs, CIDRs + domains | Domains support wildcards (`*.example.com`). A wildcard matches subdomains at any depth but not the bare domain — `*.example.com` does not match `example.com`; list both if you need the apex. A bare IP is stored and applied as a single-host prefix: `1.1.1.1` reads back as `1.1.1.1/32`. |
+| `denyOut` / `deny_out` | IPs and CIDRs only | Use `0.0.0.0/0` to deny the entire internet and rely on `allowOut` for exceptions. Domains are not accepted here. |
 
 Allow rules take precedence over deny rules when they overlap.
 
 ## Update rules on a running sandbox
 
-Networking can be updated after creation - changes apply immediately to new connections.
+Networking can be updated after creation - changes apply immediately to new connections. The sandbox must be `active`; updating `network` on a paused sandbox returns a `ConflictError`. Resume it first, or set the rules at creation so they follow the sandbox through every pause and resume.
 
 <CodeGroup>
 ```typescript TypeScript
 await sandbox.update({
   network: {
-    allowOut: ["api.anthropic.com", "api.openai.com"],
+    allowOut: ["1.1.1.1/32", "8.8.8.8/32", "api.anthropic.com", "api.openai.com"],
     denyOut: ["0.0.0.0/0"],
   },
 })
@@ -64,7 +74,7 @@ await sandbox.update({
 ```python Python
 sandbox.update(
     network=NetworkConfig(
-        allow_out=["api.anthropic.com", "api.openai.com"],
+        allow_out=["1.1.1.1/32", "8.8.8.8/32", "api.anthropic.com", "api.openai.com"],
         deny_out=["0.0.0.0/0"],
     ),
 )
