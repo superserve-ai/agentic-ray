@@ -24,6 +24,7 @@ if (!process.env.SUPERSERVE_API_KEY) {
 }
 
 const TERMINAL_STATES = new Set(["exited", "dead", "no_pidfile"])
+const ONCE = process.argv.includes("--once")
 const POLL_MS = Number(process.env.MONITOR_POLL_SECONDS || 15) * 1000
 const GRACE_MS = Number(process.env.MONITOR_GRACE_SECONDS || 120) * 1000
 const WAKE_ENABLED = config.hibernate && Boolean(process.env.CURSOR_API_KEY)
@@ -148,6 +149,7 @@ while (!shuttingDown) {
   } catch (e) {
     console.warn(`monitor: ${e.message}`)
   }
+  if (ONCE) break
   await new Promise((r) => setTimeout(r, POLL_MS))
 }
 console.log("monitor: stopped")

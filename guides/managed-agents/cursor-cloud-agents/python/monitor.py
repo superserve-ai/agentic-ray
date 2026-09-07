@@ -33,6 +33,7 @@ from worker import (
 log = logging.getLogger("monitor")
 
 TERMINAL_STATES = ("exited", "dead", "no_pidfile")
+ONCE = "--once" in sys.argv[1:]
 POLL_SECONDS = int(os.environ.get("MONITOR_POLL_SECONDS", "15"))
 GRACE_SECONDS = int(os.environ.get("MONITOR_GRACE_SECONDS", "120"))
 POOL = os.environ.get("CURSOR_POOL") or None
@@ -177,6 +178,8 @@ def main() -> int:
                 wake(sandboxes)
         except Exception as e:
             log.warning("%s", e)
+        if ONCE:
+            break
         shutdown.wait(POLL_SECONDS)
     log.info("stopped")
     return 0

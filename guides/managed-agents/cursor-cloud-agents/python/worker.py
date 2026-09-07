@@ -53,11 +53,21 @@ IDLE_RELEASE_TIMEOUT = os.environ.get("CURSOR_WORKER_IDLE_RELEASE_TIMEOUT", "600
 CLONE_GIT_REPOS = _flag("CURSOR_WORKER_CLONE_GIT_REPOS", True)
 HIBERNATE = _flag("CURSOR_WORKER_HIBERNATE", False)
 AUTO_DELETE_SECONDS = int(os.environ.get("SANDBOX_AUTO_DELETE_SECONDS", "86400"))
-ALLOW_OUT = [
-    h.strip()
-    for h in os.environ.get("CURSOR_WORKER_ALLOW_OUT", "").split(",")
-    if h.strip()
-]
+# Sandboxes resolve DNS through these public resolvers. A strict allowlist has
+# to include them or nothing resolves. Single IPs are written as /32.
+DNS_RESOLVERS = ["1.1.1.1/32", "8.8.8.8/32"]
+_IPV4_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
+
+
+def egress_allowlist(raw: str) -> list[str]:
+    entries = [e.strip() for e in raw.split(",") if e.strip()]
+    entries = [f"{e}/32" if _IPV4_RE.match(e) else e for e in entries]
+    if not entries:
+        return []
+    return list(dict.fromkeys(DNS_RESOLVERS + entries))
+
+
+ALLOW_OUT = egress_allowlist(os.environ.get("CURSOR_WORKER_ALLOW_OUT", ""))
 CURSOR_ENDPOINT = os.environ.get("CURSOR_API_ENDPOINT", "https://api.cursor.com")
 
 
@@ -113,7 +123,9 @@ rm -f "__PIDFILE__" "__EXITFILE__"
 )
 
 # The worker runs detached from the exec session (setsid) so it outlives the
-# API call that started it. Its exit code lands in EXITFILE for the probe.
+# API call that started it. The command itself lives in run.sh so no shell
+# quoting is involved; the exit code lands in EXITFILE for the probe.
+RUNFILE = f"{STATE_DIR}/run.sh"
 LAUNCH_SCRIPT = _render(
     """\
 #!/bin/bash
@@ -123,12 +135,16 @@ export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 mkdir -p "__STATE_DIR__" /workspace
 cd /workspace
 rm -f "__PIDFILE__" "__EXITFILE__"
-setsid bash -c '__WORKER_CMD__; printf "%s\\n" "$?" > __EXITFILE__' > "__LOGFILE__" 2>&1 < /dev/null &
+setsid bash -c 'bash "__RUNFILE__"; printf "%s\\n" "$?" > "__EXITFILE__"' > "__LOGFILE__" 2>&1 < /dev/null &
 pid=$!
 printf "%s\\n" "$pid" > "__PIDFILE__"
 echo "$pid"
 """
-)
+).replace("__RUNFILE__", RUNFILE)
+
+
+def run_script(command: str) -> str:
+    return f"#!/bin/bash\nexec {command}\n"
 
 
 def worker_command(pool: str) -> str:
@@ -186,10 +202,14 @@ def read_log(sandbox: Sandbox) -> str:
         return f"(could not read {LOGFILE}: {e})"
 
 
-def launch_worker(sandbox: Sandbox, pool: str, env: dict[str, str]) -> dict[str, Any]:
+def launch_worker(
+    sandbox: Sandbox, pool: str, env: dict[str, str], command: str | None = None
+) -> dict[str, Any]:
+    """Start the worker detached. ``command`` overrides the worker command; tests
+    use it to run a stand-in process."""
     sandbox.commands.run(f"mkdir -p {STATE_DIR}")
-    launch = LAUNCH_SCRIPT.replace("__WORKER_CMD__", worker_command(pool))
-    sandbox.files.write(f"{STATE_DIR}/launch.sh", launch)
+    sandbox.files.write(f"{STATE_DIR}/launch.sh", LAUNCH_SCRIPT)
+    sandbox.files.write(RUNFILE, run_script(command or worker_command(pool)))
     sandbox.files.write(f"{STATE_DIR}/probe.sh", PROBE_SCRIPT)
     sandbox.files.write(f"{STATE_DIR}/stop.sh", STOP_SCRIPT)
 

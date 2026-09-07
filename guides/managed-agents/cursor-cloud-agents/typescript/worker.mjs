@@ -22,16 +22,28 @@ function flag(name, fallback) {
   return raw === "true" || raw === "1"
 }
 
+// Sandboxes resolve DNS through these public resolvers. A strict allowlist has
+// to include them or nothing resolves. Single IPs are written as /32.
+const DNS_RESOLVERS = ["1.1.1.1/32", "8.8.8.8/32"]
+const IPV4_RE = /^\d{1,3}(\.\d{1,3}){3}$/
+
+function egressAllowlist(raw) {
+  const entries = raw
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean)
+    .map((e) => (IPV4_RE.test(e) ? `${e}/32` : e))
+  if (entries.length === 0) return []
+  return [...new Set([...DNS_RESOLVERS, ...entries])]
+}
+
 export const config = {
   templateName: process.env.CURSOR_WORKER_TEMPLATE || "cursor-worker",
   idleReleaseTimeout: process.env.CURSOR_WORKER_IDLE_RELEASE_TIMEOUT || "600",
   cloneGitRepos: flag("CURSOR_WORKER_CLONE_GIT_REPOS", true),
   hibernate: flag("CURSOR_WORKER_HIBERNATE", false),
   autoDeleteSeconds: Number(process.env.SANDBOX_AUTO_DELETE_SECONDS || 86_400),
-  allowOut: (process.env.CURSOR_WORKER_ALLOW_OUT || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean),
+  allowOut: egressAllowlist(process.env.CURSOR_WORKER_ALLOW_OUT || ""),
   cursorEndpoint: process.env.CURSOR_API_ENDPOINT || "https://api.cursor.com",
 }
 
@@ -72,20 +84,24 @@ rm -f "${PIDFILE}" "${EXITFILE}"
 `
 
 // The worker runs detached from the exec session (setsid) so it outlives the
-// API call that started it. Its exit code lands in EXITFILE for the probe.
-export function launchScript(workerCommand) {
-  return `#!/bin/bash
+// API call that started it. The command itself lives in run.sh so no shell
+// quoting is involved; the exit code lands in EXITFILE for the probe.
+const RUNFILE = `${STATE_DIR}/run.sh`
+const LAUNCH_SCRIPT = `#!/bin/bash
 set -eu
 export HOME="\${HOME:-/root}"
 export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 mkdir -p "${STATE_DIR}" /workspace
 cd /workspace
 rm -f "${PIDFILE}" "${EXITFILE}"
-setsid bash -c '${workerCommand}; printf "%s\\n" "$?" > ${EXITFILE}' > "${LOGFILE}" 2>&1 < /dev/null &
+setsid bash -c 'bash "${RUNFILE}"; printf "%s\\n" "$?" > "${EXITFILE}"' > "${LOGFILE}" 2>&1 < /dev/null &
 pid=$!
 printf "%s\\n" "$pid" > "${PIDFILE}"
 echo "$pid"
 `
+
+function runScript(workerCommand) {
+  return `#!/bin/bash\nexec ${workerCommand}\n`
 }
 
 export function workerCommand(pool) {
@@ -134,13 +150,12 @@ export async function readLog(sandbox) {
   }
 }
 
-export async function launchWorker(sandbox, { pool, env }) {
+// `command` overrides the worker command; tests use it to run a stand-in process.
+export async function launchWorker(sandbox, { pool, env, command }) {
   await sandbox.commands.run(`mkdir -p ${STATE_DIR}`)
   await Promise.all([
-    sandbox.files.write(
-      `${STATE_DIR}/launch.sh`,
-      launchScript(workerCommand(pool)),
-    ),
+    sandbox.files.write(`${STATE_DIR}/launch.sh`, LAUNCH_SCRIPT),
+    sandbox.files.write(RUNFILE, runScript(command ?? workerCommand(pool))),
     sandbox.files.write(`${STATE_DIR}/probe.sh`, PROBE_SCRIPT),
     sandbox.files.write(`${STATE_DIR}/stop.sh`, STOP_SCRIPT),
   ])
