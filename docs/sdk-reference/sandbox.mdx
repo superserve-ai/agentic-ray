@@ -327,7 +327,7 @@ sandbox.detach_secret("ANTHROPIC_API_KEY")
 
 ### `getNetworkLog` / `get_network_log`
 
-The sandbox's network log — every outbound connection and secret-bearing request, newest first. Returns a `NetworkLogPage`. See the [Network log](/sandbox/network-log) guide for the full model.
+The sandbox's network log — every outbound HTTP and HTTPS connection (ports 80 and 443) and every secret-bearing request, newest first. Returns a `NetworkLogPage`. See the [Network log](/sandbox/network-log) guide for the full model.
 
 <CodeGroup>
 ```typescript TypeScript

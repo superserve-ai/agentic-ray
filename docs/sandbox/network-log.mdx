@@ -1,10 +1,10 @@
 ---
 title: "Network log"
 sidebarTitle: Network log
-description: See every outbound connection a sandbox made — allowed, blocked, or failed — and every secret-bearing request, in one timeline.
+description: See every HTTP and HTTPS connection a sandbox made — allowed, blocked, or failed — and every secret-bearing request, in one timeline.
 ---
 
-The network log answers a question you can't answer from inside an untrusted sandbox: **what did it actually reach on the network?** Every outbound connection passes through Superserve, so the log is recorded by the platform — code inside the sandbox can't see it or tamper with it.
+The network log answers a question you can't answer from inside an untrusted sandbox: **what did it actually reach on the network?** Every outbound HTTP and HTTPS connection passes through Superserve, so the log is recorded by the platform — code inside the sandbox can't see it or tamper with it.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -34,7 +34,7 @@ for e in page.events:
 
 Each event has a `kind`:
 
-- **`connection`** — a raw outbound connection. Carries the host (or `dstIp`), a `verdict`, and byte counts. This is every connection the sandbox opened, whether or not a secret was involved.
+- **`connection`** — a raw outbound connection. Carries the host (or `dstIp`), a `verdict`, and byte counts. This is every HTTP or HTTPS connection the sandbox opened (ports 80 and 443), whether or not a secret was involved.
 - **`request`** — a secret-bearing request (the sandbox used a [secret](/secrets/overview)). Carries `method`, `path`, `status`, and the `secretId` that was used.
 
 Fields that don't apply to a row's kind are omitted.

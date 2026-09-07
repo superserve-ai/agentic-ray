@@ -7,7 +7,7 @@ description: Lock down sandbox egress to specific CIDRs or domains with allow an
 By default, a sandbox can reach any public IP on the internet. The platform always blocks egress to private, link-local, and loopback ranges regardless of your allow rules. Use `network` rules to narrow the allowlist further.
 
 <Tip>
-Rules control what a sandbox **may** reach. To see what it **actually** reached — every connection, allowed or blocked — use the [network log](/sandbox/network-log).
+Rules control what a sandbox **may** reach. To see what it **actually** reached over HTTP and HTTPS — every such connection, allowed or blocked — use the [network log](/sandbox/network-log).
 </Tip>
 
 ## Allow specific destinations
