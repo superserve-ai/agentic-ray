@@ -34,7 +34,11 @@ async function createSandbox(
     name: "agent-1",
     ...extra,
   })
-  const body = JSON.parse(mock.mock.calls[0][1].body as string)
+  // Skip the data-plane pre-warm ping; find the create POST.
+  const createCall = mock.mock.calls.find(([url]) =>
+    String(url).endsWith("/sandboxes"),
+  ) as [string, RequestInit]
+  const body = JSON.parse(createCall[1].body as string)
   vi.unstubAllGlobals()
   return { sandbox, body }
 }

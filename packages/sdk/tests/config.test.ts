@@ -7,6 +7,7 @@ import {
   previewUrl,
   RESERVED_PREVIEW_PORT,
   resolveConfig,
+  sharedDataPlaneOrigin,
 } from "../src/config.js"
 import { AuthenticationError, ValidationError } from "../src/errors.js"
 
@@ -282,5 +283,20 @@ describe("previewUrl", () => {
   it("throws ValidationError for non-integer ports", () => {
     expect(() => previewUrl("a", "h", 3000.5)).toThrow(ValidationError)
     expect(() => previewUrl("a", "h", Number.NaN)).toThrow(ValidationError)
+  })
+})
+
+describe("sharedDataPlaneOrigin", () => {
+  it("returns the shared origin for supported hosts", () => {
+    expect(sharedDataPlaneOrigin("sandbox.superserve.ai")).toBe(
+      "https://sandbox.superserve.ai",
+    )
+    expect(sharedDataPlaneOrigin("Sandbox.SuperServe.AI")).toBe(
+      "https://sandbox.superserve.ai",
+    )
+  })
+
+  it("returns undefined for unsupported hosts (per-sandbox subdomains)", () => {
+    expect(sharedDataPlaneOrigin("self-hosted.example.org")).toBeUndefined()
   })
 })

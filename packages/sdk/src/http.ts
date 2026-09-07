@@ -304,6 +304,20 @@ export async function requestVoid(opts: RequestOptions): Promise<void> {
 }
 
 /**
+ * Fire-and-forget connection warm-up: opens a keep-alive connection to the
+ * origin so the next request skips the TCP/TLS handshake. The body is
+ * drained to return the connection to the pool; failures are swallowed.
+ */
+export function prewarmOrigin(origin: string): void {
+  void fetch(`${origin}/health`, {
+    headers: { "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(5_000),
+  })
+    .then((res) => res.arrayBuffer())
+    .catch(() => {})
+}
+
+/**
  * Upload raw bytes to a URL. Used for file upload to the data plane.
  *
  * Not retried — POST is not idempotent.

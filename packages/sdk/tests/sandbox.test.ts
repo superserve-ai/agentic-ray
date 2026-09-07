@@ -41,6 +41,14 @@ const commonOpts = {
   baseUrl: "https://api.superserve.ai",
 }
 
+/** The nth control-plane call, skipping the data-plane pre-warm ping. */
+function apiCall(mock: ReturnType<typeof vi.fn>, i = 0): [string, RequestInit] {
+  const calls = mock.mock.calls.filter(
+    ([url]) => !String(url).endsWith("/health"),
+  )
+  return calls[i] as [string, RequestInit]
+}
+
 describe("Sandbox#getPreviewUrl", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -94,7 +102,7 @@ describe("Sandbox statics", () => {
     expect(sandbox.id).toBe("sbx-1")
     expect(sandbox.status).toBe("active")
 
-    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    const [url, init] = apiCall(mock)
     expect(url).toBe("https://api.superserve.ai/sandboxes")
     expect(init.method).toBe("POST")
     const headers = init.headers as Record<string, string>
@@ -113,7 +121,7 @@ describe("Sandbox statics", () => {
       autoDeleteSeconds: 3600,
     })
 
-    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    const [, init] = apiCall(mock)
     const body = JSON.parse(init.body as string)
     expect(body).toEqual({ name: "my-sandbox", auto_delete_seconds: 3600 })
   })
@@ -130,7 +138,7 @@ describe("Sandbox statics", () => {
       previewAccess: "private",
     })
 
-    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    const [, init] = apiCall(mock)
     expect(JSON.parse(init.body as string)).toEqual({
       name: "my-sandbox",
       preview_access: "private",
@@ -219,6 +227,16 @@ describe("Sandbox statics", () => {
     })
   })
 
+  it("Sandbox.create pre-warms the shared data-plane origin", async () => {
+    const mock = vi.fn(async () => jsonResponse(baseSandbox))
+    vi.stubGlobal("fetch", mock)
+
+    await Sandbox.create({ ...commonOpts, name: "my-sandbox" })
+
+    const urls = mock.mock.calls.map(([url]) => String(url))
+    expect(urls).toContain("https://sandbox.superserve.ai/health")
+  })
+
   it("Sandbox.create throws when access_token missing", async () => {
     vi.stubGlobal(
       "fetch",
@@ -238,7 +256,7 @@ describe("Sandbox statics", () => {
     const sandbox = await Sandbox.connect("sbx-1", commonOpts)
     expect(sandbox.id).toBe("sbx-1")
 
-    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    const [url, init] = apiCall(mock)
     expect(url).toBe("https://api.superserve.ai/sandboxes/sbx-1/activate")
     expect(init.method).toBe("POST")
   })
@@ -588,7 +606,7 @@ describe("Sandbox.create fromTemplate / fromSnapshot", () => {
       fromTemplate: "superserve/python-3.11",
     })
 
-    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    const [, init] = apiCall(mock)
     const body = JSON.parse(init.body as string)
     expect(body.from_template).toBe("superserve/python-3.11")
   })
@@ -603,7 +621,7 @@ describe("Sandbox.create fromTemplate / fromSnapshot", () => {
       fromTemplate: { name: "my-env", id: "t-1" },
     })
 
-    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    const [, init] = apiCall(mock)
     const body = JSON.parse(init.body as string)
     expect(body.from_template).toBe("my-env")
   })
@@ -618,7 +636,7 @@ describe("Sandbox.create fromTemplate / fromSnapshot", () => {
       fromTemplate: { id: "t-1" },
     })
 
-    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    const [, init] = apiCall(mock)
     const body = JSON.parse(init.body as string)
     expect(body.from_template).toBe("t-1")
   })
@@ -633,7 +651,7 @@ describe("Sandbox.create fromTemplate / fromSnapshot", () => {
       fromSnapshot: "snap-abc",
     })
 
-    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    const [, init] = apiCall(mock)
     const body = JSON.parse(init.body as string)
     expect(body.from_snapshot).toBe("snap-abc")
   })

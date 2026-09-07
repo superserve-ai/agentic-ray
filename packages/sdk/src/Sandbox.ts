@@ -15,10 +15,15 @@
  */
 
 import { Commands } from "./commands.js"
-import { previewUrl, type ResolvedConfig, resolveConfig } from "./config.js"
+import {
+  previewUrl,
+  type ResolvedConfig,
+  resolveConfig,
+  sharedDataPlaneOrigin,
+} from "./config.js"
 import { NotFoundError, SandboxError } from "./errors.js"
 import { Files } from "./files.js"
-import { request, requestVoid } from "./http.js"
+import { prewarmOrigin, request, requestVoid } from "./http.js"
 import type {
   ApiNetworkPage,
   ApiSandboxResponse,
@@ -39,6 +44,16 @@ import type {
   SignedPreviewUrlOptions,
 } from "./types.js"
 import { toNetworkLogPage, toSandboxInfo } from "./types.js"
+
+/**
+ * Warm the shared data-plane connection in parallel with the control-plane
+ * call. No-op on per-sandbox-subdomain hosts, where the origin isn't known
+ * until the sandbox exists.
+ */
+function prewarmDataPlane(sandboxHost: string): void {
+  const origin = sharedDataPlaneOrigin(sandboxHost)
+  if (origin !== undefined) prewarmOrigin(origin)
+}
 
 export class Sandbox {
   /** Unique sandbox ID (UUID). */
@@ -159,6 +174,7 @@ export class Sandbox {
    */
   static async create(options: SandboxCreateOptions): Promise<Sandbox> {
     const config = resolveConfig(options)
+    prewarmDataPlane(config.sandboxHost)
 
     const body: Record<string, unknown> = { name: options.name }
     if (options.timeoutSeconds !== undefined)
@@ -218,6 +234,7 @@ export class Sandbox {
     options: ConnectionOptions = {},
   ): Promise<Sandbox> {
     const config = resolveConfig(options)
+    prewarmDataPlane(config.sandboxHost)
 
     const raw = await request<ApiSandboxResponse>({
       method: "POST",
