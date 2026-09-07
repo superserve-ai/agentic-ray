@@ -103,7 +103,7 @@ export function TeamSandboxesClient({
       {isPending ? (
         <TableSkeleton columns={4} />
       ) : error ? (
-        <ErrorState message={error.message} onRetry={() => refetch()} />
+        <ErrorState onRetry={() => refetch()} />
       ) : sandboxes.length === 0 ? (
         <EmptyState
           icon={CubeIcon}

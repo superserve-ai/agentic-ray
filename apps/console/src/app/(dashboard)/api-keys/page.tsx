@@ -111,7 +111,7 @@ function ApiKeysPageContent() {
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="API Keys" />
-        <ErrorState message={error.message} onRetry={() => refetch()} />
+        <ErrorState onRetry={() => refetch()} />
       </div>
     )
   }
