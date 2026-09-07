@@ -14,11 +14,13 @@ import os
 import signal
 import sys
 import threading
+import time
 from datetime import UTC, datetime
 
 from superserve import Sandbox, SandboxInfo
 from worker import (
     HIBERNATE,
+    META_LAUNCHING,
     META_MANAGED,
     META_POOL,
     META_WORKER_ID,
@@ -72,10 +74,7 @@ def recycle(info: SandboxInfo) -> None:
 def sweep() -> list[SandboxInfo]:
     # Scope to this monitor's pool so parallel pool deployments never touch
     # each other's sandboxes.
-    metadata = {META_MANAGED: "true"}
-    if POOL:
-        metadata[META_POOL] = POOL
-    sandboxes = Sandbox.list(metadata=metadata)
+    sandboxes = Sandbox.list(metadata={META_MANAGED: "true", META_POOL: POOL or ""})
     now = datetime.now(UTC)
     for info in sandboxes:
         if status_of(info) != "active":
@@ -85,6 +84,11 @@ def sweep() -> list[SandboxInfo]:
         if created_at.tzinfo is None:
             created_at = created_at.replace(tzinfo=UTC)
         if (now - created_at).total_seconds() < GRACE_SECONDS:
+            continue
+        # The spawn hook stamps a resumed sandbox while it relaunches the worker;
+        # its created_at is old, so give the relaunch the same grace.
+        launching_ms = int(info.metadata.get(META_LAUNCHING) or 0)
+        if launching_ms and time.time() - launching_ms / 1000 < GRACE_SECONDS:
             continue
         if info.id in waking:
             continue
@@ -155,6 +159,11 @@ def main() -> int:
     if not os.environ.get("SUPERSERVE_API_KEY"):
         print("monitor: SUPERSERVE_API_KEY is not set", file=sys.stderr)
         return 2
+    if not POOL:
+        # Without a pool the sweep would cover every worker sandbox on the team,
+        # including other pools' hibernated workers.
+        print("monitor: CURSOR_POOL is not set", file=sys.stderr)
+        return 2
 
     def request_shutdown(signum, _frame):
         log.info("shutdown requested (signal %d)", signum)
@@ -168,7 +177,7 @@ def main() -> int:
         TEMPLATE_NAME,
         HIBERNATE,
         WAKE_ENABLED,
-        f" pool={POOL}" if POOL else "",
+        f" pool={POOL}",
         POLL_SECONDS,
     )
     while not shutdown.is_set():

@@ -141,7 +141,7 @@ The scripts read these from `.env`:
 | ------------------------------------ | ----------------- | ------------------------------------------------------------------------------------------------------- |
 | `SUPERSERVE_API_KEY`                 | required          | Sandbox creation, resume, and deletion                                                                  |
 | `CURSOR_API_KEY`                     | required          | Service-account key for the controller, handed to each worker                                           |
-| `CURSOR_POOL`                        | set by controller | Pool name. The monitor reads it from `.env` to scope its sweeps and wake-ups to that pool               |
+| `CURSOR_POOL`                        | required          | Pool name. The controller sets it for the spawn hook; the monitor reads it from `.env` and only touches that pool's sandboxes |
 | `CURSOR_WORKER_TEMPLATE`             | `cursor-worker`   | Template each sandbox boots from                                                                        |
 | `CURSOR_WORKER_IDLE_RELEASE_TIMEOUT` | `600`             | Seconds a worker waits for follow-ups before exiting                                                    |
 | `CURSOR_WORKER_CLONE_GIT_REPOS`      | `true`            | Start the worker with `--clone-git-repos`. Turn off for any-repo workers that handle their own checkout |

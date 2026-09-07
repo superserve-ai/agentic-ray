@@ -9,6 +9,7 @@ import { Sandbox } from "@superserve/sdk"
 
 import {
   META_MANAGED,
+  META_LAUNCHING,
   META_POOL,
   META_WORKER_ID,
   config,
@@ -29,6 +30,12 @@ const POLL_MS = Number(process.env.MONITOR_POLL_SECONDS || 15) * 1000
 const GRACE_MS = Number(process.env.MONITOR_GRACE_SECONDS || 120) * 1000
 const WAKE_ENABLED = config.hibernate && Boolean(process.env.CURSOR_API_KEY)
 const pool = process.env.CURSOR_POOL
+if (!pool) {
+  // Without a pool the sweep would cover every worker sandbox on the team,
+  // including other pools' hibernated workers.
+  console.error("monitor: CURSOR_POOL is not set")
+  process.exit(2)
+}
 
 let shuttingDown = false
 const waking = new Set()
@@ -60,14 +67,18 @@ async function recycle(info) {
 async function sweep() {
   // Scope to this monitor's pool so parallel pool deployments never touch
   // each other's sandboxes.
-  const filter = { [META_MANAGED]: "true" }
-  if (pool) filter[META_POOL] = pool
-  const sandboxes = await Sandbox.list({ metadata: filter })
+  const sandboxes = await Sandbox.list({
+    metadata: { [META_MANAGED]: "true", [META_POOL]: pool },
+  })
   const now = Date.now()
   for (const info of sandboxes) {
     if (info.status !== "active") continue
     // Give a freshly spawned sandbox time to bring its worker up.
     if (now - info.createdAt.getTime() < GRACE_MS) continue
+    // The spawn hook stamps a resumed sandbox while it relaunches the worker;
+    // its createdAt is old, so give the relaunch the same grace.
+    const launching = Number(info.metadata[META_LAUNCHING] || 0)
+    if (launching && now - launching < GRACE_MS) continue
     if (waking.has(info.id)) continue
     try {
       await recycle(info)
@@ -138,7 +149,7 @@ process.once("SIGINT", () => {
 
 console.log(
   `monitor: watching template=${config.templateName} hibernate=${config.hibernate} ` +
-    `wake=${WAKE_ENABLED}${pool ? ` pool=${pool}` : ""} every ${POLL_MS / 1000}s`,
+    `wake=${WAKE_ENABLED} pool=${pool} every ${POLL_MS / 1000}s`,
 )
 
 // eslint-disable-next-line no-unmodified-loop-condition -- signal handlers flip shuttingDown.

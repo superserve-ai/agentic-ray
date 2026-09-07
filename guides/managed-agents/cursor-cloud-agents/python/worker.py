@@ -30,6 +30,9 @@ META_WORKER_ID = "cursor.worker_id"
 META_POOL = "cursor.pool"
 META_REQUEST_ID = "cursor.request_id"
 META_REPO = "cursor.repo"
+# Set by the spawn hook while it resumes and relaunches a paused sandbox, so the
+# monitor leaves it alone until the new worker is up (see MONITOR_GRACE_SECONDS).
+META_LAUNCHING = "cursor.launching"
 
 STATE_DIR = "/var/lib/cursor-worker"
 PIDFILE = f"{STATE_DIR}/worker.pid"
@@ -224,6 +227,20 @@ def launch_worker(
     if state["state"] != "running":
         return {"ok": False, "state": state, "log": read_log(sandbox)}
     return {"ok": True, "pid": pid, "state": state}
+
+
+def tag_sandbox(sandbox: Sandbox, updates: dict[str, str | None]) -> None:
+    """Merge metadata updates into the sandbox's tags; None removes a key.
+
+    update() replaces the whole map, so read first.
+    """
+    metadata = dict(sandbox.get_info().metadata or {})
+    for key, value in updates.items():
+        if value is None:
+            metadata.pop(key, None)
+        else:
+            metadata[key] = value
+    sandbox.update(metadata=metadata)
 
 
 def find_sandbox_for_worker(worker_id: str) -> SandboxInfo | None:

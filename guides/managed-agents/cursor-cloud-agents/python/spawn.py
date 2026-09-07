@@ -10,11 +10,13 @@ from __future__ import annotations
 import os
 import re
 import sys
+import time
 
 from superserve import NetworkConfig, Sandbox
 from worker import (
     ALLOW_OUT,
     AUTO_DELETE_SECONDS,
+    META_LAUNCHING,
     META_MANAGED,
     META_POOL,
     META_REPO,
@@ -25,6 +27,7 @@ from worker import (
     launch_worker,
     release_claim,
     status_of,
+    tag_sandbox,
     worker_env,
     worker_state,
 )
@@ -114,6 +117,16 @@ def main() -> int:
             log(
                 f"reusing sandbox={existing.id} status={status_of(existing)} worker={worker_id}"
             )
+            # Tell the monitor a relaunch is in progress before anything resumes
+            # the sandbox: connect() auto-resumes, and the previous worker's exit
+            # file is visible the moment it does.
+            Sandbox.update_by_id(
+                existing.id,
+                metadata={
+                    **(existing.metadata or {}),
+                    META_LAUNCHING: str(int(time.time() * 1000)),
+                },
+            )
             sandbox = Sandbox.connect(existing.id)
             if status_of(sandbox) == "paused":
                 sandbox.resume()
@@ -129,6 +142,8 @@ def main() -> int:
             )
 
         result = launch_worker(sandbox, pool, worker_env(worker_id, worker_name))
+        if not created:
+            tag_sandbox(sandbox, {META_LAUNCHING: None})
         if not result["ok"]:
             state = result["state"]
             err(

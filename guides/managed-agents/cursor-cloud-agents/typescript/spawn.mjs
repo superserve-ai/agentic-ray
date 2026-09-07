@@ -7,6 +7,7 @@ import { Sandbox } from "@superserve/sdk"
 
 import {
   META_MANAGED,
+  META_LAUNCHING,
   META_POOL,
   META_REPO,
   META_REQUEST_ID,
@@ -15,6 +16,7 @@ import {
   findSandboxForWorker,
   launchWorker,
   releaseClaim,
+  tagSandbox,
   workerEnv,
   workerState,
 } from "./worker.mjs"
@@ -105,6 +107,15 @@ async function main() {
       console.log(
         `spawn: reusing sandbox=${existing.id} status=${existing.status} worker=${workerId}`,
       )
+      // Tell the monitor a relaunch is in progress before anything resumes the
+      // sandbox: connect() auto-resumes, and the previous worker's exit file
+      // is visible the moment it does.
+      await Sandbox.updateById(existing.id, {
+        metadata: {
+          ...existing.metadata,
+          [META_LAUNCHING]: String(Date.now()),
+        },
+      })
       sandbox = await Sandbox.connect(existing.id)
       if (sandbox.status === "paused") await sandbox.resume()
       const state = await workerState(sandbox)
@@ -126,6 +137,7 @@ async function main() {
       pool,
       env: workerEnv({ workerId, workerName }),
     })
+    if (!created) await tagSandbox(sandbox, { [META_LAUNCHING]: null })
     if (!result.ok) {
       console.error(
         `spawn: worker failed to start sandbox=${sandbox.id} state=${result.state.state} ` +

@@ -7,6 +7,9 @@ export const META_WORKER_ID = "cursor.worker_id"
 export const META_POOL = "cursor.pool"
 export const META_REQUEST_ID = "cursor.request_id"
 export const META_REPO = "cursor.repo"
+// Set by the spawn hook while it resumes and relaunches a paused sandbox, so the
+// monitor leaves it alone until the new worker is up (see MONITOR_GRACE_SECONDS).
+export const META_LAUNCHING = "cursor.launching"
 
 export const STATE_DIR = "/var/lib/cursor-worker"
 const PIDFILE = `${STATE_DIR}/worker.pid`
@@ -186,6 +189,18 @@ const LIVE_STATUSES = new Set([
   "paused",
   "resuming",
 ])
+
+// Merge metadata updates into the sandbox's existing tags. A null value
+// removes the key; update() replaces the whole map, so read first.
+export async function tagSandbox(sandbox, updates) {
+  const info = await sandbox.getInfo()
+  const metadata = { ...info.metadata }
+  for (const [key, value] of Object.entries(updates)) {
+    if (value === null) delete metadata[key]
+    else metadata[key] = value
+  }
+  await sandbox.update({ metadata })
+}
 
 export async function findSandboxForWorker(workerId) {
   const matches = await Sandbox.list({
