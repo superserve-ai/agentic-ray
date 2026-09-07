@@ -132,6 +132,7 @@ def main() -> int:
                 sandbox.resume()
             state = worker_state(sandbox)
             if state["state"] == "running":
+                tag_sandbox(sandbox, {META_LAUNCHING: None})
                 log(f"worker already running pid={state['pid']} sandbox={sandbox.id}")
                 return 0
         else:

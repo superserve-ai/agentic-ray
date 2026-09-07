@@ -120,6 +120,7 @@ async function main() {
       if (sandbox.status === "paused") await sandbox.resume()
       const state = await workerState(sandbox)
       if (state.state === "running") {
+        await tagSandbox(sandbox, { [META_LAUNCHING]: null })
         console.log(
           `spawn: worker already running pid=${state.pid} sandbox=${sandbox.id}`,
         )
