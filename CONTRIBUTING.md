@@ -41,13 +41,17 @@ Thank you for your interest in contributing to Superserve! We welcome contributi
 
 ```
 apps/console/              # Sandbox dashboard (Next.js 16, App Router)
+apps/mcp/                  # MCP host API endpoint
 apps/ui-docs/              # UI component documentation (Vite)
+docs/                      # Mintlify documentation site
 packages/cli/              # TypeScript CLI (@superserve/cli)
+packages/mcp/              # MCP server implementation (@superserve/mcp)
 packages/python-sdk/       # Python SDK (superserve on PyPI)
 packages/sdk/              # TypeScript SDK (@superserve/sdk)
 packages/ui/               # Shared UI components (@superserve/ui)
 packages/typescript-config/ # Shared tsconfig presets
 packages/tailwind-config/  # Shared Tailwind config
+tests/                     # End-to-end SDK tests
 ```
 
 ## Common Commands

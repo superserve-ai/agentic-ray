@@ -41,7 +41,7 @@
   },
   "scripts": {
     "build": "tsup && tsup --config tsup.http.config.ts",
-    "dev": "tsup --watch",
+    "dev": "tsup --watch & tsup --watch --config tsup.http.config.ts",
     "start:http": "node dist/httpServer.js",
     "lint": "bunx oxlint",
     "format": "bunx oxfmt --write",
