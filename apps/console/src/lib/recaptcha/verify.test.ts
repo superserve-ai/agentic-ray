@@ -51,14 +51,21 @@ describe("verifyRecaptcha (unconfigured)", () => {
 
   it("fails open without calling the assessment API", async () => {
     const result = await verifyRecaptcha("some-token", "signup")
-    expect(result).toEqual({ verified: true })
+    expect(result).toEqual({
+      verified: true,
+      providerOutcome: "unconfigured",
+    })
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
   it("fails closed when reCAPTCHA is only partially configured", async () => {
     process.env.RECAPTCHA_API_KEY = "test-api-key"
     const result = await verifyRecaptcha(undefined, "signup")
-    expect(result).toEqual({ verified: false, reason: "configuration_error" })
+    expect(result).toEqual({
+      verified: false,
+      providerOutcome: "configuration_error",
+      reason: "configuration_error",
+    })
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 })
@@ -76,19 +83,31 @@ describe("verifyRecaptcha (configured)", () => {
 
   it("rejects a missing token without calling the assessment API", async () => {
     const result = await verifyRecaptcha(undefined, "signup")
-    expect(result).toEqual({ verified: false, reason: "missing_token" })
+    expect(result).toEqual({
+      verified: false,
+      providerOutcome: "rejected",
+      reason: "missing_token",
+    })
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
   it("rejects a non-string token without calling the assessment API", async () => {
     const result = await verifyRecaptcha({ token: "x" }, "signup")
-    expect(result).toEqual({ verified: false, reason: "missing_token" })
+    expect(result).toEqual({
+      verified: false,
+      providerOutcome: "rejected",
+      reason: "missing_token",
+    })
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
   it("rejects an oversized token without calling the assessment API", async () => {
     const result = await verifyRecaptcha("a".repeat(5000), "signup")
-    expect(result).toEqual({ verified: false, reason: "token_too_long" })
+    expect(result).toEqual({
+      verified: false,
+      providerOutcome: "rejected",
+      reason: "token_too_long",
+    })
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
@@ -99,7 +118,11 @@ describe("verifyRecaptcha (configured)", () => {
       }),
     )
     const result = await verifyRecaptcha("token", "signup")
-    expect(result).toEqual({ verified: false, reason: "EXPIRED" })
+    expect(result).toEqual({
+      verified: false,
+      providerOutcome: "rejected",
+      reason: "EXPIRED",
+    })
   })
 
   it("rejects when the assessment action doesn't match", async () => {
@@ -110,7 +133,11 @@ describe("verifyRecaptcha (configured)", () => {
       }),
     )
     const result = await verifyRecaptcha("token", "signup")
-    expect(result).toEqual({ verified: false, reason: "action_mismatch" })
+    expect(result).toEqual({
+      verified: false,
+      providerOutcome: "rejected",
+      reason: "action_mismatch",
+    })
   })
 
   it("rejects a score below the default threshold", async () => {
@@ -121,7 +148,11 @@ describe("verifyRecaptcha (configured)", () => {
       }),
     )
     const result = await verifyRecaptcha("token", "signup")
-    expect(result).toEqual({ verified: false, reason: "low_score:0.2" })
+    expect(result).toEqual({
+      verified: false,
+      providerOutcome: "rejected",
+      reason: "low_score:0.2",
+    })
   })
 
   it("rejects a missing score the same as the lowest score", async () => {
@@ -129,7 +160,11 @@ describe("verifyRecaptcha (configured)", () => {
       okResponse({ tokenProperties: { valid: true, action: "signup" } }),
     )
     const result = await verifyRecaptcha("token", "signup")
-    expect(result).toEqual({ verified: false, reason: "missing_score" })
+    expect(result).toEqual({
+      verified: false,
+      providerOutcome: "rejected",
+      reason: "missing_score",
+    })
   })
 
   it("verifies a valid token with a passing score", async () => {
@@ -140,7 +175,10 @@ describe("verifyRecaptcha (configured)", () => {
       }),
     )
     const result = await verifyRecaptcha("token", "signup")
-    expect(result).toEqual({ verified: true })
+    expect(result).toMatchObject({
+      verified: true,
+      providerOutcome: "success",
+    })
   })
 
   it("respects a configured RECAPTCHA_SCORE_THRESHOLD", async () => {
@@ -152,7 +190,11 @@ describe("verifyRecaptcha (configured)", () => {
       }),
     )
     const result = await verifyRecaptcha("token", "signup")
-    expect(result).toEqual({ verified: false, reason: "low_score:0.8" })
+    expect(result).toMatchObject({
+      verified: false,
+      providerOutcome: "rejected",
+      reason: "low_score:0.8",
+    })
   })
 
   it("falls back to the default threshold for an out-of-range override", async () => {
@@ -164,13 +206,20 @@ describe("verifyRecaptcha (configured)", () => {
       }),
     )
     const result = await verifyRecaptcha("token", "signup")
-    expect(result).toEqual({ verified: true })
+    expect(result).toMatchObject({
+      verified: true,
+      providerOutcome: "success",
+    })
   })
 
   it("fails closed on quota exhaustion (429) rather than opening the gate", async () => {
     fetchSpy.mockResolvedValue(new Response("rate limited", { status: 429 }))
     const result = await verifyRecaptcha("token", "signup")
-    expect(result).toEqual({ verified: false, reason: "quota_exhausted" })
+    expect(result).toEqual({
+      verified: false,
+      providerOutcome: "configuration_error",
+      reason: "quota_exhausted",
+    })
   })
 
   it("fails closed on credential/configuration HTTP errors", async () => {
@@ -178,6 +227,7 @@ describe("verifyRecaptcha (configured)", () => {
     const result = await verifyRecaptcha("token", "signup")
     expect(result).toEqual({
       verified: false,
+      providerOutcome: "configuration_error",
       reason: "assessment_http_403",
     })
   })
@@ -185,13 +235,13 @@ describe("verifyRecaptcha (configured)", () => {
   it("fails open on transient provider errors", async () => {
     fetchSpy.mockResolvedValue(new Response("unavailable", { status: 503 }))
     const result = await verifyRecaptcha("token", "signup")
-    expect(result).toEqual({ verified: true })
+    expect(result).toEqual({ verified: true, providerOutcome: "unavailable" })
   })
 
   it("fails open when the request itself errors (network failure/timeout)", async () => {
     fetchSpy.mockRejectedValue(new Error("network error"))
     const result = await verifyRecaptcha("token", "signup")
-    expect(result).toEqual({ verified: true })
+    expect(result).toEqual({ verified: true, providerOutcome: "unavailable" })
   })
 
   it("sends the token, site key, and expected action to the assessment API", async () => {

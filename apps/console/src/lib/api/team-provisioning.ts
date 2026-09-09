@@ -22,14 +22,14 @@ async function guardFirstGoogleTeam(
     id: string
     app_metadata?: { provider?: string; providers?: string[] }
   },
-): Promise<boolean> {
-  if (user.id !== userId || !isGoogleUser(user)) return false
+): Promise<{ signupAttemptId?: string } | null> {
+  if (user.id !== userId || !isGoogleUser(user)) return null
 
   const directory = await listTeamMembershipsForUserDetailed(userId, {
     maxAgeMs: 0,
   })
   const state = await classifyGoogleMembershipState(userId, directory)
-  if (state.kind === "existing") return false
+  if (state.kind === "existing") return null
   if (state.kind === "indeterminate") {
     console.warn("Google onboarding blocked: membership lookup degraded", {
       userId,
@@ -38,8 +38,9 @@ async function guardFirstGoogleTeam(
     })
     throw new Error("Google membership lookup degraded; please try again")
   }
-  await requireGoogleSignupProof()
-  return true
+  return {
+    signupAttemptId: await requireGoogleSignupProof(),
+  }
 }
 
 export async function provisionTeam(
@@ -59,9 +60,9 @@ export async function provisionTeam(
   if (authError)
     throw new Error(`Unable to verify authenticated user: ${authError.message}`)
   const googleUser = !!user && user.id === userId && isGoogleUser(user)
-  const consumeProof = googleUser
+  const googleProvisioning = googleUser
     ? await guardFirstGoogleTeam(userId, user!)
-    : false
+    : null
   const admin = cellFor(region).createAdminClient()
 
   const { error: profileErr } = await admin
@@ -144,6 +145,10 @@ export async function provisionTeam(
     )
   }
 
-  if (consumeProof) await consumeGoogleSignupProof(userId)
+  if (googleProvisioning) {
+    if (googleProvisioning.signupAttemptId)
+      await consumeGoogleSignupProof(userId, googleProvisioning.signupAttemptId)
+    else await consumeGoogleSignupProof(userId)
+  }
   return { id: team.id as string, name: team.name as string, region }
 }

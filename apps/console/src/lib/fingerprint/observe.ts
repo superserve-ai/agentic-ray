@@ -8,6 +8,7 @@ export type FingerprintSignupObservation = {
   eventId: string
   userId?: string | null
   signupMethod: "email" | "google"
+  signupAttemptId?: string
 }
 
 type FingerprintNormalizedEvent = {
@@ -179,6 +180,7 @@ export async function observeFingerprintSignup({
   eventId,
   userId = null,
   signupMethod,
+  signupAttemptId,
 }: FingerprintSignupObservation): Promise<void> {
   const secretApiKey = process.env.FINGERPRINT_SECRET_API_KEY
   if (!secretApiKey || !eventId) return
@@ -222,6 +224,7 @@ export async function observeFingerprintSignup({
       userId || eventId,
       {
         provider: "fingerprint",
+        signup_attempt_id: signupAttemptId,
         provider_event_id: event.providerEventId,
         visitor_id: event.visitorId,
         visitor_found: event.visitorFound,
