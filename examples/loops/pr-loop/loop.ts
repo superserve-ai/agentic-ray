@@ -310,8 +310,7 @@ function parseDuration(value: string | undefined, fallbackMs: number): number {
 /**
  * The PR number to focus this tick on, or `undefined` to sweep all open PRs.
  * Digits-only so a hostile `--pr` value can't inject into the shell prompt built
- * in `iterateScript`. Empty (manual `workflow_dispatch` passes `--pr ""`) or
- * absent → `undefined` → sweep.
+ * in `iterateScript`. Empty or absent → `undefined` → sweep.
  */
 export function parsePrFlag(raw: string | undefined): number | undefined {
   if (raw === undefined || !/^\d+$/.test(raw)) return undefined

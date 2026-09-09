@@ -1,4 +1,9 @@
-import { Sandbox } from "@superserve/sdk"
+import {
+  Sandbox,
+  SandboxError,
+  ServerError,
+  TimeoutError,
+} from "@superserve/sdk"
 
 /**
  * Everything a loop needs to bootstrap ONCE and then tick warm inside a single
@@ -84,6 +89,56 @@ export const sdkOps: SandboxOps = {
 
 /** A loop tick can run a full agent harness; give it generous headroom. */
 const ITERATE_TIMEOUT_MS = 20 * 60_000
+const CONNECT_MAX_ATTEMPTS = 3
+const CONNECT_BASE_BACKOFF_MS = 1_000
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isNetworkError(err: unknown): boolean {
+  if (err instanceof TypeError) return true
+  if (!(err instanceof Error)) return false
+  if (err.name === "FetchError" || err.name === "NetworkError") return true
+  return "cause" in err && isNetworkError(err.cause)
+}
+
+function isRetryableConnectError(err: unknown): boolean {
+  if (err instanceof ServerError || err instanceof TimeoutError) return true
+  if (
+    err instanceof SandboxError &&
+    err.statusCode !== undefined &&
+    err.statusCode >= 500
+  ) {
+    return true
+  }
+  return isNetworkError(err)
+}
+
+async function connectWithRetry(
+  id: string,
+  ops: SandboxOps,
+  log: (line: string) => void,
+): Promise<SandboxHandle> {
+  for (let attempt = 1; attempt <= CONNECT_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await ops.connect(id)
+    } catch (err) {
+      if (!isRetryableConnectError(err) || attempt === CONNECT_MAX_ATTEMPTS) {
+        throw err
+      }
+
+      const delayMs = CONNECT_BASE_BACKOFF_MS * 2 ** (attempt - 1)
+      log(
+        `[runLoop] connect to ${id} failed (attempt ${attempt}/${CONNECT_MAX_ATTEMPTS}); ` +
+          `retrying in ${delayMs}ms: ${String(err)}\n`,
+      )
+      await sleep(delayMs)
+    }
+  }
+
+  throw new Error(`failed to connect to ${id}`)
+}
 
 /**
  * The reusable loop spine.
@@ -111,7 +166,7 @@ export async function runLoop(
         envVars: spec.envVars,
         network: spec.network,
       })
-    : await ops.connect(existing.id)
+    : await connectWithRetry(existing.id, ops, log)
 
   let destroyed = false
   try {

@@ -45,13 +45,36 @@ jobs:
     # token — skip them. Same-repo PRs and manual dispatch run normally.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    # Bound a stuck package/API/sandbox call; the loop's own review command times out after 20m.
+    timeout-minutes: 30
     steps:
       - uses: oven-sh/setup-bun@v2
-      # Runs the published loop; --pr focuses the tick on the changed PR (empty on manual
-      # dispatch → sweep all). `@stable` is the Superserve-gated update channel.
-      - run: bunx @superserve/loops@stable run pr-loop --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
+      # Runs the published loop; --pr focuses the tick on the changed PR.
+      # `@stable` is the Superserve-gated update channel.
+      - name: Review changed pull request
+        if: github.event_name == 'pull_request'
+        # Reviews are advisory: Claude/API failures must not block repository CI.
+        continue-on-error: true
+        run: bunx @superserve/loops@stable run pr-loop --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
         env:
           SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}
+          # Name of the remote Superserve secret; not the Claude credential itself.
+          SUPERSERVE_CLAUDE_SECRET: claude-oauth
+          # Default: reviews post as github-actions[bot] via the workflow's built-in token.
+          GITHUB_TOKEN: ${{ github.token }}
+          # Cross-repo / branded identity instead? Store a GitHub PAT as the Superserve
+          # secret "loop-github-token", then DELETE the GITHUB_TOKEN line above and
+          # uncomment the next line:
+          # SUPERSERVE_GITHUB_SECRET: loop-github-token
+      # Manual dispatch sweeps all open PRs by omitting --pr entirely.
+      - name: Review all open pull requests
+        if: github.event_name == 'workflow_dispatch'
+        # Keep manual review failures visible in logs without failing the workflow.
+        continue-on-error: true
+        run: bunx @superserve/loops@stable run pr-loop --repo "${{ github.repository }}" --once
+        env:
+          SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}
+          # Name of the remote Superserve secret; not the Claude credential itself.
           SUPERSERVE_CLAUDE_SECRET: claude-oauth
           # Default: reviews post as github-actions[bot] via the workflow's built-in token.
           GITHUB_TOKEN: ${{ github.token }}
