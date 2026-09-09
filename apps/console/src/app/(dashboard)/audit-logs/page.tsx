@@ -169,7 +169,7 @@ function AuditLogsPageContent() {
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="Audit Logs" />
-        <ErrorState message={error.message} onRetry={() => refetch()} />
+        <ErrorState onRetry={() => refetch()} />
       </div>
     )
   }

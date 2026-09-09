@@ -54,7 +54,6 @@ export function ActivitySection({
         <div className="border-b border-border">
           <ErrorState
             title="Unable to load activity"
-            message={error.message}
             onRetry={onRetry}
           />
         </div>

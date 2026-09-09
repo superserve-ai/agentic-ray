@@ -67,7 +67,7 @@ function SecretsPageContent() {
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="Secrets">{newButton}</PageHeader>
-        <ErrorState message={error.message} onRetry={() => refetch()} />
+        <ErrorState onRetry={() => refetch()} />
       </div>
     )
   }

@@ -11,10 +11,7 @@ export default function ApiKeysError({
 }) {
   return (
     <div className="flex h-full items-center justify-center">
-      <ErrorState
-        message={error.message || "Something went wrong"}
-        onRetry={reset}
-      />
+      <ErrorState onRetry={reset} />
     </div>
   )
 }
