@@ -4,7 +4,7 @@ import { defineConfig } from "tsup"
 // `tsup.http.config.ts` (chained after this in the `build` script) so that only
 // these executables get a shebang — a leading `#!` breaks some bundlers when the
 // `http` file is imported by the console / edge runtimes.
-export default defineConfig({
+export default defineConfig((options) => ({
   entry: { index: "src/index.ts", httpServer: "src/httpServer.ts" },
   format: ["esm"],
   target: "node18",
@@ -13,7 +13,7 @@ export default defineConfig({
   // surface (multi-minute), and these are executables.
   dts: false,
   sourcemap: true,
-  clean: true,
+  clean: !options.watch,
   // Shebang so the published bins are directly executable via npx.
   banner: { js: "#!/usr/bin/env node" },
-})
+}))
