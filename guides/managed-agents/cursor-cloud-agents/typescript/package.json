@@ -1,0 +1,13 @@
+{
+  "name": "superserve-cursor-cloud-agents",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build-template": "node build-template.mjs",
+    "monitor": "node monitor.mjs"
+  },
+  "dependencies": {
+    "@superserve/sdk": "^0.8.3",
+    "dotenv": "^17.0.0"
+  }
+}

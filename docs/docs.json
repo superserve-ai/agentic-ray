@@ -260,7 +260,10 @@
           },
           {
             "group": "Managed Agents",
-            "pages": ["integrations/managed-agents/claude-managed-agents"]
+            "pages": [
+              "integrations/managed-agents/claude-managed-agents",
+              "integrations/managed-agents/cursor-cloud-agents"
+            ]
           },
           {
             "group": "Agent Harnesses",
