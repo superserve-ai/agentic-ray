@@ -220,7 +220,11 @@ def launch_worker(
     try:
         pid = int(result.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError):
-        return {"ok": False, "state": {"state": "no_pidfile"}, "log": read_log(sandbox)}
+        return {
+            "ok": False,
+            "state": {"state": "no_pidfile", "pid": None, "exit_code": None},
+            "log": read_log(sandbox),
+        }
 
     time.sleep(STARTUP_GRACE_SECONDS)
     state = worker_state(sandbox)
